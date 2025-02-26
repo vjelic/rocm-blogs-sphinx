@@ -172,7 +172,10 @@ def quickshare(blog):
     # Generate the URL for the blog
     if hasattr(blog, "blog_title"):
         blog_title = blog.blog_title.lower().replace(" ", "-")
-        url = f"https://rocm.blogs.amd.com/artificial-intelligence/{blog_title}/README.html"
+        # Create the URL in the format expected by LinkedIn
+        raw_url = f"http://rocm.blogs.amd.com/artificial-intelligence/{blog_title}/README.html"
+        # For LinkedIn, we need to use the raw URL without encoding
+        url = raw_url
     else:
         # Fallback to the old URL format if blog_title is not available
         url = f"http://rocm.blogs.amd.com{blog.grab_href()[1:]}"
