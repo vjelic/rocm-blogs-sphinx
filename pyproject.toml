@@ -11,6 +11,9 @@ authors = [
 description = "ROCm Blogs"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = [
+  "numpy"
+]
 
 [tool.setuptools]
 include-package-data = true
