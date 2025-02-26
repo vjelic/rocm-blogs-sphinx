@@ -49,17 +49,17 @@ myst:
         "description lang=en": "{description}"
         "keywords": "{keywords}"
         "property=og:locale": "en_US"
-        "amd_category": {amd_category}
-        "amd_asset_type": {amd_asset_type}
-        "amd_blog_type": {amd_blog_type}
-        "amd_technical_blog_type": {amd_technical_blog_type}
-        "amd_developer_type": {amd_developer_type}
-        "amd_deployment": {amd_deployment}
-        "amd_product_type": {amd_product_type}
-        "amd_developer_tool": {amd_developer_tool}
-        "amd_applications": {amd_applications}
-        "amd_industries": {amd_industries}
-        "amd_blog_releasedate": {amd_blog_releasedate}
+        "amd_category": '{amd_category}'
+        "amd_asset_type": '{amd_asset_type}'
+        "amd_blog_type": '{amd_blog_type}'
+        "amd_technical_blog_type": '{amd_technical_blog_type}'
+        "amd_developer_type": '{amd_developer_type}'
+        "amd_deployment": '{amd_deployment}'
+        "amd_product_type": '{amd_product_type}'
+        "amd_developer_tool": '{amd_developer_tool}'
+        "amd_applications": '{amd_applications}'
+        "amd_industries": '{amd_industries}'
+        "amd_blog_releasedate": '{amd_blog_releasedate}'
 ---
 
 """
@@ -92,21 +92,21 @@ myst:
 
             # check if the values are None
 
-            if amd_technical_blog_type is None:
-                amd_technical_blog_type = "Applications and models, Ecosystem and Partners, Tools, Features, and Optimizations, Benchmarks and Testing"
-            if amd_developer_type is None:
+            if amd_technical_blog_type == "None":
+                amd_technical_blog_type = "Applications and models, Ecosystems and Partners, Tools, Features, and Optimizations, Benchmarks and Testing"
+            if amd_developer_type == "None":
                 amd_developer_type = "ML/AI Developer, Application Developer, HPC Developer"
-            if amd_deployment is None:
+            if amd_deployment == "None":
                 amd_deployment = "Servers"
-            if amd_product_type is None:
+            if amd_product_type == "None":
                 amd_product_type = "Accelerators"
-            if amd_developer_tool is None:
+            if amd_developer_tool == "None":
                 amd_developer_tool = "ROCm Software"
-            if amd_applications is None:
+            if amd_applications == "None":
                 amd_applications = "Cloud Computing, High Performance Computing, Large Language Models (LLM)"
-            if amd_industries is None:
+            if amd_industries == "None":
                 amd_industries = "Data Center"
-                
+
 
             # grab the title from the markdown
             with open(blog, "r", encoding="utf-8", errors="replace") as file:

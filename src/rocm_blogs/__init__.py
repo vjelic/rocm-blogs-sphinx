@@ -208,37 +208,87 @@ def count_words_in_markdown(content: str) -> int:
     Returns:
         The number of words in the markdown file.
     """
-    # Remove YAML front matter
-    if content.startswith('---'):
-        parts = content.split('---', 2)
-        if len(parts) >= 3:
-            content = parts[2]
-    
-
-    content = re.sub(r'```[\s\S]*?```', '', content)
-
-    content = re.sub(r'(?m)^( {4}|\t).*$', '', content)
-    
-    content = re.sub(r'<[^>]*>', '', content)
-
-    content = re.sub(r'https?://\S+', '', content)
-
-    content = re.sub(r'!\[.*?\]\(.*?\)', '', content)
-
-    content = re.sub(r'\[.*?\]\(.*?\)', '', content)
-    
-    content = re.sub(r'(?m)^#.*$', '', content)
-
-    content = re.sub(r'(?m)^(---|***|___)$', '', content)
-
-    content = re.sub(r'(?m)^>.*$', '', content)
-
-    content = re.sub(r'(?m)^[ \t]*[-*+][ \t]+', '', content)
-    content = re.sub(r'(?m)^[ \t]*\d+\.[ \t]+', '', content)
-
-    words = [word for word in re.split(r'\s+', content) if word.strip()]
-    
-    return len(words)
+    try:
+        # Remove YAML front matter
+        if content.startswith('---'):
+            parts = content.split('---', 2)
+            if len(parts) >= 3:
+                content = parts[2]
+        
+        # Apply regex substitutions one by one with error handling
+        try:
+            # Remove fenced code blocks
+            content = re.sub(r'```[\s\S]*?```', '', content)
+        except re.error as e:
+            print(f"Error in regex for fenced code blocks: {e}")
+        
+        try:
+            # Remove indented code blocks
+            content = re.sub(r'(?m)^( {4}|\t).*$', '', content)
+        except re.error as e:
+            print(f"Error in regex for indented code blocks: {e}")
+        
+        try:
+            # Remove HTML tags
+            content = re.sub(r'<[^>]*>', '', content)
+        except re.error as e:
+            print(f"Error in regex for HTML tags: {e}")
+        
+        try:
+            # Remove URLs
+            content = re.sub(r'https?://\S+', '', content)
+        except re.error as e:
+            print(f"Error in regex for URLs: {e}")
+        
+        try:
+            # Remove image references
+            content = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', content)
+        except re.error as e:
+            print(f"Error in regex for image references: {e}")
+        
+        try:
+            # Remove link references
+            content = re.sub(r'\[[^\]]*\]\([^)]*\)', '', content)
+        except re.error as e:
+            print(f"Error in regex for link references: {e}")
+        
+        try:
+            # Remove headers
+            content = re.sub(r'(?m)^#.*$', '', content)
+        except re.error as e:
+            print(f"Error in regex for headers: {e}")
+        
+        try:
+            # Remove horizontal rules
+            content = re.sub(r'(?m)^(---|[*]{3}|[_]{3})$', '', content)
+        except re.error as e:
+            print(f"Error in regex for horizontal rules: {e}")
+        
+        try:
+            # Remove blockquotes
+            content = re.sub(r'(?m)^>.*$', '', content)
+        except re.error as e:
+            print(f"Error in regex for blockquotes: {e}")
+        
+        try:
+            # Remove unordered list markers
+            content = re.sub(r'(?m)^[ \t]*[-*+][ \t]+', '', content)
+        except re.error as e:
+            print(f"Error in regex for unordered list markers: {e}")
+        
+        try:
+            # Remove ordered list markers
+            content = re.sub(r'(?m)^[ \t]*\d+\.[ \t]+', '', content)
+        except re.error as e:
+            print(f"Error in regex for ordered list markers: {e}")
+        
+        # Split by whitespace and count non-empty words
+        words = [word for word in re.split(r'\s+', content) if word.strip()]
+        
+        return len(words)
+    except Exception as e:
+        print(f"Error counting words in markdown: {e}")
+        return 0  # Return 0 as a fallback
 
 def process_single_blog(blog, rocmblogs):
     readme_file = blog.file_path
