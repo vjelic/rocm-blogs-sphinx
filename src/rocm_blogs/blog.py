@@ -128,14 +128,22 @@ class Blog:
         return href
     
     def grab_authors(self, authors_list: list) -> str:
-
-        # Obfuscated: use a lambda to process an author which may be a list
+        """
+        Generate HTML links for authors.
+        
+        Args:
+            authors_list: A list of author names.
+            
+        Returns:
+            HTML links for the authors.
+        """
+        # Process an author which may be a list
         def proc(author):
             return " ".join(author) if isinstance(author, list) else author
 
         return (
             ", ".join(
-                f'<a href="./authors/{proc(author).strip().replace(" ", "-").lower()}">{proc(author).strip()}</a>'
+                f'<a href="https://rocm.blogs.amd.com/blog/authors/{proc(author).strip().replace(" ", "-").lower()}.html">{proc(author).strip()}</a>'
                 for author in authors_list
             )
             or ""

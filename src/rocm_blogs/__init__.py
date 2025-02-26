@@ -398,6 +398,7 @@ def process_single_blog(blog, rocmblogs):
             image_html = pkg_resources.read_text("rocm_blogs.templates", "image_blog.html")
             blog_css = pkg_resources.read_text("rocm_blogs.static.css", "blog.css")
             author_attribution_template = pkg_resources.read_text("rocm_blogs.templates", "author_attribution.html")
+            giscus_html = pkg_resources.read_text("rocm_blogs.templates", "giscus.html")
             
             # Fill in the author attribution template
             authors_html_filled = (
@@ -448,6 +449,9 @@ def process_single_blog(blog, rocmblogs):
             new_lines.insert(line_number + 2, f"\n{image_template}\n")
             new_lines.insert(line_number + 3, f"\n{authors_html_filled}\n")
             new_lines.insert(line_number + 4, f"\n{quickshare_button}\n")
+            
+            # Add giscus comments at the end of the file
+            new_lines.append(f"\n\n{giscus_html}\n")
             
             # Write the modified file
             with open(readme_file, "w", encoding="utf-8", errors="replace") as file:
