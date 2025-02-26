@@ -17,8 +17,11 @@ class BlogHolder:
         self.blogs: dict[tuple[str, datetime], Blog] = {}
         self.blogs_categories: dict[str, list[Blog]] = {}
 
-    def _make_key(self, blog: Blog) -> None:
+    def _make_key(self, blog: Blog) -> tuple[str, datetime]:
         """Make a key for the blog."""
+
+        if not isinstance(blog, Blog):
+            raise TypeError("The blog must be an instance of the 'Blog' class.")
 
         if not hasattr(blog, "blog_title"):
             raise AttributeError("The blog must have a 'blog_title' attribute.")
@@ -28,9 +31,6 @@ class BlogHolder:
         if not hasattr(blog, "date"):
             raise AttributeError("The blog must have a 'date' attribute.")
         date = blog.date
-
-        if not isinstance(blog, Blog):
-            raise TypeError("The blog must be an instance of the 'Blog' class.")
 
         return (title, date)
 
@@ -60,6 +60,14 @@ class BlogHolder:
             del self.blogs[key]
         else:
             raise KeyError("Blog not found.")
+        
+    def get_blog_by_key(self, key: tuple[str, datetime]) -> Blog:
+        """Get a blog by its key."""
+
+        if key in self.blogs:
+            return self.blogs[key]
+
+        return None
 
     def get_blogs(self) -> list[Blog]:
         """Return the list of blogs."""
@@ -93,16 +101,24 @@ class BlogHolder:
     def get_latest_blogs(self, count: int = 15) -> list[Blog]:
         """Get the latest blogs based on the count."""
 
-        return self.blogs[:count]
+        return list(self.blogs.values())[:count]
 
     def get_blog_by_title(self, title: str) -> Blog:
         """Get a blog by its title."""
 
-        for blog in self.blogs:
+        for blog in self.blogs.values():
             if blog.blog_title == title:
                 return blog
 
         return None
+    
+    def get_blogs_by_category(self, category: str) -> list[Blog]:
+        """Get blogs by category."""
+        
+        if category in self.blogs_categories:
+            return self.blogs_categories[category]
+        
+        return []
 
     def __iter__(self) -> iter:
         """Iterate over the list of blogs."""
@@ -117,4 +133,4 @@ class BlogHolder:
     def __repr__(self) -> str:
         """Return a string representation of the class."""
 
-        return f"ROCmBlogs({len(self.blogs)} blogs)"
+        return f"BlogHolder(blogs={self.blogs})"

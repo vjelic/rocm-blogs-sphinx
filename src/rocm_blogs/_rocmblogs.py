@@ -111,33 +111,35 @@ class ROCmBlogs:
 
     def extract_metadata(self) -> dict:
         """Extract metadata from the blog files."""
+        if not self.blog_paths:
+            return {}
 
+        file_path = self.blog_paths[0]
         print(f"Extracting metadata from {file_path}")
 
-        for file_path in self.blog_paths:
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read()
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read()
 
-            match = self.yaml_pattern.match(content)
+        match = self.yaml_pattern.match(content)
 
-            if match:
-                yaml_content = match.group(1)
+        if match:
+            yaml_content = match.group(1)
 
-                try:
-                    metadata = yaml.safe_load(yaml_content)
+            try:
+                metadata = yaml.safe_load(yaml_content)
 
-                    self.categories.append(metadata.get("category", ""))
-                    self.tags.append(metadata.get("tags", ""))
+                self.categories.append(metadata.get("category", ""))
+                self.tags.append(metadata.get("tags", ""))
 
-                    return metadata
-                except yaml.YAMLError as error:
-                    raise ValueError(f"Error parsing YAML: {error}")
-            else:
-                print(
-                    f"No YAML front matter found in {file_path}. Look at the guidelines for creating a blog."
-                )
+                return metadata
+            except yaml.YAMLError as error:
+                raise ValueError(f"Error parsing YAML: {error}")
+        else:
+            print(
+                f"No YAML front matter found in {file_path}. Look at the guidelines for creating a blog."
+            )
 
-                return {}
+            return {}
 
     def extract_metadata_from_file(self, file_path: str) -> dict:
         """Extract metadata from a blog file."""
@@ -220,5 +222,4 @@ class ROCmBlogs:
     def __repr__(self) -> str:
         """Return a string representation of the class."""
 
-        # return all blog objects
-        return f"ROCmBlogs({(self.blogs)} blogs)"
+        return f"ROCmBlogs(blogs_directory='{self.blogs_directory}', blogs={self.blogs}, categories={self.categories}, blog_paths={self.blog_paths})"

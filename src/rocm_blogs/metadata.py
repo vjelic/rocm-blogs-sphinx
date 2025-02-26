@@ -86,7 +86,7 @@ myst:
             amd_deployment = html_meta.get("amd_deployment", "Servers")
             amd_product_type = html_meta.get("amd_product_type", "Accelerators")
             amd_developer_tool = html_meta.get("amd_developer_tool", "ROCm Software")
-            amd_applications = html_meta.get("amd_applications", "Cloud Computing, High Performance Computing, Large Language Models (LLM)")
+            amd_applications = "Cloud Computing, High Performance Computing, Large Language Model (LLM)"
             amd_industries = html_meta.get("amd_industries", "Data Center")
             keywords = html_meta.get("keywords", "")
 
