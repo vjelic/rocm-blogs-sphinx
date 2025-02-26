@@ -81,14 +81,32 @@ myst:
             amd_category = html_meta.get("amd_category", "Developer Resources")
             amd_asset_type = html_meta.get("amd_asset_type", "Blogs")
             amd_blog_type = html_meta.get("amd_blog_type", "Technical Articles & Blogs")
-            amd_technical_blog_type = html_meta.get("amd_technical_blog_type", "")
-            amd_developer_type = html_meta.get("amd_developer_type", "")
+            amd_technical_blog_type = html_meta.get("amd_technical_blog_type", "Applications and models, Ecosystem and Partners, Tools, Features, and Optimizations, Benchmarks and Testing")
+            amd_developer_type = html_meta.get("amd_developer_type", "ML/AI Developer, Application Developer, HPC Developer")
             amd_deployment = html_meta.get("amd_deployment", "Servers")
             amd_product_type = html_meta.get("amd_product_type", "Accelerators")
-            amd_developer_tool = html_meta.get("amd_developer_tool", "")
-            amd_applications = html_meta.get("amd_applications", "")
+            amd_developer_tool = html_meta.get("amd_developer_tool", "ROCm Software")
+            amd_applications = html_meta.get("amd_applications", "Cloud Computing, High Performance Computing, Large Language Models (LLM)")
             amd_industries = html_meta.get("amd_industries", "Data Center")
             keywords = html_meta.get("keywords", "")
+
+            # check if the values are None
+
+            if amd_technical_blog_type is None:
+                amd_technical_blog_type = "Applications and models, Ecosystem and Partners, Tools, Features, and Optimizations, Benchmarks and Testing"
+            if amd_developer_type is None:
+                amd_developer_type = "ML/AI Developer, Application Developer, HPC Developer"
+            if amd_deployment is None:
+                amd_deployment = "Servers"
+            if amd_product_type is None:
+                amd_product_type = "Accelerators"
+            if amd_developer_tool is None:
+                amd_developer_tool = "ROCm Software"
+            if amd_applications is None:
+                amd_applications = "Cloud Computing, High Performance Computing, Large Language Models (LLM)"
+            if amd_industries is None:
+                amd_industries = "Data Center"
+                
 
             # grab the title from the markdown
             with open(blog, "r", encoding="utf-8", errors="replace") as file:
@@ -164,8 +182,8 @@ myst:
             # day of week, month, day, 12:00:00 PST year
             amd_blog_releasedate = datetime.strptime(
                 f"{day_of_week} {month} {day}, 12:00:00 PST {year}",
-                "%a %B %d, 12:00:00 PST %Y",
-            ).strftime("%a %B %d, 12:00:00 PST %Y")
+                "%a %b %d, 12:00:00 PST %Y",
+            ).strftime("%a %b %d, 12:00:00 PST %Y")
 
             # construct the metadata
             metadata_content = metadata_template.format(

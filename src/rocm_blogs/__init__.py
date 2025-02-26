@@ -198,6 +198,48 @@ def blog_generation(app: Sphinx):
     except Exception as error:
         logger.warning(f"Failed to generate blogs: {error}")
 
+def count_words_in_markdown(content: str) -> int:
+    """
+    Count words in a markdown file, excluding code blocks and other non-paragraph areas.
+    
+    Args:
+        content: The content of the markdown file as a string.
+        
+    Returns:
+        The number of words in the markdown file.
+    """
+    # Remove YAML front matter
+    if content.startswith('---'):
+        parts = content.split('---', 2)
+        if len(parts) >= 3:
+            content = parts[2]
+    
+
+    content = re.sub(r'```[\s\S]*?```', '', content)
+
+    content = re.sub(r'(?m)^( {4}|\t).*$', '', content)
+    
+    content = re.sub(r'<[^>]*>', '', content)
+
+    content = re.sub(r'https?://\S+', '', content)
+
+    content = re.sub(r'!\[.*?\]\(.*?\)', '', content)
+
+    content = re.sub(r'\[.*?\]\(.*?\)', '', content)
+    
+    content = re.sub(r'(?m)^#.*$', '', content)
+
+    content = re.sub(r'(?m)^(---|***|___)$', '', content)
+
+    content = re.sub(r'(?m)^>.*$', '', content)
+
+    content = re.sub(r'(?m)^[ \t]*[-*+][ \t]+', '', content)
+    content = re.sub(r'(?m)^[ \t]*\d+\.[ \t]+', '', content)
+
+    words = [word for word in re.split(r'\s+', content) if word.strip()]
+    
+    return len(words)
+
 def process_single_blog(blog, rocmblogs):
     readme_file = blog.file_path
     backup_file = f"{readme_file}.bak"
@@ -217,6 +259,11 @@ def process_single_blog(blog, rocmblogs):
         except Exception as e:
             print(f"Warning: Could not create backup of {readme_file}: {e}")
             # Continue anyway, but with caution
+        
+        # Calculate word count from the content
+        word_count = count_words_in_markdown(content)
+        blog.set_word_count(word_count)
+        print(f"Word count for {readme_file}: {word_count}")
         
         # Read the file once
         try:
