@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rocm_blogs"
+version = "1.0.0"
+authors = [
+  { name = "Danny Guan", email = "danny.guan@amd.com" }
+]
+description = "ROCm Blogs"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+rocm_blogs = ["templates/*.html", "static/css/*.css"]
