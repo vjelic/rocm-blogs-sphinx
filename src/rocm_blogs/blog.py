@@ -143,7 +143,7 @@ class Blog:
 
         return (
             ", ".join(
-                f'<a href="https://rocm.blogs.amd.com/blog/authors/{proc(author).strip().replace(" ", "-").lower()}.html">{proc(author).strip()}</a>'
+                f'<a href="https://rocm.blogs.amd.com/authors/{proc(author).strip().replace(" ", "-").lower()}.html">{proc(author).strip()}</a>'
                 for author in authors_list
             )
             or ""

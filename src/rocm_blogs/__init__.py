@@ -169,7 +169,13 @@ def quickshare(blog):
 
     social_bar = social_bar.format(CSS=css, HTML=html)
 
-    url = f"http://rocm.blogs.amd.com{blog.grab_href()[1:]}"
+    # Generate the URL for the blog
+    if hasattr(blog, "blog_title"):
+        blog_title = blog.blog_title.lower().replace(" ", "-")
+        url = f"https://rocm.blogs.amd.com/artificial-intelligence/{blog_title}/README.html"
+    else:
+        # Fallback to the old URL format if blog_title is not available
+        url = f"http://rocm.blogs.amd.com{blog.grab_href()[1:]}"
 
     title = blog.blog_title if hasattr(blog, "blog_title") else "No Title"
     title_with_suffix = f"{title} | ROCm Blogs"
