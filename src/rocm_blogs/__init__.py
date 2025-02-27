@@ -170,14 +170,17 @@ def quickshare(blog):
     social_bar = social_bar.format(CSS=css, HTML=html)
 
     # Generate the URL for the blog
-    if hasattr(blog, "blog_title"):
-        blog_title = blog.blog_title.lower().replace(" ", "-")
+    if hasattr(blog, "file_path"):
+        # Extract the directory name from the file path
+        import os
+        # Get the directory containing the blog file
+        blog_dir = os.path.basename(os.path.dirname(blog.file_path))
         # Create the URL in the format expected by LinkedIn
-        raw_url = f"http://rocm.blogs.amd.com/artificial-intelligence/{blog_title}/README.html"
+        raw_url = f"http://rocm.blogs.amd.com/artificial-intelligence/{blog_dir}/README.html"
         # For LinkedIn, we need to use the raw URL without encoding
         url = raw_url
     else:
-        # Fallback to the old URL format if blog_title is not available
+        # Fallback to the old URL format if file_path is not available
         url = f"http://rocm.blogs.amd.com{blog.grab_href()[1:]}"
 
     title = blog.blog_title if hasattr(blog, "blog_title") else "No Title"
