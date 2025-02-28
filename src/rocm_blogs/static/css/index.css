@@ -115,27 +115,25 @@ h2 {
     margin-bottom: 10px;
 }
 
-.large-sd-card-img-top.sd-card-img-top {
-    width: 100%;
-    height: 21vw;
-    object-fit: cover;
-}
-
 .small-sd-card-img-top.sd-card-img-top {
-    width: 100%;
-    height: 100%;
+	width: 100%;
+    height: 225px;
     object-fit: cover;
-}
-
-.large-sd-card.sd-card-body {
-    width: 100%;
-    height: 15%;
+    aspect-ratio: 1/1;
+    margin: 2 !important;
+    padding: 0 !important;
+    display: block;
+    border-bottom: none !important;
 }
 
 .small-sd-card {
-    width: 45px;
-    height: 0;
-    display: none;  
+    height: 40%;
+	max-height: fit-content;
+	margin-bottom: 0px;
+	padding-left: 1rem;
+	padding-right: 1rem;
+	padding-bottom: 0px;
+	padding-top: 0px;
 }
 
 .bd-content .sd-card .sd-card-footer {
@@ -154,7 +152,6 @@ h2 {
     font-size: 12px;
     font-family: 'Arial', sans-serif;
     line-height: 1.4;
-    margin-bottom: 10px;
 }
 
 .bd-sidebar-primary {
