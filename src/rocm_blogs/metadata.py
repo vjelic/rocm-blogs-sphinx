@@ -81,8 +81,14 @@ myst:
             amd_category = html_meta.get("amd_category", "Developer Resources")
             amd_asset_type = html_meta.get("amd_asset_type", "Blogs")
             amd_blog_type = html_meta.get("amd_blog_type", "Technical Articles & Blogs")
-            amd_technical_blog_type = html_meta.get("amd_technical_blog_type", "Applications and models, Ecosystem and Partners, Tools, Features, and Optimizations, Benchmarks and Testing")
-            amd_developer_type = html_meta.get("amd_developer_type", "ML/AI Developer, Application Developer, HPC Developer")
+            amd_technical_blog_type = html_meta.get(
+                "amd_technical_blog_type",
+                "Applications and models, Ecosystem and Partners, Tools, Features, and Optimizations, Benchmarks and Testing",
+            )
+            amd_developer_type = html_meta.get(
+                "amd_developer_type",
+                "ML/AI Developer, Application Developer, HPC Developer",
+            )
             amd_deployment = html_meta.get("amd_deployment", "Servers")
             amd_product_type = html_meta.get("amd_product_type", "Accelerators")
             amd_developer_tool = html_meta.get("amd_developer_tool", "ROCm Software")
@@ -95,7 +101,9 @@ myst:
             if amd_technical_blog_type == "None":
                 amd_technical_blog_type = "Applications and models, Ecosystems and Partners, Tools, Features, and Optimizations, Benchmarks and Testing"
             if amd_developer_type == "None":
-                amd_developer_type = "ML/AI Developer, Application Developer, HPC Developer"
+                amd_developer_type = (
+                    "ML/AI Developer, Application Developer, HPC Developer"
+                )
             if amd_deployment == "None":
                 amd_deployment = "Servers"
             if amd_product_type == "None":
@@ -106,7 +114,6 @@ myst:
                 amd_applications = "Cloud Computing, High Performance Computing, Large Language Models (LLM)"
             if amd_industries == "None":
                 amd_industries = "Data Center"
-
 
             # grab the title from the markdown
             with open(blog, "r", encoding="utf-8", errors="replace") as file:

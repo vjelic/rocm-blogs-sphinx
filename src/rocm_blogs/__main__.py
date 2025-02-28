@@ -10,15 +10,12 @@ sort_blogs_by_category() - Sort the blogs by category.
 generate_grid() - Generate a grid of blog posts.
 """
 
+import cProfile
 import os
 import time
-import cProfile
-import re
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from rocm_blogs import ROCmBlogs
-from rocm_blogs import metadata_generator
+from rocm_blogs import ROCmBlogs, metadata_generator
 
 
 def main():
@@ -55,4 +52,3 @@ if __name__ == "__main__":
     profiler.print_stats()
 
     main()
-

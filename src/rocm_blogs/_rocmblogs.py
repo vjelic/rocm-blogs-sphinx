@@ -22,7 +22,7 @@ class ROCmBlogs:
         self.yaml_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
     def find_readme_files_cache(self) -> None:
-        """ Cache the README files in the 'blogs' directory. """
+        """Cache the README files in the 'blogs' directory."""
         cache_file = Path("readme_files_cache.txt")
         root = Path(self.blogs_directory)
         print("Current working directory:", os.getcwd())
@@ -34,11 +34,15 @@ class ROCmBlogs:
             # Verify that each cached file still exists.
             valid_paths = [path for path in cached_paths if Path(path).exists()]
             if valid_paths and len(valid_paths) == len(cached_paths):
-                print(f"Loaded {len(valid_paths)} cached README file(s) from {cache_file}")
+                print(
+                    f"Loaded {len(valid_paths)} cached README file(s) from {cache_file}"
+                )
                 self.blog_paths = valid_paths
                 return
             else:
-                print("Cache invalidated due to deleted or changed files. Rescanning directory.")
+                print(
+                    "Cache invalidated due to deleted or changed files. Rescanning directory."
+                )
 
         # If no valid cache is available, perform a fresh scan.
         candidates = list(root.rglob("README.md"))
@@ -94,8 +98,10 @@ class ROCmBlogs:
         """Find the 'blogs' directory starting from the given working directory."""
 
         if not os.path.exists(working_directory):
-            raise FileNotFoundError(f"The directory '{working_directory}' does not exist.")
-        
+            raise FileNotFoundError(
+                f"The directory '{working_directory}' does not exist."
+            )
+
         current_dir = Path(working_directory).resolve()
 
         while True:
@@ -105,7 +111,9 @@ class ROCmBlogs:
                 return candidate
 
             if current_dir == current_dir.parent:
-                raise FileNotFoundError("No 'blogs' directory found in the parent hierarchy.")
+                raise FileNotFoundError(
+                    "No 'blogs' directory found in the parent hierarchy."
+                )
 
             current_dir = current_dir.parent
 

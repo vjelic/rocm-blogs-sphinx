@@ -4,8 +4,8 @@ File: _blog_holder.py
 BlogHolder class to hold the blogs.
 """
 
-from datetime import datetime
 import os
+from datetime import datetime
 
 from .blog import Blog
 
@@ -60,7 +60,7 @@ class BlogHolder:
             del self.blogs[key]
         else:
             raise KeyError("Blog not found.")
-        
+
     def get_blog_by_key(self, key: tuple[str, datetime]) -> Blog:
         """Get a blog by its key."""
 
@@ -82,12 +82,16 @@ class BlogHolder:
     def sort_blogs_by_date(self, reverse: bool = True) -> list[Blog]:
         """Sort the blogs by date."""
 
-        self.blogs = dict(sorted(
-            self.blogs.items(),
-            key=lambda item: item[1].date if item[1].date is not None else datetime.min,
-            reverse=reverse,
-        ))
-    
+        self.blogs = dict(
+            sorted(
+                self.blogs.items(),
+                key=lambda item: (
+                    item[1].date if item[1].date is not None else datetime.min
+                ),
+                reverse=reverse,
+            )
+        )
+
     def sort_blogs_by_category(self, categories) -> list[Blog]:
         """Sort the blogs by category."""
 
@@ -111,13 +115,13 @@ class BlogHolder:
                 return blog
 
         return None
-    
+
     def get_blogs_by_category(self, category: str) -> list[Blog]:
         """Get blogs by category."""
-        
+
         if category in self.blogs_categories:
             return self.blogs_categories[category]
-        
+
         return []
 
     def __iter__(self) -> iter:
