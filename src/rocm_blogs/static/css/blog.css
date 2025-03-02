@@ -9,17 +9,40 @@
     vertical-align: middle;
 }
 
-.author_string {
-    font-size: 14px;
-    font-weight: 300;
-    line-height: 22.5px;
-    text-transform: none;
-    margin-bottom: 8px;
-    font-family: var(--pst-font-family-base);
-    display: inline-block;
-    vertical-align: middle;
-}
-
+.bd-main .bd-content .bd-article-container {
+    max-width: 1750px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.bd-container {
+    max-width: 1750px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.author_string {
+
+    font-size: 14px;
+
+    font-weight: 300;
+
+    line-height: 22.5px;
+
+    text-transform: none;
+
+    margin-bottom: 8px;
+
+    font-family: var(--pst-font-family-base);
+
+    display: inline-block;
+
+    vertical-align: middle;
+
+}
+
+
+
 .author_string_right {
     font-size: 14px;
     font-weight: 300;

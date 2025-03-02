@@ -1,6 +1,7 @@
 import importlib.resources as pkg_resources
 import os
 import re
+import time
 from pathlib import Path
 
 from sphinx.application import Sphinx
@@ -18,18 +19,30 @@ logger = sphinx_logging.getLogger(__name__)
 
 def calculate_read_time(words: int) -> int:
     """Average reading speed is 245 words per minute."""
-
-    return round(words / 245)
+    start_time = time.time()
+    
+    result = round(words / 245)
+    
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    logger.debug(f"Read time calculation completed in \033[96m{elapsed_time:.6f} seconds\033[0m")
+    
+    return result
 
 
 def truncate_string(input_string: str) -> str:
     """Remove special characters and spaces from a string."""
-
+    start_time = time.time()
+    
     cleaned_string = re.sub(r"[!@#$%^&*?/|]", "", input_string)
-
     transformed_string = re.sub(r"\s+", "-", cleaned_string)
-
-    return transformed_string.lower()
+    result = transformed_string.lower()
+    
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    logger.debug(f"String truncation completed in \033[96m{elapsed_time:.6f} seconds\033[0m")
+    
+    return result
 
 
 def update_index_file(app: Sphinx) -> None:
@@ -38,7 +51,8 @@ def update_index_file(app: Sphinx) -> None:
 
     param: app: Sphinx - The Sphinx application object.
     '''
-
+    start_time = time.time()
+    
     try:
         index_template = """
 ---
@@ -133,14 +147,17 @@ html_meta:
         with output_path.open("w", encoding="utf-8") as f:
             f.write(updated_html)
 
-        logger.info(f"Successfully updated {output_path} with new grid items.")
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.info(f"Successfully updated {output_path} with new grid items in \033[96m{elapsed_time:.2f} seconds\033[0m.")
     except Exception as error:
         logger.critical(f"Failed to update index file: {error}")
 
 
 def quickshare(blog):
     """Quickshare buttons for social media sharing."""
-
+    start_time = time.time()
+    
     if "test" in str(blog.file_path).lower():
         css = "css_content"
         html = "html_content"
@@ -190,6 +207,10 @@ def quickshare(blog):
         .replace("{TEXT}", description)
     )
 
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    logger.debug(f"Quickshare generation for {getattr(blog, 'blog_title', 'Unknown')} completed in \033[96m{elapsed_time:.4f} seconds\033[0m")
+    
     return social_bar
 
 
@@ -200,7 +221,8 @@ def blog_generation(app: Sphinx):
     images, and social sharing buttons. It includes robust error handling and
     file backup mechanisms to prevent data loss.
     """
-
+    start_time = time.time()
+    
     try:
         env = app.builder.env
         srcdir = Path(env.srcdir)
@@ -220,13 +242,17 @@ def blog_generation(app: Sphinx):
                 logger.warning(f"Error processing blog {blog.file_path}: {error}")
                 # Continue with next blog instead of failing completely
                 continue
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.info(f"Blog generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m")
     except Exception as error:
         logger.critical(f"Failed to generate blogs: {error}")
 
 
 def count_words_in_markdown(content: str) -> int:
     """Count the number of words in a markdown file."""
-
+    start_time = time.time()
+    
     try:
 
         if content.startswith("---"):
@@ -314,13 +340,20 @@ def count_words_in_markdown(content: str) -> int:
         # Split by whitespace and count non-empty words
         words = [word for word in re.split(r"\s+", content) if word.strip()]
 
-        return len(words)
+        word_count = len(words)
+        
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.debug(f"Word counting completed in \033[96m{elapsed_time:.4f} seconds\033[0m")
+        
+        return word_count
     except Exception as error:
         logger.warning(f"Error counting words in markdown: {error}")
         return 0
 
 
 def process_single_blog(blog, rocmblogs):
+    start_time = time.time()
     readme_file = blog.file_path
     backup_file = f"{readme_file}.bak"
 
@@ -386,6 +419,9 @@ def process_single_blog(blog, rocmblogs):
                 authors_html = authors_html.replace("././", "../../").replace(
                     ".md", ".html"
                 )
+            
+            # Check if author is "No author" or empty
+            has_valid_author = authors_html and "No author" not in authors_html
 
             # Find the title and its position
             title, line_number = None, None
@@ -408,14 +444,26 @@ def process_single_blog(blog, rocmblogs):
                 "rocm_blogs.templates", "image_blog.html"
             )
             blog_css = pkg_resources.read_text("rocm_blogs.static.css", "blog.css")
+            breadcrumbs_css = pkg_resources.read_text("rocm_blogs.static.css", "breadcrumbs.css")
             author_attribution_template = pkg_resources.read_text(
                 "rocm_blogs.templates", "author_attribution.html"
             )
             giscus_html = pkg_resources.read_text("rocm_blogs.templates", "giscus.html")
 
+            # Modify the author attribution template based on whether there's a valid author
+            if has_valid_author:
+                # Use the original template with author
+                modified_author_template = author_attribution_template
+            else:
+                # Create a modified template without "by {authors_string}"
+                modified_author_template = author_attribution_template.replace(
+                    '<span> {date} by {authors_string}.</span>',
+                    '<span> {date}</span>'
+                )
+            
             # Fill in the author attribution template
             authors_html_filled = (
-                author_attribution_template.replace("{authors_string}", authors_html)
+                modified_author_template.replace("{authors_string}", authors_html)
                 .replace("{date}", date)
                 .replace("{language}", language)
                 .replace("{category}", category_html)
@@ -471,7 +519,9 @@ def process_single_blog(blog, rocmblogs):
             with open(readme_file, "w", encoding="utf-8", errors="replace") as file:
                 file.writelines(new_lines)
 
-            logger.info(f"\033[33mSuccessfully processed blog {readme_file}\033[0m")
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            logger.info(f"\033[33mSuccessfully processed blog {readme_file} in \033[96m{elapsed_time:.2f} seconds\033[33m\033[0m")
 
             # Remove the backup file if everything went well
             try:
@@ -519,11 +569,17 @@ def process_single_blog(blog, rocmblogs):
 
 
 def setup(app: Sphinx):
-
+    start_time = time.time()
+    
     logger.info("Setting up ROCm Blogs extension")
 
     app.connect("builder-inited", update_index_file)
     app.connect("builder-inited", blog_generation)
+    
+    # Log the total build setup time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    logger.info(f"ROCm Blogs extension setup completed in \033[96m{elapsed_time:.2f} seconds\033[0m")
 
     return {
         "version": __version__,

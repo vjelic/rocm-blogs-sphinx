@@ -7,8 +7,6 @@ Blog class for ROCmBlogs package.
 import io
 import os
 import pathlib
-import re
-import shutil
 from datetime import datetime
 
 from PIL import Image
@@ -129,26 +127,58 @@ class Blog:
 
     def grab_authors(self, authors_list: list) -> str:
         """
-        Generate HTML links for authors.
+        Generate HTML links for authors, but only if their bio file exists.
 
         Args:
             authors_list: A list of author names.
 
         Returns:
-            HTML links for the authors.
+            HTML links for the authors with existing bios, or plain text for authors without bios.
         """
-
-        # Process an author which may be a list
-        def proc(author):
-            return " ".join(author) if isinstance(author, list) else author
-
-        return (
-            ", ".join(
-                f'<a href="https://rocm.blogs.amd.com/authors/{proc(author).strip().replace(" ", "-").lower()}.html">{proc(author).strip()}</a>'
-                for author in authors_list
-            )
-            or ""
-        )
+        # Filter out "No author" or empty authors
+        valid_authors = []
+        for author in authors_list:
+            if isinstance(author, list):
+                author_str = " ".join(author).strip()
+            else:
+                author_str = str(author).strip()
+            
+            if author_str and author_str.lower() != "no author":
+                valid_authors.append(author_str)
+        
+        if not valid_authors:
+            return ""
+        
+        # Generate HTML links for valid authors, but only if their bio file exists
+        author_elements = []
+        for author in valid_authors:
+            # Create the filename that would be used for the author's bio
+            author_filename = author.replace(" ", "-").lower() + ".md"
+            
+            # Check if the author's bio file exists in the blogs/authors directory
+            # We need to find the blogs directory first
+            if hasattr(self, 'file_path'):
+                # Start from the blog's directory and navigate to the authors directory
+                blog_dir = os.path.dirname(self.file_path)
+                # Go up to the blogs directory
+                blogs_dir = os.path.dirname(os.path.dirname(blog_dir))
+                authors_dir = os.path.join(blogs_dir, "authors")
+                
+                author_file_path = os.path.join(authors_dir, author_filename)
+                
+                if os.path.exists(author_file_path):
+                    # Bio exists, create a link
+                    author_elements.append(
+                        f'<a href="https://rocm.blogs.amd.com/authors/{author.replace(" ", "-").lower()}.html">{author}</a>'
+                    )
+                else:
+                    # Bio doesn't exist, just use the author's name without a link
+                    author_elements.append(author)
+            else:
+                # If we can't determine the file path, just use the author's name without a link
+                author_elements.append(author)
+        
+        return ", ".join(author_elements)
 
     def optimize_image(self, image) -> None:
         """Optimize the image."""

@@ -21,26 +21,25 @@ def generate_grid(ROCmBlogs, blog) -> str:
 
     date = blog.date.strftime("%B %d, %Y") if blog.date else "No Date"
 
-    # look at myst description
-
-    if hasattr(blog, "myst"):
-        description = (
-            blog.myst.get("html_meta").get("description lang=en")
-            if blog.myst.get("html_meta").get("description lang=en")
-            else "No Description"
-        )
-
-        if len(description) > 150:
-            description = description[:150] + "..."
-        else:
-            description = description + "..." + " " * (150 - len(description))
-
+    # Get description from myst metadata
+    description = "No Description"
+    if hasattr(blog, "myst") and blog.myst:
+        html_meta = blog.myst.get("html_meta", {})
+        if html_meta and "description lang=en" in html_meta:
+            description = html_meta["description lang=en"]
+    
     authors_list = getattr(blog, "author", "").split(",")
 
     image = blog.grab_image(ROCmBlogs)
 
+    # Initialize authors_html
+    authors_html = ""
+    
+    # Get author HTML if there are authors
     if authors_list:
         authors_html = blog.grab_authors(authors_list)
+    
+    # Only add "by" prefix if there are valid authors
     if authors_html:
         authors_html = f"by {authors_html}"
 

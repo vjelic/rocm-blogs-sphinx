@@ -1,0 +1,18 @@
+/* CSS for fixing Sphinx breadcrumbs */
+.bd-breadcrumbs {
+    display: block !important;
+    color: #ffd700; /* Gold color */
+}
+
+.bd-breadcrumbs li {
+    color: #ffd700; /* Gold color */
+}
+
+.bd-breadcrumbs a {
+    color: #ffd700; /* Gold color */
+}
+
+.bd-breadcrumbs a:hover {
+    color: #ffcc00; /* Slightly darker gold for hover */
+    text-decoration: underline;
+}
