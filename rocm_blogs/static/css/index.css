@@ -1,0 +1,517 @@
+/* Import modern fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Set wider site width */
+.bd-page-width {
+    max-width: 1750px !important;
+    width: 95% !important;
+    margin: 0 auto !important;
+}
+
+.bd-main .bd-content .bd-article-container {
+    max-width: 1750px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.bd-container {
+    max-width: 1750px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.bd-sidebar-secondary {
+    display: none;
+}
+
+label.sidebar-toggle.secondary-toggle.btn.btn-sm {
+    display: none;
+}
+
+/* Button styling */
+#buttonWrapper {
+    border: none;
+    background-color: var(--card-bg-light);
+    box-shadow: 0 4px 12px var(--shadow-light);
+    text-align: center;
+    font-weight: 500;
+    font-size: 14px;
+    border-radius: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    padding: 10px 20px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--text-color-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+#buttonWrapper:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px var(--hover-shadow-light);
+}
+
+#buttonWrapper::after {
+    content: "→";
+    margin-left: 8px;
+    transition: transform 0.2s ease;
+}
+
+#buttonWrapper:hover::after {
+    transform: translateX(4px);
+}
+
+html[data-theme="dark"] #buttonWrapper {
+    background-color: var(--card-bg-dark);
+    box-shadow: 0 4px 12px var(--shadow-dark);
+    color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] #buttonWrapper:hover {
+    box-shadow: 0 8px 24px var(--hover-shadow-dark);
+}
+
+h2 {
+    margin: 0;
+    font-size: 20px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 10px;
+}
+
+/* Container styling */
+.container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0px 10px 20px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1750px;
+    margin: 0 auto;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+html[data-theme="dark"] .container {
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.read-more-btn {
+    font-size: 20px;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    display: inline-block;
+    align-items: center;
+    text-decoration: none;
+    overflow: hidden;
+    gap: 7px;
+    display: block;
+    text-align: left;
+    margin-left: 0;
+    margin-top: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.read-more-btn-small {
+    font-size: 15px;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    display: inline-block;
+    align-items: center;
+    text-decoration: none;
+    overflow: hidden;
+    gap: 7px;
+    display: block;
+    text-align: left;
+    margin-left: 0;
+    margin-top: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.arrows {
+    font-size: 20px;
+    display: inline-block;
+    font-weight: bold;
+    transition: transform 0.3s ease, color 0.3s ease, font-size 0.3s ease;
+}
+
+.read-more-btn:hover .arrows {
+    transform: translateX(8px);
+}
+
+.arrows-small {
+    font-size: 15px;
+    display: inline-block;
+    font-weight: bold;
+    transition: transform 0.3s ease, color 0.3s ease, font-size 0.3s ease;
+}
+
+.read-more-btn-small:hover .arrows-small {
+    transform: translateX(10px);
+}
+
+.date {
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 22.5px;
+    text-transform: none;
+    margin-bottom: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.paragraph {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #555;
+}
+
+/* Dark mode support */
+:root {
+    --card-bg-light: white;
+    --card-bg-dark: #1e1e1e;
+    --text-color-light: #333;
+    --text-color-dark: #e0e0e0;
+    --shadow-light: rgba(0, 0, 0, 0.08);
+    --shadow-dark: rgba(0, 0, 0, 0.3);
+    --hover-shadow-light: rgba(0, 0, 0, 0.12);
+    --hover-shadow-dark: rgba(0, 0, 0, 0.5);
+    --paragraph-color-light: #555;
+    --paragraph-color-dark: #b0b0b0;
+    --link-hover-light: #0066cc;
+    --link-hover-dark: #4d9fff;
+}
+
+/* Card styling */
+.sd-card {
+    border-radius: 12px !important;
+    box-shadow: 0 4px 12px var(--shadow-light) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    margin-bottom: 20px;
+    background-color: var(--card-bg-light);
+    border: none !important;
+    height: 470px !important; /* Increased height for all cards to accommodate more authors */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.sd-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px var(--hover-shadow-light) !important;
+}
+
+/* Image styling */
+.small-sd-card-img-top.sd-card-img-top {
+    width: 100%;
+    height: 250px;
+    object-fit: cover;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block;
+    border-bottom: none !important;
+    border-radius: 0 !important;
+    flex-shrink: 0 !important;
+}
+
+/* Fix empty card body */
+.small-sd-card.sd-card-body {
+    display: none;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 0 !important;
+}
+
+/* Card footer styling */
+.sd-card-footer {
+    border-top: none !important;
+    background-color: var(--card-bg-light) !important;
+    padding: 16px !important;
+    flex-grow: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Fix for grid layout */
+.sd-col {
+    padding: 8px !important;
+    display: flex !important;
+}
+
+.card-header {
+    font-size: 18px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 10px;
+    color: var(--text-color-light);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.small-card-header-link h2 {
+    font-weight: 700 !important;
+}
+
+.small-card-header-link {
+    text-decoration: none !important;
+}
+
+.small-card-header-link:hover h2 {
+    color: var(--link-hover-light);
+}
+
+/* Paragraph text with truncation */
+.paragraph {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--paragraph-color-light);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Date styling */
+.date {
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.5;
+    text-transform: none;
+    margin-bottom: 10px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin-top: auto; /* Push date to bottom of card */
+    white-space: normal !important; /* Allow text to wrap */
+    overflow: visible !important; /* Ensure text is not cut off */
+    text-overflow: clip !important; /* Don't use ellipsis */
+    word-wrap: break-word !important; /* Break long words if needed */
+    max-width: 100% !important; /* Use full width */
+    display: block !important; /* Always display */
+}
+
+/* Ensure author links don't break layout */
+.date a {
+    display: inline !important;
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Dark mode styles */
+html[data-theme="dark"] .sd-card {
+    background-color: var(--card-bg-dark) !important;
+    box-shadow: 0 4px 12px var(--shadow-dark) !important;
+}
+
+html[data-theme="dark"] .sd-card:hover {
+    box-shadow: 0 8px 24px var(--hover-shadow-dark) !important;
+}
+
+html[data-theme="dark"] .sd-card-footer {
+    background-color: var(--card-bg-dark) !important;
+}
+
+html[data-theme="dark"] .card-header {
+    color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .paragraph {
+    color: var(--paragraph-color-dark);
+}
+
+html[data-theme="dark"] .small-card-header-link:hover h2 {
+    color: var(--link-hover-dark);
+}
+
+html[data-theme="dark"] .container h2 {
+    color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .date {
+    color: var(--paragraph-color-dark);
+}
+
+/* Responsive adjustments based on Sphinx Design grid breakpoints */
+/* Extra large screens (≥ 1200px) - 4 columns */
+@media (min-width: 1566px) {
+    .sd-card {
+        height: 470px !important; /* Increased height for all cards */
+    }
+    
+    .paragraph {
+        -webkit-line-clamp: 3;
+        display: -webkit-box;
+    }
+    
+    .card-header {
+        -webkit-line-clamp: 3;
+    }
+}
+
+/* Large screens (≥ 992px and < 1200px) - 4 columns */
+@media (min-width: 992px) and (max-width: 1565px) {
+    .sd-card {
+        height: 480px !important; /* Increased height for all cards */
+    }
+    
+    .paragraph {
+        -webkit-line-clamp: 3; /* Show 2 lines of text */
+        display: -webkit-box;
+    }
+    
+    .card-header {
+        -webkit-line-clamp: 3;
+    }
+}
+
+/* Medium screens (≥ 768px and < 992px) - 3 columns */
+@media (min-width: 768px) and (max-width: 991px) {
+    .sd-card {
+        height: 460px !important; /* Increased height for all cards */
+    }
+    
+    .paragraph {
+        -webkit-line-clamp: 4; /* Show 2 lines of text */
+        display: -webkit-box;
+    }
+    
+    .card-header {
+        -webkit-line-clamp: 2;
+    }
+}
+
+/* Small screens (≥ 576px and < 768px) - 2 columns */
+@media (min-width: 576px) and (max-width: 767px) {
+    .sd-card {
+        height: 440px !important; /* Increased height for all cards */
+    }
+    
+    .paragraph {
+        -webkit-line-clamp: 5; /* Show 1 line of text */
+        display: -webkit-box;
+    }
+    
+    .card-header {
+        -webkit-line-clamp: 3;
+        font-size: 16px;
+    }
+}
+
+/* Extra small screens (< 576px) - 1 column */
+@media (max-width: 575px) {
+    .sd-card {
+        height: 420px !important; /* Increased height for all cards */
+    }
+    
+    .paragraph {
+        display: none !important; /* Hide paragraph on mobile */
+    }
+    
+    .card-header {
+        -webkit-line-clamp: 3;
+        font-size: 16px;
+    }
+    
+    /* Ensure date/author is always visible */
+    .date {
+        display: block !important;
+        font-size: 12px;
+    }
+}
+
+.bd-sidebar-primary {
+    display: none;
+}
+
+.sidebar-toggle {
+    display: none;
+}
+
+label.sidebar-toggle.primary-toggle.btn.btn-sm {
+    display: none;
+}
+
+/* Grid layout improvements */
+.sd-container-fluid {
+    padding: 0 10px;
+    max-width: 1750px;
+    margin: 0 auto;
+}
+
+.sd-row {
+    margin: 0 -10px;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* Custom grid layout overrides - Direct targeting of Sphinx Design grid classes */
+/* Extra large screens (≥ 1400px) - 4 columns */
+@media (min-width: 1460px) {
+    /* Target all grid columns regardless of their class */
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 25% !important;
+        max-width: 25% !important;
+    }
+}
+
+/* Large screens (≥ 1200px and < 1400px) - 3 columns */
+@media (min-width: 1200px) and (max-width: 1459px) {
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 33.333333% !important;
+        max-width: 33.333333% !important;
+    }
+}
+
+/* Medium screens (≥ 992px and < 1200px) - 2 columns */
+@media (min-width: 992px) and (max-width: 1199px) {
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+    }
+}
+
+/* Small screens (≥ 768px and < 992px) - 2 columns */
+@media (min-width: 768px) and (max-width: 991px) {
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+    }
+}
+
+/* Extra small screens (< 768px) - 1 column */
+@media (max-width: 767px) {
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+/* Responsive grid adjustments */
+@media (max-width: 1800px) {
+    .bd-page-width, 
+    .bd-main .bd-content .bd-article-container,
+    .bd-container,
+    .container,
+    .sd-container-fluid {
+        max-width: 95% !important;
+    }
+}
+
+/* Section headings */
+.container h2 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-color-light);
+}
