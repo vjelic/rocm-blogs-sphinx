@@ -457,7 +457,7 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
 
 /* Custom grid layout overrides - Direct targeting of Sphinx Design grid classes */
 /* Extra large screens (≥ 1400px) - 4 columns */
-@media (min-width: 1460px) {
+@media (min-width: 1440px) {
     /* Target all grid columns regardless of their class */
     .sd-row > [class*="sd-col"] {
         flex: 0 0 25% !important;
@@ -466,7 +466,7 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
 }
 
 /* Large screens (≥ 1200px and < 1400px) - 3 columns */
-@media (min-width: 1200px) and (max-width: 1459px) {
+@media (min-width: 1200px) and (max-width: 1440px) {
     .sd-row > [class*="sd-col"] {
         flex: 0 0 33.333333% !important;
         max-width: 33.333333% !important;
@@ -474,15 +474,7 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
 }
 
 /* Medium screens (≥ 992px and < 1200px) - 2 columns */
-@media (min-width: 992px) and (max-width: 1199px) {
-    .sd-row > [class*="sd-col"] {
-        flex: 0 0 50% !important;
-        max-width: 50% !important;
-    }
-}
-
-/* Small screens (≥ 768px and < 992px) - 2 columns */
-@media (min-width: 768px) and (max-width: 991px) {
+@media (min-width:768px) and (max-width: 1199px) {
     .sd-row > [class*="sd-col"] {
         flex: 0 0 50% !important;
         max-width: 50% !important;
@@ -490,7 +482,7 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
 }
 
 /* Extra small screens (< 768px) - 1 column */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
     .sd-row > [class*="sd-col"] {
         flex: 0 0 100% !important;
         max-width: 100% !important;

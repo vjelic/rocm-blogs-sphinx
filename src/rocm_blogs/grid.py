@@ -27,18 +27,18 @@ def generate_grid(ROCmBlogs, blog) -> str:
         html_meta = blog.myst.get("html_meta", {})
         if html_meta and "description lang=en" in html_meta:
             description = html_meta["description lang=en"]
-    
+
     authors_list = getattr(blog, "author", "").split(",")
 
     image = blog.grab_image(ROCmBlogs)
 
     # Initialize authors_html
     authors_html = ""
-    
+
     # Get author HTML if there are authors
     if authors_list:
         authors_html = blog.grab_authors(authors_list)
-    
+
     # Only add "by" prefix if there are valid authors
     if authors_html:
         authors_html = f"by {authors_html}"

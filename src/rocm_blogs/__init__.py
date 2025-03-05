@@ -2,6 +2,7 @@ import importlib.resources as pkg_resources
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sphinx.application import Sphinx
@@ -16,43 +17,69 @@ __all__ = ["Blog", "BlogHolder", "ROCmBlogs", "grid_generation", "metadata_gener
 
 logger = sphinx_logging.getLogger(__name__)
 
+# Template and CSS caching
+_TEMPLATE_CACHE = {}
+_CSS_CACHE = {}
+
+
+def cached_read_text(package, resource):
+    """Read text from a package resource with caching."""
+    
+    cache_key = f"{package}.{resource}"
+
+    if "css" in resource:
+        if cache_key in _CSS_CACHE:
+            return _CSS_CACHE[cache_key]
+        content = pkg_resources.read_text(package, resource)
+        _CSS_CACHE[cache_key] = content
+        return content
+    else:
+        if cache_key in _TEMPLATE_CACHE:
+            return _TEMPLATE_CACHE[cache_key]
+        content = pkg_resources.read_text(package, resource)
+        _TEMPLATE_CACHE[cache_key] = content
+        return content
+
 
 def calculate_read_time(words: int) -> int:
     """Average reading speed is 245 words per minute."""
+
     start_time = time.time()
-    
+
     result = round(words / 245)
-    
+
     end_time = time.time()
     elapsed_time = end_time - start_time
-    logger.debug(f"Read time calculation completed in \033[96m{elapsed_time:.6f} seconds\033[0m")
-    
+    logger.debug(
+        f"Read time calculation completed in \033[96m{elapsed_time:.6f} seconds\033[0m"
+    )
+
     return result
 
 
 def truncate_string(input_string: str) -> str:
     """Remove special characters and spaces from a string."""
+
     start_time = time.time()
-    
+
     cleaned_string = re.sub(r"[!@#$%^&*?/|]", "", input_string)
     transformed_string = re.sub(r"\s+", "-", cleaned_string)
     result = transformed_string.lower()
-    
+
     end_time = time.time()
     elapsed_time = end_time - start_time
-    logger.debug(f"String truncation completed in \033[96m{elapsed_time:.6f} seconds\033[0m")
-    
+    logger.debug(
+        f"String truncation completed in \033[96m{elapsed_time:.6f} seconds\033[0m"
+    )
+
     return result
 
 
 def update_index_file(app: Sphinx) -> None:
-    '''
-    Update the index file with new blog posts.
+    """Update the index file with new blog posts."""
 
-    param: app: Sphinx - The Sphinx application object.
-    '''
     start_time = time.time()
-    
+
     try:
         index_template = """
 ---
@@ -70,10 +97,10 @@ html_meta:
 """
 
         # load index.html template
-        template_html = pkg_resources.read_text("rocm_blogs.templates", "index.html")
+        template_html = cached_read_text("rocm_blogs.templates", "index.html")
 
         # load index.css template
-        css_content = pkg_resources.read_text("rocm_blogs.static.css", "index.css")
+        css_content = cached_read_text("rocm_blogs.static.css", "index.css")
 
         index_template = index_template.format(CSS=css_content, HTML=template_html)
 
@@ -98,35 +125,41 @@ html_meta:
         application_grid_items = []
         software_grid_items = []
 
-        for blog in all_blogs:
-            if blog not in used:
-                used.append(blog)
-                grid_items.append(generate_grid(rocmblogs, blog))
-                if len(grid_items) == 12:
-                    break
+        # Helper function to generate grid items in parallel
+        def generate_grid_items(blog_list, max_items, used_blogs):
+            items = []
+            count = 0
 
-        for blog in rocmblogs.blogs.blogs_categories.get("Ecosystems and Partners"):
-            if blog not in used:
-                used.append(blog)
-                eco_grid_items.append(generate_grid(rocmblogs, blog))
-                if len(eco_grid_items) == 4:
-                    break
+            with ThreadPoolExecutor() as executor:
+                futures = {}
+                for blog in blog_list:
+                    if blog not in used_blogs and count < max_items:
+                        used_blogs.append(blog)
+                        futures[executor.submit(generate_grid, rocmblogs, blog)] = blog
+                        count += 1
 
-        for blog in rocmblogs.blogs.blogs_categories.get("Applications & models"):
-            if blog not in used:
-                used.append(blog)
-                application_grid_items.append(generate_grid(rocmblogs, blog))
-                if len(application_grid_items) == 4:
-                    break
+                for future in futures:
+                    items.append(future.result())
 
-        for blog in rocmblogs.blogs.blogs_categories.get(
-            "Software tools & optimizations"
-        ):
-            if blog not in used:
-                used.append(blog)
-                software_grid_items.append(generate_grid(rocmblogs, blog))
-                if len(software_grid_items) == 4:
-                    break
+            return items
+
+        # Generate grid items in parallel
+        logger.info("Generating grid items in parallel")
+
+        # Main grid items (up to 12)
+        grid_items = generate_grid_items(all_blogs, 16, used)
+
+        # Category-specific grid items (up to 4 each)
+        eco_blogs = rocmblogs.blogs.blogs_categories.get("Ecosystems and Partners", [])
+        eco_grid_items = generate_grid_items(eco_blogs, 4, used)
+
+        app_blogs = rocmblogs.blogs.blogs_categories.get("Applications & models", [])
+        application_grid_items = generate_grid_items(app_blogs, 4, used)
+
+        sw_blogs = rocmblogs.blogs.blogs_categories.get(
+            "Software tools & optimizations", []
+        )
+        software_grid_items = generate_grid_items(sw_blogs, 4, used)
 
         grid_content = "\n".join(grid_items)
         eco_grid_content = "\n".join(eco_grid_items)
@@ -149,21 +182,24 @@ html_meta:
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        logger.info(f"Successfully updated {output_path} with new grid items in \033[96m{elapsed_time:.2f} seconds\033[0m.")
+        logger.info(
+            f"Successfully updated {output_path} with new grid items in \033[96m{elapsed_time:.2f} seconds\033[0m."
+        )
     except Exception as error:
         logger.critical(f"Failed to update index file: {error}")
 
 
 def quickshare(blog):
     """Quickshare buttons for social media sharing."""
+
     start_time = time.time()
-    
+
     if "test" in str(blog.file_path).lower():
         css = "css_content"
         html = "html_content"
     else:
-        css = pkg_resources.read_text("rocm_blogs.static.css", "social-bar.css")
-        html = pkg_resources.read_text("rocm_blogs.templates", "social-bar.html")
+        css = cached_read_text("rocm_blogs.static.css", "social-bar.css")
+        html = cached_read_text("rocm_blogs.templates", "social-bar.html")
 
     social_bar = """
 <style>
@@ -209,20 +245,17 @@ def quickshare(blog):
 
     end_time = time.time()
     elapsed_time = end_time - start_time
-    logger.debug(f"Quickshare generation for {getattr(blog, 'blog_title', 'Unknown')} completed in \033[96m{elapsed_time:.4f} seconds\033[0m")
-    
+    logger.debug(
+        f"Quickshare generation for {getattr(blog, 'blog_title', 'Unknown')} completed in \033[96m{elapsed_time:.4f} seconds\033[0m"
+    )
+
     return social_bar
 
 
 def blog_generation(app: Sphinx):
-    """Generate blog pages with enhanced styling and metadata.
-
-    This function processes each blog file, adding styling, author attribution,
-    images, and social sharing buttons. It includes robust error handling and
-    file backup mechanisms to prevent data loss.
-    """
+    """Generate blog pages with styling and metadata."""
     start_time = time.time()
-    
+
     try:
         env = app.builder.env
         srcdir = Path(env.srcdir)
@@ -234,118 +267,94 @@ def blog_generation(app: Sphinx):
         rocmblogs.create_blog_objects()
         rocmblogs.blogs.sort_blogs_by_date()
 
-        # Process each blog
-        for blog in rocmblogs.blogs.get_blogs():
-            try:
-                process_single_blog(blog, rocmblogs)
-            except Exception as error:
-                logger.warning(f"Error processing blog {blog.file_path}: {error}")
-                # Continue with next blog instead of failing completely
-                continue
+        # Process blogs in parallel
+        blogs = rocmblogs.blogs.get_blogs()
+
+        # Use a thread pool to process blogs in parallel
+        # Determine the optimal number of workers based on CPU count
+        max_workers = min(32, (os.cpu_count() or 1) * 2)
+        logger.info(f"Processing {len(blogs)} blogs with {max_workers} workers")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Create a list of futures
+            futures = []
+            for blog in blogs:
+                future = executor.submit(process_single_blog, blog, rocmblogs)
+                futures.append(future)
+
+            # Process results as they complete
+            for future in futures:
+                try:
+                    future.result()  # This will raise any exceptions from the thread
+                except Exception as error:
+                    logger.warning(f"Error processing blog: {error}")
+
         end_time = time.time()
         elapsed_time = end_time - start_time
-        logger.info(f"Blog generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m")
+        logger.info(
+            f"Blog generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m"
+        )
     except Exception as error:
         logger.critical(f"Failed to generate blogs: {error}")
 
 
+# Precompile regex patterns for better performance
+_YAML_FRONT_MATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+_FENCED_CODE_BLOCKS_PATTERN = re.compile(r"```[\s\S]*?```")
+_INDENTED_CODE_BLOCKS_PATTERN = re.compile(r"(?m)^( {4}|\t).*$")
+_HTML_TAGS_PATTERN = re.compile(r"<[^>]*>")
+_URLS_PATTERN = re.compile(r"https?://\S+")
+_IMAGE_REFERENCES_PATTERN = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_LINK_REFERENCES_PATTERN = re.compile(r"\[[^\]]*\]\([^)]*\)")
+_HEADERS_PATTERN = re.compile(r"(?m)^#.*$")
+_HORIZONTAL_RULES_PATTERN = re.compile(r"(?m)^(---|[*]{3}|[_]{3})$")
+_BLOCKQUOTES_PATTERN = re.compile(r"(?m)^>.*$")
+_UNORDERED_LIST_MARKERS_PATTERN = re.compile(r"(?m)^[ \t]*[-*+][ \t]+")
+_ORDERED_LIST_MARKERS_PATTERN = re.compile(r"(?m)^[ \t]*\d+\.[ \t]+")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
 def count_words_in_markdown(content: str) -> int:
     """Count the number of words in a markdown file."""
+
     start_time = time.time()
-    
+
     try:
-
+        # Remove YAML front matter
         if content.startswith("---"):
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                content = parts[2]
+            content = _YAML_FRONT_MATTER_PATTERN.sub("", content)
 
-        try:
-            content = re.sub(r"```[\s\S]*?```", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for fenced code blocks: {error}\033[0m"
-            )
+        # Apply all regex replacements in a single pass
+        patterns_to_remove = [
+            _FENCED_CODE_BLOCKS_PATTERN,
+            _INDENTED_CODE_BLOCKS_PATTERN,
+            _HTML_TAGS_PATTERN,
+            _URLS_PATTERN,
+            _IMAGE_REFERENCES_PATTERN,
+            _LINK_REFERENCES_PATTERN,
+            _HEADERS_PATTERN,
+            _HORIZONTAL_RULES_PATTERN,
+            _BLOCKQUOTES_PATTERN,
+            _UNORDERED_LIST_MARKERS_PATTERN,
+            _ORDERED_LIST_MARKERS_PATTERN,
+        ]
 
-        try:
-            content = re.sub(r"(?m)^( {4}|\t).*$", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for indented code blocks: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"<[^>]*>", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for HTML tags: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"https?://\S+", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for URLs: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for image references: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"\[[^\]]*\]\([^)]*\)", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for link references: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"(?m)^#.*$", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for headers: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"(?m)^(---|[*]{3}|[_]{3})$", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for horizontal rules: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"(?m)^>.*$", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for blockquotes: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"(?m)^[ \t]*[-*+][ \t]+", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for unordered list markers: {error}\033[0m"
-            )
-
-        try:
-            content = re.sub(r"(?m)^[ \t]*\d+\.[ \t]+", "", content)
-        except re.error as error:
-            logger.warning(
-                f"\033[33mError in regex for ordered list markers: {error}\033[0m"
-            )
+        for pattern in patterns_to_remove:
+            try:
+                content = pattern.sub("", content)
+            except re.error as error:
+                logger.warning(f"\033[33mError in regex: {error}\033[0m")
 
         # Split by whitespace and count non-empty words
-        words = [word for word in re.split(r"\s+", content) if word.strip()]
-
+        words = [word for word in _WHITESPACE_PATTERN.split(content) if word.strip()]
         word_count = len(words)
-        
+
         end_time = time.time()
         elapsed_time = end_time - start_time
-        logger.debug(f"Word counting completed in \033[96m{elapsed_time:.4f} seconds\033[0m")
-        
+        logger.debug(
+            f"Word counting completed in \033[96m{elapsed_time:.4f} seconds\033[0m"
+        )
+
         return word_count
     except Exception as error:
         logger.warning(f"Error counting words in markdown: {error}")
@@ -363,25 +372,25 @@ def process_single_blog(blog, rocmblogs):
         return
 
     try:
-
+        # Read file content once and create backup
         try:
             with open(readme_file, "r", encoding="utf-8", errors="replace") as src:
                 content = src.read()
+                # Convert content to lines immediately to avoid reading the
+                # file twice
+                lines = content.splitlines(True)  # Keep line endings
+
+            # Create backup
             with open(backup_file, "w", encoding="utf-8", errors="replace") as dst:
                 dst.write(content)
         except Exception as error:
-            logger.warning(f"Error backing up blog {readme_file}: {error}")
+            logger.warning(f"Error reading or backing up blog {readme_file}: {error}")
+            return
 
+        # Count words using the content we already have
         word_count = count_words_in_markdown(content)
         blog.set_word_count(word_count)
         logger.info(f"\033[33mWord count for {readme_file}: {word_count}\033[0m")
-
-        try:
-            with open(readme_file, "r", encoding="utf-8", errors="replace") as file:
-                lines = file.readlines()
-        except Exception as error:
-            logger.warning(f"Error reading blog {readme_file}: {error}")
-            return
 
         try:
 
@@ -419,7 +428,7 @@ def process_single_blog(blog, rocmblogs):
                 authors_html = authors_html.replace("././", "../../").replace(
                     ".md", ".html"
                 )
-            
+
             # Check if author is "No author" or empty
             has_valid_author = authors_html and "No author" not in authors_html
 
@@ -437,30 +446,25 @@ def process_single_blog(blog, rocmblogs):
 
             # Load templates and CSS
             quickshare_button = quickshare(blog)
-            image_css = pkg_resources.read_text(
-                "rocm_blogs.static.css", "image_blog.css"
-            )
-            image_html = pkg_resources.read_text(
-                "rocm_blogs.templates", "image_blog.html"
-            )
-            blog_css = pkg_resources.read_text("rocm_blogs.static.css", "blog.css")
-            breadcrumbs_css = pkg_resources.read_text("rocm_blogs.static.css", "breadcrumbs.css")
-            author_attribution_template = pkg_resources.read_text(
+            image_css = cached_read_text("rocm_blogs.static.css", "image_blog.css")
+            image_html = cached_read_text("rocm_blogs.templates", "image_blog.html")
+            blog_css = cached_read_text("rocm_blogs.static.css", "blog.css")
+            author_attribution_template = cached_read_text(
                 "rocm_blogs.templates", "author_attribution.html"
             )
-            giscus_html = pkg_resources.read_text("rocm_blogs.templates", "giscus.html")
+            giscus_html = cached_read_text("rocm_blogs.templates", "giscus.html")
 
-            # Modify the author attribution template based on whether there's a valid author
+            # Modify the author attribution template based on whether there's a
+            # valid author
             if has_valid_author:
                 # Use the original template with author
                 modified_author_template = author_attribution_template
             else:
                 # Create a modified template without "by {authors_string}"
                 modified_author_template = author_attribution_template.replace(
-                    '<span> {date} by {authors_string}.</span>',
-                    '<span> {date}</span>'
+                    "<span> {date} by {authors_string}.</span>", "<span> {date}</span>"
                 )
-            
+
             # Fill in the author attribution template
             authors_html_filled = (
                 modified_author_template.replace("{authors_string}", authors_html)
@@ -521,7 +525,9 @@ def process_single_blog(blog, rocmblogs):
 
             end_time = time.time()
             elapsed_time = end_time - start_time
-            logger.info(f"\033[33mSuccessfully processed blog {readme_file} in \033[96m{elapsed_time:.2f} seconds\033[33m\033[0m")
+            logger.info(
+                f"\033[33mSuccessfully processed blog {readme_file} in \033[96m{elapsed_time:.2f} seconds\033[33m\033[0m"
+            )
 
             # Remove the backup file if everything went well
             try:
@@ -570,16 +576,18 @@ def process_single_blog(blog, rocmblogs):
 
 def setup(app: Sphinx):
     start_time = time.time()
-    
+
     logger.info("Setting up ROCm Blogs extension")
 
     app.connect("builder-inited", update_index_file)
     app.connect("builder-inited", blog_generation)
-    
+
     # Log the total build setup time
     end_time = time.time()
     elapsed_time = end_time - start_time
-    logger.info(f"ROCm Blogs extension setup completed in \033[96m{elapsed_time:.2f} seconds\033[0m")
+    logger.info(
+        f"ROCm Blogs extension setup completed in \033[96m{elapsed_time:.2f} seconds\033[0m"
+    )
 
     return {
         "version": __version__,
