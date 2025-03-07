@@ -273,6 +273,7 @@ html[data-theme="dark"] .container {
     text-transform: none;
     margin-bottom: 10px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    display: -webkit-box !important;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     margin-top: auto;
