@@ -11,9 +11,8 @@ from sphinx.util import logging as sphinx_logging
 from ._rocmblogs import ROCmBlogs
 from ._version import __version__
 from .grid import generate_grid
-from .metadata import metadata_generator
 
-__all__ = ["Blog", "BlogHolder", "ROCmBlogs", "grid_generation", "metadata_generator"]
+__all__ = ["Blog", "BlogHolder", "ROCmBlogs", "grid_generation"]
 
 logger = sphinx_logging.getLogger(__name__)
 
