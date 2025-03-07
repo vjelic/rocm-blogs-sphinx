@@ -15,7 +15,7 @@ import os
 import time
 from pathlib import Path
 
-from rocm_blogs import ROCmBlogs, metadata_generator
+from rocm_blogs import ROCmBlogs
 
 
 def main():
