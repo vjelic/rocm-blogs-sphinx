@@ -284,6 +284,12 @@ html[data-theme="dark"] .container {
     display: block !important; 
 }
 
+.date a {
+    display: inline !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
 /* Ensure author links don't break layout */
 .date a {
     display: inline !important;
