@@ -11,7 +11,6 @@ from datetime import datetime
 
 from PIL import Image
 
-
 class Blog:
     def __init__(self, file_path, metadata, image=None):
         self.file_path = file_path
@@ -126,15 +125,7 @@ class Blog:
         return href
 
     def grab_authors(self, authors_list: list) -> str:
-        """
-        Generate HTML links for authors, but only if their bio file exists.
-
-        Args:
-            authors_list: A list of author names.
-
-        Returns:
-            HTML links for the authors with existing bios, or plain text for authors without bios.
-        """
+        """Generate HTML links for authors, but only if their bio file exists."""
         # Filter out "No author" or empty authors
         valid_authors = []
         for author in authors_list:
@@ -149,8 +140,7 @@ class Blog:
         if not valid_authors:
             return ""
 
-        # Generate HTML links for valid authors, but only if their bio file
-        # exists
+        # Generate HTML links for valid authors, but only if their bio file exists
         author_elements = []
         for author in valid_authors:
             # Create the filename that would be used for the author's bio
@@ -159,8 +149,7 @@ class Blog:
             # Check if the author's bio file exists in the blogs/authors directory
             # We need to find the blogs directory first
             if hasattr(self, "file_path"):
-                # Start from the blog's directory and navigate to the authors
-                # directory
+                # Start from the blog's directory and navigate to the authors directory
                 blog_dir = os.path.dirname(self.file_path)
                 # Go up to the blogs directory
                 blogs_dir = os.path.dirname(os.path.dirname(blog_dir))
@@ -174,12 +163,10 @@ class Blog:
                         f'<a href="https://rocm.blogs.amd.com/authors/{author.replace(" ", "-").lower()}.html">{author}</a>'
                     )
                 else:
-                    # Bio doesn't exist, just use the author's name without a
-                    # link
+                    # Bio doesn't exist, just use the author's name without a link
                     author_elements.append(author)
             else:
-                # If we can't determine the file path, just use the author's
-                # name without a link
+
                 author_elements.append(author)
 
         return ", ".join(author_elements)
@@ -232,7 +219,6 @@ class Blog:
         image = getattr(self, "thumbnail", None)
         print(f"Original thumbnail value: {image}")
 
-        # Reduce verbose logging to improve performance
         # print("Blog attributes:")
         # for attr_name in dir(self):
         #     if not attr_name.startswith("__") and not callable(
@@ -248,7 +234,7 @@ class Blog:
         if not image:
             print("No thumbnail specified in metadata, using generic.jpg")
             self.image = "generic.jpg"
-            # Cache the result
+
             self._image_path_cache[cache_key] = {
                 "relative_path": "./images/generic.jpg",
                 "image_name": "generic.jpg",
@@ -264,6 +250,7 @@ class Blog:
             full_image_path = pathlib.Path(image)
             print(f"Found image at absolute path: {full_image_path}")
         else:
+            
             # Create a list of possible paths
             possible_paths = [
                 pathlib.Path(self.file_path).parent / image,
@@ -295,7 +282,7 @@ class Blog:
         if not full_image_path:
             print(f"Image not found: {image}")
             self.image = "generic.jpg"
-            # Cache the result
+
             self._image_path_cache[cache_key] = {
                 "relative_path": "./images/generic.jpg",
                 "image_name": "generic.jpg",
@@ -317,7 +304,6 @@ class Blog:
         image_name = os.path.basename(str(full_image_path))
         self.save_image_path(image_name)
 
-        # Cache the result for future use
         self._image_path_cache[cache_key] = {
             "relative_path": relative_path,
             "image_name": image_name,
