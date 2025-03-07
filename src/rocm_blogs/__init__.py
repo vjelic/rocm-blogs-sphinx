@@ -111,7 +111,7 @@ html_meta:
         # Assume the blogs directory is the sibling of srcdir.
         blogs_dir = rocmblogs.find_blogs_directory(app.srcdir)
         rocmblogs.blogs_directory = str(blogs_dir)
-        rocmblogs.find_readme_files_cache()
+        rocmblogs.find_readme_files()
         rocmblogs.create_blog_objects()
         rocmblogs.blogs.sort_blogs_by_date()
         rocmblogs.blogs.sort_blogs_by_category(rocmblogs.categories)
@@ -262,7 +262,7 @@ def blog_generation(app: Sphinx):
         rocmblogs = ROCmBlogs()
         blogs_dir = rocmblogs.find_blogs_directory(str(srcdir))
         rocmblogs.blogs_directory = str(blogs_dir)
-        rocmblogs.find_readme_files_cache()
+        rocmblogs.find_readme_files()
         rocmblogs.create_blog_objects()
         rocmblogs.blogs.sort_blogs_by_date()
 
