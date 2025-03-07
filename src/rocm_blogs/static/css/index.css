@@ -1,21 +1,26 @@
-/* Import modern fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-/* Set wider site width */
 .bd-page-width {
-    max-width: 1750px !important;
-    width: 95% !important;
-    margin: 0 auto !important;
-}
-
-.bd-main .bd-content .bd-article-container {
-    max-width: 1750px !important;
+    max-width: 1440px !important;
     width: 100% !important;
     margin: 0 auto !important;
 }
 
+.bd-main .bd-content .bd-article-container {
+    max-width: 1440px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+@media (min-width: 1200px) {
+    .bd-main .bd-content .bd-article-container .bd-article {
+        padding-left: 2rem;
+        padding-top: 0px;
+    }
+}
+
 .bd-container {
-    max-width: 1750px !important;
+    max-width: 1440px !important;
     width: 100% !important;
     margin: 0 auto !important;
 }
@@ -36,7 +41,7 @@ label.sidebar-toggle.secondary-toggle.btn.btn-sm {
     text-align: center;
     font-weight: 500;
     font-size: 14px;
-    border-radius: 12px;
+    border-radius: 0;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     padding: 10px 20px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -80,7 +85,6 @@ h2 {
     margin-bottom: 10px;
 }
 
-/* Container styling */
 .container {
     display: flex;
     justify-content: space-between;
@@ -88,7 +92,7 @@ h2 {
     padding: 0px 10px 20px;
     box-sizing: border-box;
     width: 100%;
-    max-width: 1750px;
+    max-width: 1440px;
     margin: 0 auto;
     border-bottom: 1px solid rgba(0,0,0,0.05);
     margin-bottom: 20px;
@@ -154,7 +158,6 @@ html[data-theme="dark"] .container {
     transform: translateX(10px);
 }
 
-/* Dark mode support */
 :root {
     --card-bg-light: white;
     --card-bg-dark: #1e1e1e;
@@ -170,9 +173,8 @@ html[data-theme="dark"] .container {
     --link-hover-dark: #4d9fff;
 }
 
-/* Card styling */
 .sd-card {
-    border-radius: 12px !important;
+    border-radius: 0 !important;
     box-shadow: 0 4px 12px var(--shadow-light) !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     overflow: hidden;
@@ -189,7 +191,6 @@ html[data-theme="dark"] .container {
     box-shadow: 0 8px 24px var(--hover-shadow-light) !important;
 }
 
-/* Image styling */
 .small-sd-card-img-top.sd-card-img-top {
     width: 100%;
     height: 250px;
@@ -202,7 +203,6 @@ html[data-theme="dark"] .container {
     flex-shrink: 0 !important;
 }
 
-/* Fix empty card body */
 .small-sd-card.sd-card-body {
     display: none;
     padding: 0 !important;
@@ -210,7 +210,6 @@ html[data-theme="dark"] .container {
     height: 0 !important;
 }
 
-/* Card footer styling */
 .sd-card-footer {
     border-top: none !important;
     background-color: var(--card-bg-light) !important;
@@ -220,7 +219,6 @@ html[data-theme="dark"] .container {
     flex-direction: column !important;
 }
 
-/* Fix for grid layout */
 .sd-col {
     padding: 8px !important;
     display: flex !important;
@@ -252,7 +250,6 @@ html[data-theme="dark"] .container {
     color: var(--link-hover-light);
 }
 
-/* Paragraph text with truncation */
 .paragraph {
     font-size: 14px;
     line-height: 1.5;
@@ -273,16 +270,14 @@ html[data-theme="dark"] .container {
     text-transform: none;
     margin-bottom: 10px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin-top: auto;
+    max-width: 100% !important;
     display: -webkit-box !important;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    margin-top: auto;
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important; 
-    word-wrap: break-word !important; 
-    max-width: 100% !important;
-    display: block !important; 
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    word-wrap: break-word !important;
 }
 
 .date a {
@@ -291,15 +286,6 @@ html[data-theme="dark"] .container {
     overflow-wrap: break-word !important;
 }
 
-/* Ensure author links don't break layout */
-.date a {
-    display: inline !important;
-    white-space: normal !important;
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-}
-
-/* Dark mode styles */
 html[data-theme="dark"] .sd-card {
     background-color: var(--card-bg-dark) !important;
     box-shadow: 0 4px 12px var(--shadow-dark) !important;
@@ -333,11 +319,9 @@ html[data-theme="dark"] .date {
     color: var(--paragraph-color-dark);
 }
 
-/* Responsive adjustments based on Sphinx Design grid breakpoints */
-/* Extra large screens (≥ 1200px) - 4 columns */
-@media (min-width: 1566px) {
+@media (min-width: 1220px) {
     .sd-card {
-        height: 470px !important; /* Increased height for all cards */
+        height: 470px !important;
     }
     
     .paragraph {
@@ -348,32 +332,40 @@ html[data-theme="dark"] .date {
     .card-header {
         -webkit-line-clamp: 3;
     }
+
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 25% !important;
+        max-width: 25% !important;
+    }
 }
 
-/* Large screens (≥ 992px and < 1200px) - 4 columns */
-@media (min-width: 992px) and (max-width: 1565px) {
+@media (min-width: 1024px) and (max-width: 1220px) {
     .sd-card {
-        height: 480px !important; /* Increased height for all cards */
+        height: 480px !important;
     }
     
     .paragraph {
-        -webkit-line-clamp: 3; /* Show 2 lines of text */
+        -webkit-line-clamp: 3;
         display: -webkit-box;
     }
     
     .card-header {
         -webkit-line-clamp: 3;
     }
+
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 33.333333% !important;
+        max-width: 33.333333% !important;
+    }
 }
 
-/* Medium screens (≥ 768px and < 992px) - 3 columns */
 @media (min-width: 768px) and (max-width: 991px) {
     .sd-card {
-        height: 460px !important; /* Increased height for all cards */
+        height: 460px !important;
     }
     
     .paragraph {
-        -webkit-line-clamp: 4; /* Show 2 lines of text */
+        -webkit-line-clamp: 4;
         display: -webkit-box;
     }
     
@@ -382,14 +374,13 @@ html[data-theme="dark"] .date {
     }
 }
 
-/* Small screens (≥ 576px and < 768px) - 2 columns */
-@media (min-width: 576px) and (max-width: 767px) {
+@media (min-width:576px) and (max-width: 1024px) {
     .sd-card {
-        height: 440px !important; /* Increased height for all cards */
+        height: 440px !important;
     }
     
     .paragraph {
-        -webkit-line-clamp: 5; /* Show 1 line of text */
+        -webkit-line-clamp: 3;
         display: -webkit-box;
     }
     
@@ -397,27 +388,37 @@ html[data-theme="dark"] .date {
         -webkit-line-clamp: 3;
         font-size: 16px;
     }
+
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+    }
 }
 
-/* Extra small screens (< 576px) - 1 column */
 @media (max-width: 575px) {
     .sd-card {
-        height: 420px !important; /* Increased height for all cards */
+        height: 420px !important;
     }
     
     .paragraph {
-        display: none !important; /* Hide paragraph on mobile */
+        -webkit-line-clamp: 3;
+        display: -webkit-box;
     }
     
     .card-header {
         -webkit-line-clamp: 3;
         font-size: 16px;
     }
-    
-    /* Ensure date/author is always visible */
+
     .date {
-        display: block !important;
+        display: -webkit-box !important;
         font-size: 12px;
+        -webkit-line-clamp: 1;
+    }
+
+    .sd-row > [class*="sd-col"] {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
     }
 }
 
@@ -433,10 +434,9 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
     display: none;
 }
 
-/* Grid layout improvements */
 .sd-container-fluid {
     padding: 0 10px;
-    max-width: 1750px;
+    max-width: 1440px;
     margin: 0 auto;
 }
 
@@ -446,52 +446,16 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
     flex-wrap: wrap;
 }
 
-/* Custom grid layout overrides - Direct targeting of Sphinx Design grid classes */
-/* Extra large screens (≥ 1400px) - 4 columns */
-@media (min-width: 1440px) {
-    /* Target all grid columns regardless of their class */
-    .sd-row > [class*="sd-col"] {
-        flex: 0 0 25% !important;
-        max-width: 25% !important;
-    }
-}
-
-/* Large screens (≥ 1200px and < 1400px) - 3 columns */
-@media (min-width: 1200px) and (max-width: 1440px) {
-    .sd-row > [class*="sd-col"] {
-        flex: 0 0 33.333333% !important;
-        max-width: 33.333333% !important;
-    }
-}
-
-/* Medium screens (≥ 992px and < 1200px) - 2 columns */
-@media (min-width:768px) and (max-width: 1199px) {
-    .sd-row > [class*="sd-col"] {
-        flex: 0 0 50% !important;
-        max-width: 50% !important;
-    }
-}
-
-/* Extra small screens (< 768px) - 1 column */
-@media (max-width: 768px) {
-    .sd-row > [class*="sd-col"] {
-        flex: 0 0 100% !important;
-        max-width: 100% !important;
-    }
-}
-
-/* Responsive grid adjustments */
-@media (max-width: 1800px) {
+@media (max-width: 1440px) {
     .bd-page-width, 
     .bd-main .bd-content .bd-article-container,
     .bd-container,
     .container,
     .sd-container-fluid {
-        max-width: 95% !important;
+        max-width: 100% !important;
     }
 }
 
-/* Section headings */
 .container h2 {
     font-size: 28px;
     font-weight: 700;
