@@ -160,6 +160,7 @@ html[data-theme="dark"] .container {
     line-height: 22.5px;
     text-transform: none;
     margin-bottom: 10px;
+    -webkit-line-clamp: 2;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
