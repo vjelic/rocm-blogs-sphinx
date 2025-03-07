@@ -146,7 +146,7 @@ html_meta:
         logger.info("Generating grid items in parallel")
 
         # Main grid items (up to 12)
-        grid_items = generate_grid_items(all_blogs, 16, used)
+        grid_items = generate_grid_items(all_blogs, 12, used)
 
         # Category-specific grid items (up to 4 each)
         eco_blogs = rocmblogs.blogs.blogs_categories.get("Ecosystems and Partners", [])
