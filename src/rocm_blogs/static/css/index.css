@@ -154,24 +154,6 @@ html[data-theme="dark"] .container {
     transform: translateX(10px);
 }
 
-.date {
-    font-size: 13px;
-    font-weight: 300;
-    line-height: 22.5px;
-    text-transform: none;
-    margin-bottom: 10px;
-    -webkit-line-clamp: 2;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.paragraph {
-    font-size: 14px;
-    line-height: 1.5;
-    margin-bottom: 10px;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #555;
-}
-
 /* Dark mode support */
 :root {
     --card-bg-light: white;
@@ -284,7 +266,6 @@ html[data-theme="dark"] .container {
     text-overflow: ellipsis;
 }
 
-/* Date styling */
 .date {
     font-size: 13px;
     font-weight: 300;
@@ -292,13 +273,14 @@ html[data-theme="dark"] .container {
     text-transform: none;
     margin-bottom: 10px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    margin-top: auto; /* Push date to bottom of card */
-    white-space: normal !important; /* Allow text to wrap */
-    overflow: visible !important; /* Ensure text is not cut off */
-    text-overflow: clip !important; /* Don't use ellipsis */
-    word-wrap: break-word !important; /* Break long words if needed */
-    max-width: 100% !important; /* Use full width */
-    display: block !important; /* Always display */
+    -webkit-line-clamp: 2;
+    margin-top: auto;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important; 
+    word-wrap: break-word !important; 
+    max-width: 100% !important;
+    display: block !important; 
 }
 
 /* Ensure author links don't break layout */
