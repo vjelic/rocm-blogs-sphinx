@@ -193,11 +193,8 @@ def quickshare(blog):
 
     start_time = time.time()
 
-    if "test" in str(blog.file_path).lower():
-        pass
-    else:
-        css = cached_read_text("rocm_blogs.static.css", "social-bar.css")
-        html = cached_read_text("rocm_blogs.templates", "social-bar.html")
+    css = cached_read_text("rocm_blogs.static.css", "social-bar.css")
+    html = cached_read_text("rocm_blogs.templates", "social-bar.html")
 
     social_bar = """
 <style>
