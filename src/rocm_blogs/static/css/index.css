@@ -181,7 +181,7 @@ html[data-theme="dark"] .container {
     margin-bottom: 20px;
     background-color: var(--card-bg-light);
     border: none !important;
-    height: 470px !important; /* Increased height for all cards to accommodate more authors */
+    height: 510px !important;
     display: flex !important;
     flex-direction: column !important;
 }
@@ -321,7 +321,7 @@ html[data-theme="dark"] .date {
 
 @media (min-width: 1220px) {
     .sd-card {
-        height: 470px !important;
+        height: 520px !important;
     }
     
     .paragraph {
@@ -341,7 +341,7 @@ html[data-theme="dark"] .date {
 
 @media (min-width: 1024px) and (max-width: 1220px) {
     .sd-card {
-        height: 480px !important;
+        height: 510px !important;
     }
     
     .paragraph {
@@ -361,7 +361,7 @@ html[data-theme="dark"] .date {
 
 @media (min-width: 768px) and (max-width: 991px) {
     .sd-card {
-        height: 460px !important;
+        height: 490px !important;
     }
     
     .paragraph {
@@ -376,7 +376,7 @@ html[data-theme="dark"] .date {
 
 @media (min-width:576px) and (max-width: 1024px) {
     .sd-card {
-        height: 440px !important;
+        height: 470px !important;
     }
     
     .paragraph {
@@ -397,7 +397,7 @@ html[data-theme="dark"] .date {
 
 @media (max-width: 575px) {
     .sd-card {
-        height: 420px !important;
+        height: 450px !important;
     }
     
     .paragraph {
@@ -406,16 +406,10 @@ html[data-theme="dark"] .date {
     }
     
     .card-header {
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 2;
         font-size: 16px;
     }
-
-    .date {
-        display: -webkit-box !important;
-        font-size: 12px;
-        -webkit-line-clamp: 1;
-    }
-
+    
     .sd-row > [class*="sd-col"] {
         flex: 0 0 100% !important;
         max-width: 100% !important;
