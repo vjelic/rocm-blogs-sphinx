@@ -1002,7 +1002,7 @@ def setup(app: Sphinx) -> dict:
     logger.info(f"Setting up ROCm Blogs extension, version: {__version__}")
     logger.info(f"Build process started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_BUILD_START_TIME))}")
     
-    #app.connect("builder-inited", run_metadata_generator)
+    app.connect("builder-inited", run_metadata_generator)
     app.connect("builder-inited", update_index_file)
     app.connect("builder-inited", update_posts_file)
     app.connect("builder-inited", update_category_pages)
