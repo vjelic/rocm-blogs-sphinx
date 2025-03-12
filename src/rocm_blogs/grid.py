@@ -1,5 +1,5 @@
 def generate_grid(ROCmBlogs, blog) -> str:
-    """Takes a blog and creates a sphinx grid item."""
+    """Takes a blog and creates a sphinx grid item with WebP image support."""
 
     grid_template = """
 :::{{grid-item-card}}
@@ -30,6 +30,7 @@ def generate_grid(ROCmBlogs, blog) -> str:
 
     authors_list = getattr(blog, "author", "").split(",")
 
+    # Get the image path
     image = blog.grab_image(ROCmBlogs)
 
     # Initialize authors_html

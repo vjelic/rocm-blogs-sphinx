@@ -11,6 +11,7 @@ from datetime import datetime
 
 from PIL import Image
 
+
 class Blog:
     def __init__(self, file_path, metadata, image=None):
         self.file_path = file_path
@@ -125,7 +126,15 @@ class Blog:
         return href
 
     def grab_authors(self, authors_list: list) -> str:
-        """Generate HTML links for authors, but only if their bio file exists."""
+        """
+        Generate HTML links for authors, but only if their bio file exists.
+
+        Args:
+            authors_list: A list of author names.
+
+        Returns:
+            HTML links for the authors with existing bios, or plain text for authors without bios.
+        """
         # Filter out "No author" or empty authors
         valid_authors = []
         for author in authors_list:
@@ -140,7 +149,8 @@ class Blog:
         if not valid_authors:
             return ""
 
-        # Generate HTML links for valid authors, but only if their bio file exists
+        # Generate HTML links for valid authors, but only if their bio file
+        # exists
         author_elements = []
         for author in valid_authors:
             # Create the filename that would be used for the author's bio
@@ -149,7 +159,8 @@ class Blog:
             # Check if the author's bio file exists in the blogs/authors directory
             # We need to find the blogs directory first
             if hasattr(self, "file_path"):
-                # Start from the blog's directory and navigate to the authors directory
+                # Start from the blog's directory and navigate to the authors
+                # directory
                 blog_dir = os.path.dirname(self.file_path)
                 # Go up to the blogs directory
                 blogs_dir = os.path.dirname(os.path.dirname(blog_dir))
@@ -163,10 +174,12 @@ class Blog:
                         f'<a href="https://rocm.blogs.amd.com/authors/{author.replace(" ", "-").lower()}.html">{author}</a>'
                     )
                 else:
-                    # Bio doesn't exist, just use the author's name without a link
+                    # Bio doesn't exist, just use the author's name without a
+                    # link
                     author_elements.append(author)
             else:
-
+                # If we can't determine the file path, just use the author's
+                # name without a link
                 author_elements.append(author)
 
         return ", ".join(author_elements)
@@ -194,39 +207,17 @@ class Blog:
         except Exception as error:
             print(f"Error optimizing image {image}: {error}")
 
-    # Cache for image paths to avoid redundant file system operations
-    _image_path_cache = {}
-
     def grab_image(self, rocmblogs) -> pathlib.Path:
-        """Grab the image for the blog with caching for better performance"""
-
-        # Check if we've already processed this blog's image
-        cache_key = str(self.file_path) if hasattr(self, "file_path") else str(id(self))
-        if cache_key in self._image_path_cache:
-            cached_result = self._image_path_cache[cache_key]
-            # If we have a cached image path, use it directly
-            if cached_result["image_name"]:
-                self.save_image_path(cached_result["image_name"])
-            return cached_result["relative_path"]
+        """Find the image for the blog and return its path (without caching)"""
 
         print(
             f"Processing image for blog: {self.blog_title if hasattr(self, 'blog_title') else 'Unknown'}"
         )
         print(f"Blog file path: {self.file_path}")
-        print(f"Blogs directory: {rocmblogs.blogs_directory}")
 
         # Get the thumbnail from metadata
         image = getattr(self, "thumbnail", None)
         print(f"Original thumbnail value: {image}")
-
-        # print("Blog attributes:")
-        # for attr_name in dir(self):
-        #     if not attr_name.startswith("__") and not callable(
-        #         getattr(self, attr_name)
-        #     ):
-        #         attr_value = getattr(self, attr_name)
-        #         if not isinstance(attr_value, (dict, list)) or attr_name == "thumbnail":
-        #             print(f"  {attr_name}: {attr_value}")
 
         full_image_path = None
         image_name = None
@@ -234,15 +225,11 @@ class Blog:
         if not image:
             print("No thumbnail specified in metadata, using generic.jpg")
             self.image = "generic.jpg"
-
-            self._image_path_cache[cache_key] = {
-                "relative_path": "./images/generic.jpg",
-                "image_name": "generic.jpg",
-            }
             self.save_image_path("generic.jpg")
             return "./images/generic.jpg"
 
-        if "/images/" in image or "\\images\\" in image:
+        # Extract just the filename if a path is provided
+        if "/" in image or "\\" in image:
             image = os.path.basename(image)
             print(f"Extracted image filename: {image}")
 
@@ -250,31 +237,46 @@ class Blog:
             full_image_path = pathlib.Path(image)
             print(f"Found image at absolute path: {full_image_path}")
         else:
+            # Create a prioritized list of possible paths
+            blog_dir = pathlib.Path(self.file_path).parent
+            blogs_dir = pathlib.Path(rocmblogs.blogs_directory)
             
-            # Create a list of possible paths
+            # First check blog-specific locations
             possible_paths = [
-                pathlib.Path(self.file_path).parent / image,
-                pathlib.Path(self.file_path).parent / "images" / image,
-                pathlib.Path(self.file_path).parent.parent / "images" / image,
-                pathlib.Path(self.file_path).parent.parent.parent / "images" / image,
-                pathlib.Path(rocmblogs.blogs_directory) / "images" / image,
-                pathlib.Path(rocmblogs.blogs_directory) / "images" / image.lower(),
+                blog_dir / image,  # Direct reference in blog directory
+                blog_dir / "images" / image,  # Blog's images subdirectory
             ]
-
-            # Check all paths in one go to reduce logging overhead
+            
+            # Then check global locations
+            global_paths = [
+                blog_dir.parent / "images" / image,  # Parent directory's images
+                blogs_dir / "images" / image,  # Global images directory
+                blogs_dir / "images" / image.lower(),  # Case-insensitive check
+            ]
+            
+            # Check blog-specific paths first
             for path in possible_paths:
-                if path.exists():
+                if path.exists() and path.is_file():
                     full_image_path = path
-                    print(f"Found image at: {full_image_path}")
+                    print(f"Found image in blog directory: {full_image_path}")
                     break
-
+            
+            # If not found, check global paths
             if not full_image_path:
-                images_dir = pathlib.Path(rocmblogs.blogs_directory) / "images"
+                for path in global_paths:
+                    if path.exists() and path.is_file():
+                        full_image_path = path
+                        print(f"Found image in global directory: {full_image_path}")
+                        break
+            
+            # If still not found, try partial matching in the global images directory
+            if not full_image_path:
+                images_dir = blogs_dir / "images"
                 if images_dir.exists():
-                    # Try to find a partial match more efficiently
+                    # Try to find a partial match by filename
                     image_base = os.path.splitext(image)[0].lower()
                     for img_file in images_dir.glob("*"):
-                        if image_base in img_file.name.lower():
+                        if img_file.is_file() and image_base in img_file.name.lower():
                             print(f"Found partial match: {img_file}")
                             full_image_path = img_file
                             break
@@ -282,33 +284,22 @@ class Blog:
         if not full_image_path:
             print(f"Image not found: {image}")
             self.image = "generic.jpg"
-
-            self._image_path_cache[cache_key] = {
-                "relative_path": "./images/generic.jpg",
-                "image_name": "generic.jpg",
-            }
             self.save_image_path("generic.jpg")
             return "./images/generic.jpg"
 
+        # Get the image name and save it
+        image_name = os.path.basename(str(full_image_path))
+        self.save_image_path(image_name)
+
+        # Return the relative path for use in HTML
         relative_path = os.path.relpath(
             str(full_image_path), str(rocmblogs.blogs_directory)
         )
-
         relative_path = relative_path.replace("\\", "/")
-
         if not relative_path.startswith("./"):
             relative_path = "./" + relative_path
 
         print(f"Using image at relative path: {relative_path}")
-
-        image_name = os.path.basename(str(full_image_path))
-        self.save_image_path(image_name)
-
-        self._image_path_cache[cache_key] = {
-            "relative_path": relative_path,
-            "image_name": image_name,
-        }
-
         return relative_path
 
     def __repr__(self) -> str:

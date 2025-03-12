@@ -1,0 +1,163 @@
+
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" href="/_static/css/theme.css" as="style">
+<link rel="preload" href="/_static/css/index.css" as="style">
+<link rel="preload" href="/_static/css/bootstrap.min.css" as="style">
+
+<script>
+  if (window.performance && window.performance.mark) {
+    window.performance.mark('posts-start');
+  }
+</script>
+
+<style>
+  #buttonWrapper {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    transition: none !important;
+  }
+  
+  
+  #buttonWrapper:hover {
+    transform: none !important;
+  }
+</style>
+
+<p>Explore the latest blogs about applications and models in the ROCm ecosystem, including machine learning frameworks, AI models, and application case studies.</p>
+
+::::{grid} 1 2 3 4
+:margin 2
+{grid_items}
+::::
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.performance && window.performance.mark) {
+      window.performance.mark('dom-content-loaded');
+      window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
+    }
+    
+    const scheduleIdleTask = (callback) => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(callback, { timeout: 2000 });
+      } else {
+        setTimeout(callback, 1);
+      }
+    };
+    
+    const scheduleAnimation = (callback) => {
+      return window.requestAnimationFrame(callback);
+    };
+    
+    if ('IntersectionObserver' in window) {
+      const uniqueDomains = new Set();
+      document.querySelectorAll('img[data-src]').forEach(img => {
+        try {
+          const url = new URL(img.dataset.src);
+          uniqueDomains.add(url.origin);
+        } catch (e) {
+        }
+      });
+      
+      uniqueDomains.forEach(domain => {
+        const link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = domain;
+        document.head.appendChild(link);
+      });
+      
+      const lazyImages = document.querySelectorAll('img[data-src]');
+      
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            
+            if (window.performance && window.performance.mark) {
+              window.performance.mark(`image-load-start-${img.dataset.src}`);
+            }
+            
+            const tempImage = new Image();
+            
+            tempImage.onload = function() {
+              img.src = img.dataset.src;
+              
+              img.removeAttribute('data-src');
+              
+              img.classList.add('loaded');
+              
+              if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-load-end-${img.src}`);
+                window.performance.measure(
+                  `image-load-time-${img.src}`,
+                  `image-load-start-${img.src}`,
+                  `image-load-end-${img.src}`
+                );
+              }
+            };
+            
+            tempImage.src = img.dataset.src;
+            
+            observer.unobserve(img);
+          }
+        });
+      }, {
+        rootMargin: '200px 0px',
+        threshold: 0.01,
+      });
+
+      lazyImages.forEach(img => {
+        imageObserver.observe(img);
+      });
+    } else {
+      scheduleIdleTask(() => {
+        const lazyImages = document.querySelectorAll('img[data-src]');
+        lazyImages.forEach(img => {
+          img.src = img.dataset.src;
+          img.removeAttribute('data-src');
+        });
+      });
+    }
+
+    scheduleAnimation(() => {
+      const gridItems = document.querySelectorAll('.sd-col');
+      gridItems.forEach((item, index) => {
+        item.style.animationDelay = `${index * 0.05}s`;
+      });
+    });
+
+    if (window.performance && window.performance.getEntriesByType) {
+      scheduleIdleTask(() => {
+        const perfEntries = performance.getEntriesByType('measure');
+
+        console.log('Performance metrics:', perfEntries);
+
+        if (window.navigator.sendBeacon) {
+          try {
+            const metrics = JSON.stringify(perfEntries);
+            navigator.sendBeacon('/analytics', metrics);
+          } catch (e) {
+            console.error('Failed to send performance metrics', e);
+          }
+        }
+      });
+    }
+  });
+
+  window.addEventListener('scroll', function() {
+  }, { passive: true });
+
+  window.addEventListener('load', function() {
+    if (window.performance && window.performance.mark) {
+      window.performance.mark('posts-fully-loaded');
+      window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
+
+      const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
+      console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
+    }
+  });
+</script>

@@ -15,11 +15,15 @@ import os
 import time
 from pathlib import Path
 
-from rocm_blogs import ROCmBlogs
+from rocm_blogs import ROCmBlogs, metadata_generator
+from rocm_blogs._version import __version__
 
 
 def main():
     """Main entry-point for ROCmBlogs package."""
+
+    print(f"ROCm Blogs version: {__version__}")
+    print("=" * 50)
 
     start_time = time.time()
 
