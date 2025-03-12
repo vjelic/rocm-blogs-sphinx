@@ -1,0 +1,128 @@
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+  width: 100%;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-family: var(--pst-font-family-base);
+}
+
+.pagination-info {
+  font-size: 1rem;
+  color: var(--pst-color-text-base);
+  margin: 0 1rem;
+}
+
+
+.pagination-button {
+  border: none;
+  background-color: var(--card-bg-light);
+  box-shadow: 0 4px 12px var(--shadow-light);
+  text-align: center;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  padding: 10px 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-color-light);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  width: 120px;
+  min-width: 120px;
+  white-space: nowrap;
+  justify-content: center;
+  flex: 1;
+  text-decoration: none;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  touch-action: manipulation;
+}
+
+.pagination-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px var(--hover-shadow-light);
+}
+
+
+.pagination-button.next::after {
+  content: "→";
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+  will-change: transform;
+}
+
+
+.pagination-button.previous::before {
+  content: "←";
+  margin-right: 8px;
+  transition: transform 0.2s ease;
+  will-change: transform;
+}
+
+.pagination-button:hover.next::after {
+  transform: translateX(4px);
+}
+
+.pagination-button:hover.previous::before {
+  transform: translateX(-4px);
+}
+
+.pagination-button:disabled,
+.pagination-button.disabled {
+  background-color: var(--card-bg-light);
+  cursor: not-allowed;
+  opacity: 0.7;
+  box-shadow: 0 4px 12px var(--shadow-light);
+}
+
+
+html[data-theme="dark"] .pagination-button {
+  background-color: var(--card-bg-dark);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+  color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .pagination-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px var(--hover-shadow-dark);
+}
+
+html[data-theme="dark"] .pagination-button:disabled,
+html[data-theme="dark"] .pagination-button.disabled {
+  background-color: var(--card-bg-dark);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+}
+
+.pagination-button i {
+  margin-right: 0.5rem;
+}
+
+.pagination-button.next i {
+  margin-right: 0;
+  margin-left: 0.5rem;
+}
+
+
+@media (max-width: 768px) {
+  .pagination {
+    flex-wrap: wrap;
+  }
+  
+  .pagination-info {
+    order: 3;
+    width: 100%;
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+}
+
