@@ -11,37 +11,29 @@ from sphinx.util import logging as sphinx_logging
 from ._rocmblogs import ROCmBlogs
 from ._version import __version__
 from .grid import generate_grid
+from .metadata import metadata_generator
 
-__all__ = ["Blog", "BlogHolder", "ROCmBlogs", "grid_generation"]
+def log_time(func):
+    """Decorator to log execution time of functions"""
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.info(f"{func.__name__} completed in \033[96m{elapsed_time:.4f} seconds\033[0m")
+        return result
+    return wrapper
+
+__all__ = ["Blog", "BlogHolder", "ROCmBlogs", "grid_generation", "metadata_generator"]
 
 logger = sphinx_logging.getLogger(__name__)
 
-# Template and CSS caching
-_TEMPLATE_CACHE = {}
-_CSS_CACHE = {}
-
-
-def cached_read_text(package, resource):
-    """Read text from a package resource with caching."""
-    
-    cache_key = f"{package}.{resource}"
-
-    if "css" in resource:
-        if cache_key in _CSS_CACHE:
-            return _CSS_CACHE[cache_key]
-        content = pkg_resources.read_text(package, resource)
-        _CSS_CACHE[cache_key] = content
-        return content
-    else:
-        if cache_key in _TEMPLATE_CACHE:
-            return _TEMPLATE_CACHE[cache_key]
-        content = pkg_resources.read_text(package, resource)
-        _TEMPLATE_CACHE[cache_key] = content
-        return content
+def import_file(package, resource):
+    """Read text from a package resource directly without caching."""
+    return pkg_resources.read_text(package, resource)
 
 
 def calculate_read_time(words: int) -> int:
-    """Average reading speed is 245 words per minute."""
 
     start_time = time.time()
 
@@ -50,14 +42,13 @@ def calculate_read_time(words: int) -> int:
     end_time = time.time()
     elapsed_time = end_time - start_time
     logger.debug(
-        f"Read time calculation completed in \033[96m{elapsed_time:.6f} seconds\033[0m"
+        f"Read time calculation completed in \033[96m{elapsed_time:.6f} milliseconds\033[0m"
     )
 
     return result
 
 
 def truncate_string(input_string: str) -> str:
-    """Remove special characters and spaces from a string."""
 
     start_time = time.time()
 
@@ -68,16 +59,15 @@ def truncate_string(input_string: str) -> str:
     end_time = time.time()
     elapsed_time = end_time - start_time
     logger.debug(
-        f"String truncation completed in \033[96m{elapsed_time:.6f} seconds\033[0m"
+        f"String truncation completed in \033[96m{elapsed_time:.6f} milliseconds\033[0m"
     )
 
     return result
 
 
 def update_index_file(app: Sphinx) -> None:
-    """Update the index file with new blog posts."""
 
-    start_time = time.time()
+    phase_start_time = time.time()
 
     try:
         index_template = """
@@ -89,6 +79,9 @@ html_meta:
 "keywords": "AMD GPU, MI300, MI250, ROCm, blog"
 "property=og:locale": "en_US"
 ---
+
+# ROCm Blogs
+
 <style>
 {CSS}
 </style>
@@ -96,16 +89,18 @@ html_meta:
 """
 
         # load index.html template
-        template_html = cached_read_text("rocm_blogs.templates", "index.html")
+        template_html = import_file("rocm_blogs.templates", "index.html")
 
         # load index.css template
-        css_content = cached_read_text("rocm_blogs.static.css", "index.css")
+        css_content = import_file("rocm_blogs.static.css", "index.css")
 
-        index_template = index_template.format(CSS=css_content, HTML=template_html)
+        index_template = index_template.format(
+            CSS=css_content, 
+            HTML=template_html
+        )
 
         index_template = index_template[1:]
 
-        # 3. Process blog data using ROCmBlogs.
         rocmblogs = ROCmBlogs()
 
         # Assume the blogs directory is the sibling of srcdir.
@@ -124,7 +119,6 @@ html_meta:
         application_grid_items = []
         software_grid_items = []
 
-        # Helper function to generate grid items in parallel
         def generate_grid_items(blog_list, max_items, used_blogs):
             items = []
             count = 0
@@ -141,14 +135,11 @@ html_meta:
                     items.append(future.result())
 
             return items
-
-        # Generate grid items in parallel
+        
         logger.info("Generating grid items in parallel")
 
-        # Main grid items (up to 12)
-        grid_items = generate_grid_items(all_blogs, 12, used)
+        grid_items = generate_grid_items(all_blogs, 4, used)
 
-        # Category-specific grid items (up to 4 each)
         eco_blogs = rocmblogs.blogs.blogs_categories.get("Ecosystems and Partners", [])
         eco_grid_items = generate_grid_items(eco_blogs, 4, used)
 
@@ -180,21 +171,24 @@ html_meta:
             f.write(updated_html)
 
         end_time = time.time()
-        elapsed_time = end_time - start_time
+        elapsed_time = end_time - phase_start_time
+        # Store the time in the build phases dictionary
+        _BUILD_PHASES['update_index'] = elapsed_time
         logger.info(
-            f"Successfully updated {output_path} with new grid items in \033[96m{elapsed_time:.2f} seconds\033[0m."
+            f"Successfully updated {output_path} with new grid items in \033[96m{elapsed_time:.2f} milliseconds\033[0m."
         )
     except Exception as error:
         logger.critical(f"Failed to update index file: {error}")
+        # Even on error, record the time spent
+        _BUILD_PHASES['update_index'] = time.time() - phase_start_time
 
 
 def quickshare(blog):
-    """Quickshare buttons for social media sharing."""
 
     start_time = time.time()
 
-    css = cached_read_text("rocm_blogs.static.css", "social-bar.css")
-    html = cached_read_text("rocm_blogs.templates", "social-bar.html")
+    css = import_file("rocm_blogs.static.css", "social-bar.css")
+    html = import_file("rocm_blogs.templates", "social-bar.html")
 
     social_bar = """
 <style>
@@ -228,7 +222,6 @@ def quickshare(blog):
     else:
         description = "No Description"
 
-    # For testing, include the title and description directly in the output
     if "test" in str(blog.file_path).lower():
         social_bar += f"\n<!-- {title_with_suffix} -->\n<!-- {description} -->\n"
 
@@ -241,15 +234,14 @@ def quickshare(blog):
     end_time = time.time()
     elapsed_time = end_time - start_time
     logger.debug(
-        f"Quickshare generation for {getattr(blog, 'blog_title', 'Unknown')} completed in \033[96m{elapsed_time:.4f} seconds\033[0m"
+        f"Quickshare generation for {getattr(blog, 'blog_title', 'Unknown')} completed in \033[96m{elapsed_time:.4f} milliseconds\033[0m"
     )
 
     return social_bar
 
 
 def blog_generation(app: Sphinx):
-    """Generate blog pages with styling and metadata."""
-    start_time = time.time()
+    phase_start_time = time.time()
 
     try:
         env = app.builder.env
@@ -262,16 +254,13 @@ def blog_generation(app: Sphinx):
         rocmblogs.create_blog_objects()
         rocmblogs.blogs.sort_blogs_by_date()
 
-        # Process blogs in parallel
         blogs = rocmblogs.blogs.get_blogs()
 
-        # Use a thread pool to process blogs in parallel
-        # Determine the optimal number of workers based on CPU count
         max_workers = min(32, (os.cpu_count() or 1) * 2)
         logger.info(f"Processing {len(blogs)} blogs with {max_workers} workers")
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create a list of futures
+            
             futures = []
             for blog in blogs:
                 future = executor.submit(process_single_blog, blog, rocmblogs)
@@ -285,15 +274,18 @@ def blog_generation(app: Sphinx):
                     logger.warning(f"Error processing blog: {error}")
 
         end_time = time.time()
-        elapsed_time = end_time - start_time
+        elapsed_time = end_time - phase_start_time
+        # Store the time in the build phases dictionary
+        _BUILD_PHASES['blog_generation'] = elapsed_time
         logger.info(
             f"Blog generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m"
         )
     except Exception as error:
         logger.critical(f"Failed to generate blogs: {error}")
+        # Even on error, record the time spent
+        _BUILD_PHASES['blog_generation'] = time.time() - phase_start_time
 
 
-# Precompile regex patterns for better performance
 _YAML_FRONT_MATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _FENCED_CODE_BLOCKS_PATTERN = re.compile(r"```[\s\S]*?```")
 _INDENTED_CODE_BLOCKS_PATTERN = re.compile(r"(?m)^( {4}|\t).*$")
@@ -310,16 +302,13 @@ _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
 def count_words_in_markdown(content: str) -> int:
-    """Count the number of words in a markdown file."""
 
     start_time = time.time()
 
     try:
-        # Remove YAML front matter
         if content.startswith("---"):
             content = _YAML_FRONT_MATTER_PATTERN.sub("", content)
 
-        # Apply all regex replacements in a single pass
         patterns_to_remove = [
             _FENCED_CODE_BLOCKS_PATTERN,
             _INDENTED_CODE_BLOCKS_PATTERN,
@@ -340,14 +329,13 @@ def count_words_in_markdown(content: str) -> int:
             except re.error as error:
                 logger.warning(f"\033[33mError in regex: {error}\033[0m")
 
-        # Split by whitespace and count non-empty words
         words = [word for word in _WHITESPACE_PATTERN.split(content) if word.strip()]
         word_count = len(words)
 
         end_time = time.time()
         elapsed_time = end_time - start_time
         logger.debug(
-            f"Word counting completed in \033[96m{elapsed_time:.4f} seconds\033[0m"
+            f"Word counting completed in \033[96m{elapsed_time:.4f} milliseconds\033[0m"
         )
 
         return word_count
@@ -356,232 +344,678 @@ def count_words_in_markdown(content: str) -> int:
         return 0
 
 
+def optimize_image(image_path):
+
+    try:
+        from PIL import Image
+        import os
+        
+        # Get file extension
+        _, file_ext = os.path.splitext(image_path)
+        file_ext = file_ext.lower()
+        
+        # Record original file size
+        original_size = os.path.getsize(image_path)
+        
+        with Image.open(image_path) as img:
+            # Get original dimensions and format
+            original_width, original_height = img.size
+            original_format = img.format
+            
+            # Strip EXIF and other metadata to reduce file size
+            img_data = list(img.getdata())
+            img_without_exif = Image.new(img.mode, img.size)
+            img_without_exif.putdata(img_data)
+            
+            # Regular content images
+            max_width, max_height = (1280, 720)
+            
+            # Calculate scaling factor to maintain aspect ratio
+            scaling_factor = min(
+                max_width / original_width, 
+                max_height / original_height
+            )
+            
+            # Only resize if the image is larger than our max dimensions
+            if scaling_factor < 1:
+                new_width = int(original_width * scaling_factor)
+                new_height = int(original_height * scaling_factor)
+                
+                # Resize the image using high-quality Lanczos resampling
+                img_without_exif = img_without_exif.resize((new_width, new_height), resample=Image.LANCZOS)
+                logger.info(f"Resized image: {original_width}x{original_height} → {new_width}x{new_height}")
+            
+            # Optimize based on image format
+            if file_ext in ['.jpg', '.jpeg']:
+                img_without_exif.save(
+                    image_path, 
+                    format="JPEG", 
+                    optimize=True, 
+                    quality=85
+                )
+            elif file_ext == '.png':
+                img_without_exif.save(
+                    image_path, 
+                    format="PNG", 
+                    optimize=True, 
+                    compress_level=9
+                )
+            else:
+                # For other formats, just save with default settings
+                img_without_exif.save(image_path)
+            
+            # Get new file size for logging
+            new_size = os.path.getsize(image_path)
+            size_reduction = (1 - new_size / original_size) * 100 if original_size > 0 else 0
+            
+            logger.info(
+                f"Optimized {os.path.basename(image_path)}: "
+                f"{original_format} {original_size/1024:.1f}KB → {new_size/1024:.1f}KB "
+                f"({size_reduction:.1f}% reduction)"
+            )
+            
+            # Create WebP version as well (but don't replace the original in HTML)
+            try:
+                webp_path = os.path.splitext(image_path)[0] + '.webp'
+                
+                # Convert to RGB mode if needed (WebP doesn't support CMYK or other modes)
+                if img_without_exif.mode not in ('RGB', 'RGBA'):
+                    webp_img = img_without_exif.convert('RGB')
+                else:
+                    webp_img = img_without_exif
+                
+                # Save as WebP with high quality
+                webp_img.save(
+                    webp_path,
+                    format="WEBP",
+                    quality=85,  # High quality WebP
+                    method=6,    # Highest compression method (slower but better)
+                    lossless=False
+                )
+                
+                # Get WebP file size for logging
+                webp_size = os.path.getsize(webp_path)
+                webp_reduction = (1 - webp_size / original_size) * 100 if original_size > 0 else 0
+                
+                logger.info(
+                    f"Created WebP version: {os.path.basename(webp_path)}: "
+                    f"{webp_size/1024:.1f}KB ({webp_reduction:.1f}% reduction from original)"
+                )
+            except Exception as webp_error:
+                logger.warning(f"Error creating WebP version of {os.path.basename(image_path)}: {webp_error}")
+            
+            return True
+    except Exception as error:
+        logger.warning(f"Error optimizing image {os.path.basename(image_path)}: {error}")
+        return False
+
+
 def process_single_blog(blog, rocmblogs):
     start_time = time.time()
     readme_file = blog.file_path
-    backup_file = f"{readme_file}.bak"
+    blog_dir = os.path.dirname(readme_file)
 
-    # Skip processing if the blog doesn't have required attributes
     if not hasattr(blog, "author") or not blog.author:
         logger.warning(f"Skipping blog {readme_file} without author")
         return
 
     try:
-        # Read file content once and create backup
-        try:
-            with open(readme_file, "r", encoding="utf-8", errors="replace") as src:
-                content = src.read()
-                # Convert content to lines immediately to avoid reading the
-                # file twice
-                lines = content.splitlines(True)  # Keep line endings
+        with open(readme_file, "r", encoding="utf-8", errors="replace") as src:
+            content = src.read()
+            # Convert content to lines immediately
+            lines = content.splitlines(True)  # Keep line endings
 
-            # Create backup
-            with open(backup_file, "w", encoding="utf-8", errors="replace") as dst:
-                dst.write(content)
-        except Exception as error:
-            logger.warning(f"Error reading or backing up blog {readme_file}: {error}")
-            return
+        if hasattr(blog, "thumbnail") and blog.thumbnail:
+            blog.grab_image(rocmblogs)
+            logger.info(f"Found thumbnail image: {blog.image_paths[0] if blog.image_paths else 'None'}")
 
-        # Count words using the content we already have
         word_count = count_words_in_markdown(content)
         blog.set_word_count(word_count)
         logger.info(f"\033[33mWord count for {readme_file}: {word_count}\033[0m")
 
-        try:
+        authors_list = blog.author.split(",")
+        date = blog.date.strftime("%B %d, %Y") if blog.date else "No Date"
+        language = getattr(blog, "language", "en")
+        category = getattr(blog, "category", "blog")
+        tags = getattr(blog, "tags", "")
 
-            authors_list = blog.author.split(",")
-            date = blog.date.strftime("%B %d, %Y") if blog.date else "No Date"
-            language = getattr(blog, "language", "en")
-            category = getattr(blog, "category", "blog")
-            tags = getattr(blog, "tags", "")
+        tag_html_list = []
+        if tags:
+            tags_list = [tag.strip() for tag in tags.split(",")]
+            for tag in tags_list:
+                tag_link = truncate_string(tag)
+                tag_html = f'<a href="https://rocm.blogs.amd.com/blog/tag/{tag_link}.html">{tag}</a>'
+                tag_html_list.append(tag_html)
 
-            # Process tags
-            tag_html_list = []
-            if tags:
-                tags_list = [tag.strip() for tag in tags.split(",")]
-                for tag in tags_list:
-                    tag_link = truncate_string(tag)
-                    tag_html = f'<a href="https://rocm.blogs.amd.com/blog/tag/{tag_link}.html">{tag}</a>'
-                    tag_html_list.append(tag_html)
+        tags_html = ", ".join(tag_html_list)
 
-            tags_html = ", ".join(tag_html_list)
+        category_link = truncate_string(category)
+        category_html = f'<a href="https://rocm.blogs.amd.com/blog/category/{category_link}.html">{category.strip()}</a>'
 
-            # Process category
-            category_link = truncate_string(category)
-            category_html = f'<a href="https://rocm.blogs.amd.com/blog/category/{category_link}.html">{category.strip()}</a>'
+        blog_read_time = (
+            str(calculate_read_time(getattr(blog, "word_count", 0)))
+            if hasattr(blog, "word_count")
+            else "No Read Time"
+        )
 
-            # Calculate read time
-            blog_read_time = (
-                str(calculate_read_time(getattr(blog, "word_count", 0)))
-                if hasattr(blog, "word_count")
-                else "No Read Time"
+        authors_html = blog.grab_authors(authors_list)
+        if authors_html:
+            authors_html = authors_html.replace("././", "../../").replace(
+                ".md", ".html"
             )
 
-            # Get author HTML
-            authors_html = blog.grab_authors(authors_list)
-            if authors_html:
-                authors_html = authors_html.replace("././", "../../").replace(
-                    ".md", ".html"
-                )
+        has_valid_author = authors_html and "No author" not in authors_html
 
-            # Check if author is "No author" or empty
-            has_valid_author = authors_html and "No author" not in authors_html
+        title, line_number = None, None
+        for i, line in enumerate(lines):
+            if line.startswith("#") and line.count("#") == 1:
+                title = line
+                line_number = i
+                break
 
-            # Find the title and its position
-            title, line_number = None, None
-            for i, line in enumerate(lines):
-                if line.startswith("#") and line.count("#") == 1:
-                    title = line
-                    line_number = i
-                    break
+        if not title or line_number is None:
+            logger.warning(f"Could not find title in blog {readme_file}")
+            return
 
-            if not title or line_number is None:
-                logger.warning(f"Could not find title in blog {readme_file}")
-                return
+        quickshare_button = quickshare(blog)
+        image_css = import_file("rocm_blogs.static.css", "image_blog.css")
+        image_html = import_file("rocm_blogs.templates", "image_blog.html")
+        blog_css = import_file("rocm_blogs.static.css", "blog.css")
+        author_attribution_template = import_file(
+            "rocm_blogs.templates", "author_attribution.html"
+        )
+        giscus_html = import_file("rocm_blogs.templates", "giscus.html")
 
-            # Load templates and CSS
-            quickshare_button = quickshare(blog)
-            image_css = cached_read_text("rocm_blogs.static.css", "image_blog.css")
-            image_html = cached_read_text("rocm_blogs.templates", "image_blog.html")
-            blog_css = cached_read_text("rocm_blogs.static.css", "blog.css")
-            author_attribution_template = cached_read_text(
-                "rocm_blogs.templates", "author_attribution.html"
-            )
-            giscus_html = cached_read_text("rocm_blogs.templates", "giscus.html")
-
-            # Modify the author attribution template based on whether there's a
-            # valid author
-            if has_valid_author:
-                # Use the original template with author
-                modified_author_template = author_attribution_template
-            else:
-                # Create a modified template without "by {authors_string}"
-                modified_author_template = author_attribution_template.replace(
-                    "<span> {date} by {authors_string}.</span>", "<span> {date}</span>"
-                )
-
-            # Fill in the author attribution template
-            authors_html_filled = (
-                modified_author_template.replace("{authors_string}", authors_html)
-                .replace("{date}", date)
-                .replace("{language}", language)
-                .replace("{category}", category_html)
-                .replace("{tags}", tags_html)
-                .replace("{read_time}", blog_read_time)
-                .replace(
-                    "{word_count}", str(getattr(blog, "word_count", "No Word Count"))
-                )
+        if has_valid_author:
+            # Use the original template with author
+            modified_author_template = author_attribution_template
+        else:
+            # Create a modified template without "by {authors_string}"
+            modified_author_template = author_attribution_template.replace(
+                "<span> {date} by {authors_string}.</span>", "<span> {date}</span>"
             )
 
-            # Get the image path
-            try:
-                image_path = blog.grab_image(rocmblogs)
-                if blog.image_paths:
-                    blog_image = f"../../_images/{blog.image_paths[0]}"
-                else:
-                    blog_image = "../../_images/generic.jpg"
-            except Exception as error:
-                logger.warning(
-                    f"Error processing image for blog {readme_file}: {error}"
-                )
-                blog_image = "../../_images/generic.jpg"
-
-            # Fill in the image template
-            image_template_filled = image_html.replace("{IMAGE}", blog_image).replace(
-                "{TITLE}", getattr(blog, "blog_title", "")
+        authors_html_filled = (
+            modified_author_template.replace("{authors_string}", authors_html)
+            .replace("{date}", date)
+            .replace("{language}", language)
+            .replace("{category}", category_html)
+            .replace("{tags}", tags_html)
+            .replace("{read_time}", blog_read_time)
+            .replace(
+                "{word_count}", str(getattr(blog, "word_count", "No Word Count"))
             )
+        )
 
-            # Prepare the templates to insert
-            blog_template = f"""
+        if blog.image_paths:
+            blog_image = f"../../_images/{blog.image_paths[0]}"
+        else:
+            blog_image = "../../_images/generic.jpg"
+
+        image_template_filled = image_html.replace("{IMAGE}", blog_image).replace(
+            "{TITLE}", getattr(blog, "blog_title", "")
+        )
+
+        # Prepare the templates to insert
+        blog_template = f"""
 <style>
 {blog_css}
 </style>
 """
-            image_template = f"""
+        image_template = f"""
 <style>
 {image_css}
 </style>
 {image_template_filled}
 """
 
-            # Insert the templates at the appropriate positions
-            new_lines = lines.copy()
-            new_lines.insert(line_number + 1, f"\n{blog_template}\n")
-            new_lines.insert(line_number + 2, f"\n{image_template}\n")
-            new_lines.insert(line_number + 3, f"\n{authors_html_filled}\n")
-            new_lines.insert(line_number + 4, f"\n{quickshare_button}\n")
+        new_lines = lines.copy()
+        new_lines.insert(line_number + 1, f"\n{blog_template}\n")
+        new_lines.insert(line_number + 2, f"\n{image_template}\n")
+        new_lines.insert(line_number + 3, f"\n{authors_html_filled}\n")
+        new_lines.insert(line_number + 4, f"\n{quickshare_button}\n")
 
-            # Add giscus comments at the end of the file
-            new_lines.append(f"\n\n{giscus_html}\n")
+        new_lines.append(f"\n\n{giscus_html}\n")
 
-            # Write the modified file
-            with open(readme_file, "w", encoding="utf-8", errors="replace") as file:
-                file.writelines(new_lines)
+        # Write the modified file
+        with open(readme_file, "w", encoding="utf-8", errors="replace") as file:
+            file.writelines(new_lines)
 
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            logger.info(
-                f"\033[33mSuccessfully processed blog {readme_file} in \033[96m{elapsed_time:.2f} seconds\033[33m\033[0m"
-            )
-
-            # Remove the backup file if everything went well
-            try:
-                os.remove(backup_file)
-            except BaseException:
-                pass
-
-        except Exception as error:
-            logger.warning(f"Error processing blog {readme_file}: {error}")
-
-            try:
-                if os.path.exists(backup_file):
-                    with open(
-                        backup_file, "r", encoding="utf-8", errors="replace"
-                    ) as src:
-                        content = src.read()
-                    with open(
-                        readme_file, "w", encoding="utf-8", errors="replace"
-                    ) as dst:
-                        dst.write(content)
-
-                    logger.info(f"\033[33mRestored {readme_file} from backup\033[0m")
-
-            except BaseException:
-                logger.warning(
-                    f"WARNING: Could not restore {readme_file} from backup after unexpected error"
-                )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.info(
+            f"\033[33mSuccessfully processed blog {readme_file} in \033[96m{elapsed_time:.2f} milliseconds\033[33m\033[0m"
+        )
 
     except Exception as error:
         logger.warning(f"Error processing blog {readme_file}: {error}")
 
-        try:
-            if os.path.exists(backup_file):
-                with open(backup_file, "r", encoding="utf-8", errors="replace") as src:
-                    content = src.read()
-                with open(readme_file, "w", encoding="utf-8", errors="replace") as dst:
-                    dst.write(content)
-                logger.warning(
-                    f"Restored {readme_file} from backup after unexpected error"
-                )
-        except BaseException:
-            logger.warning(
-                f"WARNING: Could not restore {readme_file} from backup after unexpected error"
-            )
 
+_BUILD_START_TIME = time.time()
 
-def setup(app: Sphinx):
-    start_time = time.time()
+_BUILD_PHASES = {
+    'setup': 0,
+    'update_index': 0,
+    'blog_generation': 0,
+    'other': 0
+}
 
-    logger.info("Setting up ROCm Blogs extension")
-
-    app.connect("builder-inited", update_index_file)
-    app.connect("builder-inited", blog_generation)
-
-    # Log the total build setup time
+def log_total_build_time(app, exception):
     end_time = time.time()
-    elapsed_time = end_time - start_time
+    total_elapsed_time = end_time - _BUILD_START_TIME
+    
+    accounted_time = sum(_BUILD_PHASES.values())
+    _BUILD_PHASES['other'] = total_elapsed_time - accounted_time
+    
+    logger.info("=" * 80)
+    logger.info(f"BUILD PROCESS TIMING SUMMARY:")
+    logger.info("-" * 80)
+    logger.info(f"Setup phase:          \033[96m{_BUILD_PHASES['setup']:.2f} seconds\033[0m ({_BUILD_PHASES['setup']/total_elapsed_time*100:.1f}%)")
+    logger.info(f"Index update phase:   \033[96m{_BUILD_PHASES['update_index']:.2f} seconds\033[0m ({_BUILD_PHASES['update_index']/total_elapsed_time*100:.1f}%)")
+    logger.info(f"Blog generation phase: \033[96m{_BUILD_PHASES['blog_generation']:.2f} seconds\033[0m ({_BUILD_PHASES['blog_generation']/total_elapsed_time*100:.1f}%)")
+    logger.info(f"Other processing:     \033[96m{_BUILD_PHASES['other']:.2f} seconds\033[0m ({_BUILD_PHASES['other']/total_elapsed_time*100:.1f}%)")
+    logger.info("-" * 80)
+    logger.info(f"Total build process completed in \033[92m{total_elapsed_time:.2f} seconds\033[0m")
+    logger.info("=" * 80)
+
+def update_posts_file(app: Sphinx) -> None:
+    
+    phase_start_time = time.time()
+
+    try:
+        posts_template = """---
+title: All Posts{page_title_suffix}
+myst:
+html_meta:
+"description lang=en": "All AMD ROCm™ software blogs{page_description_suffix}"
+"keywords": "AMD GPU, MI300, MI250, ROCm, blog, posts, articles, page {current_page}"
+"property=og:locale": "en_US"
+---
+
+# Recent Posts{page_title_suffix}
+
+<style>
+{CSS}
+{PAGINATION_CSS}
+</style>
+{HTML}
+
+{pagination_controls}
+"""
+
+        # Load posts.html template
+        template_html = import_file("rocm_blogs.templates", "posts.html")
+        
+        # Load pagination template
+        pagination_template = import_file("rocm_blogs.templates", "pagination.html")
+
+        # Load CSS templates for styling
+        css_content = import_file("rocm_blogs.static.css", "index.css")
+        pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
+
+        # Process blog data using ROCmBlogs
+        rocmblogs = ROCmBlogs()
+
+        # Assume the blogs directory is the sibling of srcdir
+        blogs_dir = rocmblogs.find_blogs_directory(app.srcdir)
+        rocmblogs.blogs_directory = str(blogs_dir)
+        rocmblogs.find_readme_files()
+        rocmblogs.create_blog_objects()
+        rocmblogs.blogs.sort_blogs_by_date()
+
+        # Get all blogs
+        all_blogs = rocmblogs.blogs.get_blogs()
+        
+        blogs_per_page = 12
+        
+        # Calculate total number of pages
+        total_pages = max(1, (len(all_blogs) + blogs_per_page - 1) // blogs_per_page)
+        
+        logger.info(f"Generating {total_pages} paginated posts pages with {blogs_per_page} blogs per page")
+        
+        def optimize_grid_item(grid_item):
+            """Add lazy loading to images in a grid item."""
+            # Replace src with data-src for lazy loading
+            if 'img' in grid_item and 'src="' in grid_item:
+                # Add a tiny placeholder image (1x1 transparent pixel)
+                grid_item = grid_item.replace('<img ', '<img loading="lazy" ')
+                grid_item = grid_item.replace('src="', 'data-src="')
+                grid_item = grid_item.replace('<img loading="lazy" data-src="', 
+                                             '<img loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="')
+            return grid_item
+        
+        all_grid_items = []
+        with ThreadPoolExecutor() as executor:
+            futures = {}
+            for blog in all_blogs:
+                futures[executor.submit(generate_grid, rocmblogs, blog)] = blog
+                
+            for future in futures:
+                # Optimize the grid item for lazy loading
+                grid_item = optimize_grid_item(future.result())
+                all_grid_items.append(grid_item)
+        
+        current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        
+        for page_num in range(1, total_pages + 1):
+            # Calculate slice indices for this page
+            start_idx = (page_num - 1) * blogs_per_page
+            end_idx = min(start_idx + blogs_per_page, len(all_grid_items))
+            
+            # Get grid items for this page
+            page_grid_items = all_grid_items[start_idx:end_idx]
+            grid_content = "\n".join(page_grid_items)
+            
+            prev_button = ""
+            if page_num > 1:
+                prev_page = page_num - 1
+                prev_file = f"posts-page{prev_page}.html" if prev_page > 1 else "posts.html"
+                prev_button = f'<a href="{prev_file}" class="pagination-button previous"> Prev</a>'
+            else:
+                prev_button = '<span class="pagination-button disabled"> Prev</span>'
+                
+            next_button = ""
+            if page_num < total_pages:
+                next_page = page_num + 1
+                next_file = f"posts-page{next_page}.html"
+                next_button = f'<a href="{next_file}" class="pagination-button next">Next </a>'
+            else:
+                next_button = '<span class="pagination-button disabled">Next </span>'
+            
+            # Fill in pagination template
+            pagination_controls = pagination_template.replace("{prev_button}", prev_button)
+            pagination_controls = pagination_controls.replace("{current_page}", str(page_num))
+            pagination_controls = pagination_controls.replace("{total_pages}", str(total_pages))
+            pagination_controls = pagination_controls.replace("{next_button}", next_button)
+            
+            page_title_suffix = f" - Page {page_num}" if page_num > 1 else ""
+            page_description_suffix = f" (Page {page_num} of {total_pages})" if page_num > 1 else ""
+            
+            updated_html = posts_template.format(
+                CSS=css_content,
+                PAGINATION_CSS=pagination_css,
+                HTML=template_html,
+                pagination_controls=pagination_controls,
+                page_title_suffix=page_title_suffix,
+                page_description_suffix=page_description_suffix,
+                current_page=page_num
+            )
+            
+            # Replace grid_items placeholder in the HTML
+            updated_html = updated_html.replace("{grid_items}", grid_content)
+            
+            updated_html = updated_html.replace("{datetime}", current_datetime)
+            
+            if page_num == 1:
+                output_filename = "posts.md"
+            else:
+                output_filename = f"posts-page{page_num}.md"
+            
+            # Write the updated HTML to blogs/posts.md or blogs/posts-page{n}.md
+            output_path = Path(blogs_dir) / output_filename
+            with output_path.open("w", encoding="utf-8") as f:
+                f.write(updated_html)
+                
+            logger.info(
+                f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num} of {total_pages})"
+            )
+            
+        end_time = time.time()
+        elapsed_time = end_time - phase_start_time
+        # Store the time in the build phases dictionary
+        _BUILD_PHASES['update_posts'] = elapsed_time
+        
+        logger.info(
+            f"Successfully created {total_pages} paginated posts pages in \033[96m{elapsed_time:.2f} seconds\033[0m."
+        )
+    except Exception as error:
+        logger.critical(f"Failed to create posts files: {error}")
+        # Even on error, record the time spent
+        _BUILD_PHASES['update_posts'] = time.time() - phase_start_time
+
+
+def run_metadata_generator(app: Sphinx) -> None:
+    phase_start_time = time.time()
+    
+    try:
+        logger.info("Running metadata generator...")
+        
+        rocmblogs = ROCmBlogs()
+        
+        blogs_dir = rocmblogs.find_blogs_directory(app.srcdir)
+        rocmblogs.blogs_directory = str(blogs_dir)
+        
+        rocmblogs.find_readme_files()
+        
+        metadata_generator(rocmblogs)
+        
+        end_time = time.time()
+        elapsed_time = end_time - phase_start_time
+        # Store the time in the build phases dictionary
+        _BUILD_PHASES['metadata_generation'] = elapsed_time
+        logger.info(
+            f"Metadata generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m"
+        )
+    except Exception as error:
+        logger.critical(f"Failed to generate metadata: {error}")
+        # Even on error, record the time spent
+        _BUILD_PHASES['metadata_generation'] = time.time() - phase_start_time
+
+
+def update_category_pages(app: Sphinx) -> None:
+    
+    phase_start_time = time.time()
+
+    try:
+        categories = [
+            {
+                "name": "Applications & models",
+                "template": "applications-models.html",
+                "output_base": "applications-models",
+                "category_key": "Applications & models",
+                "title": "Applications & Models",
+                "description": "AMD ROCm™ software blogs about applications and models",
+                "keywords": "applications, models, AI, machine learning"
+            },
+            {
+                "name": "Software tools & optimizations",
+                "template": "software-tools.html",
+                "output_base": "software-tools",
+                "category_key": "Software tools & optimizations",
+                "title": "Software Tools and Optimizations",
+                "description": "AMD ROCm™ software blogs about tools and optimizations",
+                "keywords": "software, tools, optimizations, performance"
+            },
+            {
+                "name": "Ecosystems and Partners",
+                "template": "ecosystem-partners.html",
+                "output_base": "ecosystem-partners",
+                "category_key": "Ecosystems and Partners",
+                "title": "Ecosystem and Partners",
+                "description": "AMD ROCm™ software blogs about ecosystem and partners",
+                "keywords": "ecosystem, partners, integrations, collaboration"
+            }
+        ]
+        
+        pagination_template = import_file("rocm_blogs.templates", "pagination.html")
+
+        css_content = import_file("rocm_blogs.static.css", "index.css")
+        pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
+        
+        blogs_per_page = 12
+        
+        # Process blog data using ROCmBlogs
+        rocmblogs = ROCmBlogs()
+
+        # Assume the blogs directory is the sibling of srcdir
+        blogs_dir = rocmblogs.find_blogs_directory(app.srcdir)
+        rocmblogs.blogs_directory = str(blogs_dir)
+        rocmblogs.find_readme_files()
+        rocmblogs.create_blog_objects()
+        rocmblogs.blogs.sort_blogs_by_date()
+        rocmblogs.blogs.sort_blogs_by_category(rocmblogs.categories)
+        
+        # Current datetime for template
+        current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        
+        def optimize_grid_item(grid_item):
+            """Add lazy loading to images in a grid item."""
+            # Replace src with data-src for lazy loading
+            if 'img' in grid_item and 'src="' in grid_item:
+                # Add a tiny placeholder image (1x1 transparent pixel)
+                grid_item = grid_item.replace('<img ', '<img loading="lazy" ')
+                grid_item = grid_item.replace('src="', 'data-src="')
+                grid_item = grid_item.replace('<img loading="lazy" data-src="', 
+                                             '<img loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="')
+            return grid_item
+        
+        for category_info in categories:
+            category_name = category_info["name"]
+            template_name = category_info["template"]
+            output_base = category_info["output_base"]
+            category_key = category_info["category_key"]
+            title = category_info["title"]
+            description = category_info["description"]
+            keywords = category_info["keywords"]
+            
+            logger.info(f"Generating paginated pages for category: {category_name}")
+            
+            template_html = import_file("rocm_blogs.templates", template_name)
+            
+            category_blogs = rocmblogs.blogs.blogs_categories.get(category_key, [])
+            
+            total_pages = max(1, (len(category_blogs) + blogs_per_page - 1) // blogs_per_page)
+            
+            logger.info(f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages")
+            
+            all_grid_items = []
+            with ThreadPoolExecutor() as executor:
+                futures = {}
+                for blog in category_blogs:
+                    futures[executor.submit(generate_grid, rocmblogs, blog)] = blog
+                    
+                for future in futures:
+                    # Optimize the grid item for lazy loading
+                    grid_item = optimize_grid_item(future.result())
+                    all_grid_items.append(grid_item)
+            
+            category_template = """---
+title: {title}{page_title_suffix}
+myst:
+html_meta:
+"description lang=en": "{description}{page_description_suffix}"
+"keywords": "AMD GPU, MI300, MI250, ROCm, blog, {keywords}, page {current_page}"
+"property=og:locale": "en_US"
+---
+
+# {title}{page_title_suffix}
+
+<style>
+{CSS}
+{PAGINATION_CSS}
+</style>
+{HTML}
+
+{pagination_controls}
+"""
+            
+            for page_num in range(1, total_pages + 1):
+                start_idx = (page_num - 1) * blogs_per_page
+                end_idx = min(start_idx + blogs_per_page, len(all_grid_items))
+                
+                page_grid_items = all_grid_items[start_idx:end_idx]
+                grid_content = "\n".join(page_grid_items)
+                
+                prev_button = ""
+                if page_num > 1:
+                    prev_page = page_num - 1
+                    prev_file = f"{output_base}-page{prev_page}.html" if prev_page > 1 else f"{output_base}.html"
+                    prev_button = f'<a href="{prev_file}" class="pagination-button previous"> Prev</a>'
+                else:
+                    prev_button = '<span class="pagination-button disabled"> Prev</span>'
+                    
+                next_button = ""
+                if page_num < total_pages:
+                    next_page = page_num + 1
+                    next_file = f"{output_base}-page{next_page}.html"
+                    next_button = f'<a href="{next_file}" class="pagination-button next">Next </a>'
+                else:
+                    next_button = '<span class="pagination-button disabled">Next </span>'
+                
+                # Fill in pagination template
+                pagination_controls = pagination_template.replace("{prev_button}", prev_button)
+                pagination_controls = pagination_controls.replace("{current_page}", str(page_num))
+                pagination_controls = pagination_controls.replace("{total_pages}", str(total_pages))
+                pagination_controls = pagination_controls.replace("{next_button}", next_button)
+                
+                page_title_suffix = f" - Page {page_num}" if page_num > 1 else ""
+                page_description_suffix = f" (Page {page_num} of {total_pages})" if page_num > 1 else ""
+                
+                updated_html = template_html.replace("{grid_items}", grid_content)
+                updated_html = updated_html.replace("{datetime}", current_datetime)
+                
+                # Create the final markdown content
+                final_content = category_template.format(
+                    title=title,
+                    description=description,
+                    keywords=keywords,
+                    CSS=css_content,
+                    PAGINATION_CSS=pagination_css,
+                    HTML=updated_html,
+                    pagination_controls=pagination_controls,
+                    page_title_suffix=page_title_suffix,
+                    page_description_suffix=page_description_suffix,
+                    current_page=page_num
+                )
+                
+                if page_num == 1:
+                    output_filename = f"{output_base}.md"
+                else:
+                    output_filename = f"{output_base}-page{page_num}.md"
+                
+                # Write the updated HTML to blogs/category_file.md
+                output_path = Path(blogs_dir) / output_filename
+                with output_path.open("w", encoding="utf-8") as f:
+                    f.write(final_content)
+                    
+                logger.info(
+                    f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num} of {total_pages})"
+                )
+            
+        end_time = time.time()
+        elapsed_time = end_time - phase_start_time
+        # Store the time in the build phases dictionary
+        _BUILD_PHASES['update_category_pages'] = elapsed_time
+        
+        logger.info(
+            f"Category pages generation completed in \033[96m{elapsed_time:.2f} seconds\033[0m."
+        )
+    except Exception as error:
+        logger.critical(f"Failed to create category pages: {error}")
+        # Even on error, record the time spent
+        _BUILD_PHASES['update_category_pages'] = time.time() - phase_start_time
+
+
+def setup(app: Sphinx) -> dict:
+    setup_start_time = time.time()
+
+    logger.info(f"Setting up ROCm Blogs extension, version: {__version__}")
+    logger.info(f"Build process started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_BUILD_START_TIME))}")
+    
+    #app.connect("builder-inited", run_metadata_generator)
+    app.connect("builder-inited", update_index_file)
+    app.connect("builder-inited", update_posts_file)
+    app.connect("builder-inited", update_category_pages)
+    app.connect("builder-inited", blog_generation)
+    
+    app.connect("build-finished", log_total_build_time)
+
+    setup_end_time = time.time()
+    setup_elapsed_time = setup_end_time - setup_start_time
+    # Store the setup time in the build phases dictionary
+    _BUILD_PHASES['setup'] = setup_elapsed_time
     logger.info(
-        f"ROCm Blogs extension setup completed in \033[96m{elapsed_time:.2f} seconds\033[0m"
+        f"ROCm Blogs extension setup completed in \033[96m{setup_elapsed_time:.2f} seconds\033[0m"
     )
 
     return {

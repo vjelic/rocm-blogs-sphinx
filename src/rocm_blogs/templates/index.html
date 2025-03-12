@@ -1,32 +1,195 @@
-<!--
-Updated 2024 October 10
-Generated {datetime}
--->
 
-<h1><a href="blog/atom.xml"><i class="fa fa-rss fa-rotate-270"></i></a> AMD ROCm™ Blogs</h1>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" href="/_static/css/theme.css" as="style">
+<link rel="preload" href="/_static/css/index.css" as="style">
+<link rel="preload" href="/_static/css/bootstrap.min.css" as="style">
+
 
 <script>
-  const buttonWrapper = document.getElementById('buttonWrapper');
+  // Performance monitoring
+  if (window.performance && window.performance.mark) {
+    window.performance.mark('index-start');
+  }
+</script>
 
-  const observer = new MutationObserver((mutationsList) => {
-    for (const mutation of mutationsList) {
-      if (mutation.type === 'attributes' && mutation.attributeName === 'data-mode') {
-        console.log(`Data mode changed to: ${newMode}`);
-        if (newMode === 'light') {
-          buttonWrapper.style.setProperty('--original-background', 'white');
-          buttonWrapper.style.setProperty('--hover-background-colour', 'white');
-        } else {
-          buttonWrapper.style.setProperty('--original-background', 'black');
-          buttonWrapper.style.setProperty('--hover-background-colour', 'black');
-        }
+<script>
+  // Optimized event listener for buttons
+  document.addEventListener('DOMContentLoaded', function() {
+    // Performance mark for DOMContentLoaded
+    if (window.performance && window.performance.mark) {
+      window.performance.mark('dom-content-loaded');
+      window.performance.measure('dom-processing', 'index-start', 'dom-content-loaded');
+    }
+    
+    // Use requestIdleCallback for non-critical operations
+    const scheduleIdleTask = (callback) => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(callback, { timeout: 2000 });
+      } else {
+        setTimeout(callback, 1);
       }
+    };
+    
+    // Button wrapper optimization
+    scheduleIdleTask(() => {
+      const buttonWrappers = document.querySelectorAll('#buttonWrapper');
+      
+      buttonWrappers.forEach(buttonWrapper => {
+        // Use Intersection Observer to only process visible buttons
+        if ('IntersectionObserver' in window) {
+          const buttonObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                setupButtonWrapper(buttonWrapper);
+                buttonObserver.unobserve(buttonWrapper);
+              }
+            });
+          });
+          
+          buttonObserver.observe(buttonWrapper);
+        } else {
+          // Fallback for browsers without IntersectionObserver
+          setupButtonWrapper(buttonWrapper);
+        }
+      });
+    });
+    
+    function setupButtonWrapper(buttonWrapper) {
+      const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'data-mode') {
+            const newMode = buttonWrapper.getAttribute('data-mode');
+            console.log(`Data mode changed to: ${newMode}`);
+            if (newMode === 'light') {
+              buttonWrapper.style.setProperty('--original-background', 'white');
+              buttonWrapper.style.setProperty('--hover-background-colour', 'white');
+            } else {
+              buttonWrapper.style.setProperty('--original-background', 'black');
+              buttonWrapper.style.setProperty('--hover-background-colour', 'black');
+            }
+          }
+        }
+      });
+      
+      // Start observing the button wrapper
+      observer.observe(buttonWrapper, { attributes: true });
+      
+      // Remove hover effects for better performance
+    }
+    
+    // Enhanced Intersection Observer for lazy loading images
+    if ('IntersectionObserver' in window) {
+      // Create connection observer for preconnecting to image domains
+      const uniqueDomains = new Set();
+      document.querySelectorAll('img[data-src]').forEach(img => {
+        try {
+          const url = new URL(img.dataset.src);
+          uniqueDomains.add(url.origin);
+        } catch (e) {
+          // Ignore invalid URLs
+        }
+      });
+      
+      // Preconnect to image domains
+      uniqueDomains.forEach(domain => {
+        const link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = domain;
+        document.head.appendChild(link);
+      });
+      
+      // Get all images that should be lazy loaded
+      const lazyImages = document.querySelectorAll('img[data-src]');
+      
+      // Create an intersection observer with optimized options
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          // If the image is in the viewport
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            
+            // Performance mark for image loading
+            if (window.performance && window.performance.mark) {
+              window.performance.mark(`image-load-start-${img.dataset.src}`);
+            }
+            
+            // Create new image to preload
+            const tempImage = new Image();
+            
+            tempImage.onload = function() {
+              // Replace the src with the data-src
+              img.src = img.dataset.src;
+              
+              // Remove the data-src attribute
+              img.removeAttribute('data-src');
+              
+              // Add loaded class for CSS transitions
+              img.classList.add('loaded');
+              
+              // Performance mark for image loaded
+              if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-load-end-${img.src}`);
+                window.performance.measure(
+                  `image-load-time-${img.src}`,
+                  `image-load-start-${img.src}`,
+                  `image-load-end-${img.src}`
+                );
+              }
+            };
+            
+            tempImage.src = img.dataset.src;
+            
+            // Stop observing this image
+            observer.unobserve(img);
+          }
+        });
+      }, {
+        rootMargin: '200px 0px', // Start loading images when they're 200px from viewport
+        threshold: 0.01 // Trigger when at least 1% of the image is visible
+      });
+      
+      // Observe each image
+      lazyImages.forEach(img => {
+        imageObserver.observe(img);
+      });
+    }
+    
+    // Report performance metrics
+    if (window.performance && window.performance.getEntriesByType) {
+      scheduleIdleTask(() => {
+        // Get all performance entries
+        const perfEntries = performance.getEntriesByType('measure');
+        
+        // Log performance metrics
+        console.log('Performance metrics:', perfEntries);
+      });
+    }
+  });
+  
+  // Use passive event listeners for better scrolling performance
+  window.addEventListener('scroll', function() {
+    // Throttled scroll handler
+  }, { passive: true });
+  
+  // Mark when all content is loaded
+  window.addEventListener('load', function() {
+    if (window.performance && window.performance.mark) {
+      window.performance.mark('index-fully-loaded');
+      window.performance.measure('full-page-load', 'index-start', 'index-fully-loaded');
+      
+      // Log the full page load time
+      const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
+      console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
     }
   });
 </script>
 
 <div class="container">
   <h2>Recent Posts</h2>
-  <a href="blog.html">
+  <a href="posts.html">
     <button id="buttonWrapper">
       See All
     </button>
@@ -40,7 +203,7 @@ Generated {datetime}
 
 <div class="container">
   <h2>Ecosystems and partners</h2>
-  <a href="blog/category/ecosystems-and-partners.html">
+  <a href="ecosystem-partners.html">
     <button id="buttonWrapper">
       See All
     </button>
@@ -54,7 +217,7 @@ Generated {datetime}
 
 <div class="container">
   <h2>Applications & models</h2>
-  <a href="blog/category/applications-models.html">
+  <a href="applications-models.html">
     <button id="buttonWrapper">
       See All
     </button>
@@ -68,7 +231,7 @@ Generated {datetime}
 
 <div class="container">
   <h2>Software tools & optimizations</h2>
-  <a href="blog/category/software-tools-optimizations.html">
+  <a href="software-tools.html">
     <button id="buttonWrapper">
       See All
     </button>
