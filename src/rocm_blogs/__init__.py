@@ -451,6 +451,7 @@ def optimize_image(image_path):
 
 
 def process_single_blog(blog, rocmblogs):
+    """Process a single blog file without creating backups."""
     start_time = time.time()
     readme_file = blog.file_path
     blog_dir = os.path.dirname(readme_file)
@@ -460,14 +461,48 @@ def process_single_blog(blog, rocmblogs):
         return
 
     try:
+
         with open(readme_file, "r", encoding="utf-8", errors="replace") as src:
             content = src.read()
-            # Convert content to lines immediately
-            lines = content.splitlines(True)  # Keep line endings
+
+            lines = content.splitlines(True)
 
         if hasattr(blog, "thumbnail") and blog.thumbnail:
             blog.grab_image(rocmblogs)
-            logger.info(f"Found thumbnail image: {blog.image_paths[0] if blog.image_paths else 'None'}")
+            logger.info(
+                f"Found thumbnail image: {blog.image_paths[0] if blog.image_paths else 'None'}"
+            )
+
+            thumbnails = [os.path.basename(path) for path in blog.image_paths] if blog.image_paths else []
+
+            if thumbnails:
+                for image_name in thumbnails:
+                    possible_image_paths = []
+
+                    blog_dir_img = os.path.join(blog_dir, image_name)
+                    blog_dir_images_img = os.path.join(blog_dir, "images", image_name)
+
+                    blogs_dir = rocmblogs.blogs_directory
+                    global_img = os.path.join(blogs_dir, "images", image_name)
+                    
+                    possible_image_paths.extend([blog_dir_img, blog_dir_images_img, global_img])
+
+                    for img_path in possible_image_paths:
+                        if os.path.exists(img_path) and os.path.isfile(img_path):
+                            logger.info(f"Optimizing image from image_paths: {img_path}")
+                            optimize_image(img_path, thumbnails)
+                            break
+
+            blog_images_dir = os.path.join(blog_dir, "images")
+            if os.path.exists(blog_images_dir) and os.path.isdir(blog_images_dir):
+                logger.info(f"Checking for images in blog images directory: {blog_images_dir}")
+                for filename in os.listdir(blog_images_dir):
+                    img_path = os.path.join(blog_images_dir, filename)
+                    if os.path.isfile(img_path):
+                        _, ext = os.path.splitext(filename)
+                        if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif']:
+                            logger.info(f"Optimizing image from blog/images directory: {img_path}")
+                            optimize_image(img_path, thumbnails)
 
         word_count = count_words_in_markdown(content)
         blog.set_word_count(word_count)
@@ -527,10 +562,8 @@ def process_single_blog(blog, rocmblogs):
         giscus_html = import_file("rocm_blogs.templates", "giscus.html")
 
         if has_valid_author:
-            # Use the original template with author
             modified_author_template = author_attribution_template
         else:
-            # Create a modified template without "by {authors_string}"
             modified_author_template = author_attribution_template.replace(
                 "<span> {date} by {authors_string}.</span>", "<span> {date}</span>"
             )
@@ -542,18 +575,50 @@ def process_single_blog(blog, rocmblogs):
             .replace("{category}", category_html)
             .replace("{tags}", tags_html)
             .replace("{read_time}", blog_read_time)
-            .replace(
-                "{word_count}", str(getattr(blog, "word_count", "No Word Count"))
-            )
+            .replace("{word_count}", str(getattr(blog, "word_count", "No Word Count")))
         )
 
-        if blog.image_paths:
-            blog_image = f"../../_images/{blog.image_paths[0]}"
-        else:
-            blog_image = "../../_images/generic.jpg"
+        blog_path = Path(blog.file_path)
+        blogs_dir = Path(rocmblogs.blogs_directory)
+        
+        try:
+            rel_path = blog_path.relative_to(blogs_dir)
+            depth = len(rel_path.parts) - 1
+            logger.info(f"Blog depth: {depth} for {blog.file_path}")
+            
+            parent_dirs = "../" * (depth + 1)
 
-        image_template_filled = image_html.replace("{IMAGE}", blog_image).replace(
-            "{TITLE}", getattr(blog, "blog_title", "")
+            logger.info(f"Blog path: {blog_path}")
+            logger.info(f"Blogs dir: {blogs_dir}")
+            logger.info(f"Relative path: {rel_path}")
+            logger.info(f"Depth: {depth}")
+            logger.info(f"Parent dirs: {parent_dirs}")
+
+            if depth == 1 and parent_dirs == "../../":
+                pass
+            elif depth == 2 and parent_dirs == "../../../":
+                pass
+            elif depth == 3 and parent_dirs == "../../../../":
+                parent_dirs = "../../../"
+                logger.info(f"Corrected parent dirs for depth 3: {parent_dirs}")
+            
+            if blog.image_paths:
+                blog_image = f"{parent_dirs}_images/{blog.image_paths[0]}"
+            else:
+                blog_image = f"{parent_dirs}_images/generic.jpg"
+                
+            logger.info(f"Using image path: {blog_image}")
+        except ValueError:
+            # If the blog is not relative to blogs_dir, fall back to default
+            logger.warning(f"Could not determine relative path for {blog.file_path}, using default image path")
+            if blog.image_paths:
+                blog_image = f"../../_images/{blog.image_paths[0]}"
+            else:
+                blog_image = "../../_images/generic.jpg"
+
+        image_template_filled = (
+            image_html.replace("{IMAGE}", blog_image)
+            .replace("{TITLE}", getattr(blog, "blog_title", ""))
         )
 
         # Prepare the templates to insert
@@ -569,12 +634,14 @@ def process_single_blog(blog, rocmblogs):
 {image_template_filled}
 """
 
+        # Insert the templates at the appropriate positions
         new_lines = lines.copy()
         new_lines.insert(line_number + 1, f"\n{blog_template}\n")
         new_lines.insert(line_number + 2, f"\n{image_template}\n")
         new_lines.insert(line_number + 3, f"\n{authors_html_filled}\n")
         new_lines.insert(line_number + 4, f"\n{quickshare_button}\n")
 
+        # Add giscus comments at the end of the file
         new_lines.append(f"\n\n{giscus_html}\n")
 
         # Write the modified file
@@ -589,7 +656,6 @@ def process_single_blog(blog, rocmblogs):
 
     except Exception as error:
         logger.warning(f"Error processing blog {readme_file}: {error}")
-
 
 _BUILD_START_TIME = time.time()
 
