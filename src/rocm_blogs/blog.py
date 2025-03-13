@@ -237,43 +237,61 @@ class Blog:
             full_image_path = pathlib.Path(image)
             print(f"Found image at absolute path: {full_image_path}")
         else:
-            # Create a prioritized list of possible paths
             blog_dir = pathlib.Path(self.file_path).parent
             blogs_dir = pathlib.Path(rocmblogs.blogs_directory)
-            
-            # First check blog-specific locations
+
+            # Check in the blog directory and its images subdirectory
             possible_paths = [
-                blog_dir / image,  # Direct reference in blog directory
-                blog_dir / "images" / image,  # Blog's images subdirectory
+                blog_dir / image,
+                blog_dir / "images" / image,
             ]
             
-            # Then check global locations
+            # Check parent directories up to 3 levels deep
+            parent1 = blog_dir.parent
+            parent2 = parent1.parent if parent1 != blogs_dir else None
+            parent3 = parent2.parent if parent2 and parent2 != blogs_dir else None
+            
+            # Add parent directory image paths
+            if parent1:
+                possible_paths.append(parent1 / image)
+                possible_paths.append(parent1 / "images" / image)
+            
+            if parent2:
+                possible_paths.append(parent2 / image)
+                possible_paths.append(parent2 / "images" / image)
+            
+            if parent3:
+                possible_paths.append(parent3 / image)
+                possible_paths.append(parent3 / "images" / image)
+            
+            # Check global image directories
             global_paths = [
-                blog_dir.parent / "images" / image,  # Parent directory's images
-                blogs_dir / "images" / image,  # Global images directory
-                blogs_dir / "images" / image.lower(),  # Case-insensitive check
+                blog_dir.parent / "images" / image,
+                blogs_dir / "images" / image,
+                blogs_dir / "images" / image.lower(),
             ]
             
-            # Check blog-specific paths first
+            # Debug output
+            print(f"Blog directory: {blog_dir}")
+            print(f"Checking possible paths: {[str(p) for p in possible_paths]}")
+            print(f"Checking global paths: {[str(p) for p in global_paths]}")
+
             for path in possible_paths:
                 if path.exists() and path.is_file():
                     full_image_path = path
                     print(f"Found image in blog directory: {full_image_path}")
                     break
-            
-            # If not found, check global paths
+
             if not full_image_path:
                 for path in global_paths:
                     if path.exists() and path.is_file():
                         full_image_path = path
                         print(f"Found image in global directory: {full_image_path}")
                         break
-            
-            # If still not found, try partial matching in the global images directory
+
             if not full_image_path:
                 images_dir = blogs_dir / "images"
                 if images_dir.exists():
-                    # Try to find a partial match by filename
                     image_base = os.path.splitext(image)[0].lower()
                     for img_file in images_dir.glob("*"):
                         if img_file.is_file() and image_base in img_file.name.lower():
@@ -287,11 +305,9 @@ class Blog:
             self.save_image_path("generic.jpg")
             return "./images/generic.jpg"
 
-        # Get the image name and save it
         image_name = os.path.basename(str(full_image_path))
         self.save_image_path(image_name)
 
-        # Return the relative path for use in HTML
         relative_path = os.path.relpath(
             str(full_image_path), str(rocmblogs.blogs_directory)
         )
