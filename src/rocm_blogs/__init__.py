@@ -490,7 +490,7 @@ def process_single_blog(blog, rocmblogs):
                     for img_path in possible_image_paths:
                         if os.path.exists(img_path) and os.path.isfile(img_path):
                             logger.info(f"Optimizing image from image_paths: {img_path}")
-                            optimize_image(img_path, thumbnails)
+                            optimize_image(img_path)
                             break
 
             blog_images_dir = os.path.join(blog_dir, "images")
@@ -502,7 +502,7 @@ def process_single_blog(blog, rocmblogs):
                         _, ext = os.path.splitext(filename)
                         if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif']:
                             logger.info(f"Optimizing image from blog/images directory: {img_path}")
-                            optimize_image(img_path, thumbnails)
+                            optimize_image(img_path)
 
         word_count = count_words_in_markdown(content)
         blog.set_word_count(word_count)
