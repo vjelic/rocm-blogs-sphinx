@@ -417,19 +417,17 @@ def optimize_image(image_path):
             # Create WebP version as well (but don't replace the original in HTML)
             try:
                 webp_path = os.path.splitext(image_path)[0] + '.webp'
-                
-                # Convert to RGB mode if needed (WebP doesn't support CMYK or other modes)
+
                 if img_without_exif.mode not in ('RGB', 'RGBA'):
                     webp_img = img_without_exif.convert('RGB')
                 else:
                     webp_img = img_without_exif
-                
-                # Save as WebP with high quality
+
                 webp_img.save(
                     webp_path,
                     format="WEBP",
-                    quality=85,  # High quality WebP
-                    method=6,    # Highest compression method (slower but better)
+                    quality=85,
+                    method=6,
                     lossless=False
                 )
                 
@@ -583,38 +581,34 @@ def process_single_blog(blog, rocmblogs):
         
         try:
             rel_path = blog_path.relative_to(blogs_dir)
+
             depth = len(rel_path.parts) - 1
             logger.info(f"Blog depth: {depth} for {blog.file_path}")
-            
-            parent_dirs = "../" * (depth + 1)
 
-            logger.info(f"Blog path: {blog_path}")
-            logger.info(f"Blogs dir: {blogs_dir}")
-            logger.info(f"Relative path: {rel_path}")
-            logger.info(f"Depth: {depth}")
-            logger.info(f"Parent dirs: {parent_dirs}")
-
-            if depth == 1 and parent_dirs == "../../":
-                pass
-            elif depth == 2 and parent_dirs == "../../../":
-                pass
-            elif depth == 3 and parent_dirs == "../../../../":
-                parent_dirs = "../../../"
-                logger.info(f"Corrected parent dirs for depth 3: {parent_dirs}")
+            parent_dirs = "../" * depth
             
+            logger.info(f"Using {parent_dirs} for blog at depth {depth}: {blog.file_path}")
+
             if blog.image_paths:
-                blog_image = f"{parent_dirs}_images/{blog.image_paths[0]}"
+                image_filename = os.path.basename(blog.image_paths[0])
             else:
-                blog_image = f"{parent_dirs}_images/generic.jpg"
-                
-            logger.info(f"Using image path: {blog_image}")
+                image_filename = "generic.jpg"
+
+            blog_image = f"{parent_dirs}_images/{image_filename}"
+            
+            logger.info(f"Using image path for blog: {blog_image}")
+
         except ValueError:
-            # If the blog is not relative to blogs_dir, fall back to default
             logger.warning(f"Could not determine relative path for {blog.file_path}, using default image path")
             if blog.image_paths:
                 blog_image = f"../../_images/{blog.image_paths[0]}"
             else:
                 blog_image = "../../_images/generic.jpg"
+
+        image_template_filled = (
+            image_html.replace("{IMAGE}", blog_image)
+            .replace("{TITLE}", getattr(blog, "blog_title", ""))
+        )
 
         image_template_filled = (
             image_html.replace("{IMAGE}", blog_image)
