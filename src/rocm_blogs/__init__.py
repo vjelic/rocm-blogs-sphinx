@@ -254,24 +254,25 @@ def blog_generation(app: Sphinx):
         rocmblogs.create_blog_objects()
         rocmblogs.blogs.sort_blogs_by_date()
 
+        # Get all blogs
         blogs = rocmblogs.blogs.get_blogs()
-
-        max_workers = min(32, (os.cpu_count() or 1) * 2)
-        logger.info(f"Processing {len(blogs)} blogs with {max_workers} workers")
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        total_blogs = len(blogs)
+        
+        if not blogs:
+            logger.warning("No blogs found to process")
+            return
             
-            futures = []
-            for blog in blogs:
-                future = executor.submit(process_single_blog, blog, rocmblogs)
-                futures.append(future)
+        logger.info(f"Starting to process {total_blogs} blogs")
 
-            # Process results as they complete
-            for future in futures:
-                try:
-                    future.result()  # This will raise any exceptions from the thread
-                except Exception as error:
-                    logger.warning(f"Error processing blog: {error}")
+        for blog in blogs:
+            try:
+                process_single_blog(blog, rocmblogs)
+                processed_count += 1
+
+                logger.info(f"Processed {processed_count}/{total_blogs} blogs")
+            except Exception as error:
+                logger.warning(f"Error processing blog {getattr(blog, 'file_path', 'Unknown')}: {error}")
+
 
         end_time = time.time()
         elapsed_time = end_time - phase_start_time
