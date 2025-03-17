@@ -1,8 +1,0 @@
-Metadata-Version: 2.2
-Name: rocm-blogs-sphinx
-Version: 1.3.0
-Summary: ROCm Blogs
-Author-email: Danny Guan <danny.guan@amd.com>
-Requires-Python: >=3.10
-Description-Content-Type: text/markdown
-Requires-Dist: numpy
