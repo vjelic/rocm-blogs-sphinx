@@ -384,67 +384,6 @@ def optimize_image(image_path):
                 # Resize the image using high-quality Lanczos resampling
                 img_without_exif = img_without_exif.resize((new_width, new_height), resample=Image.LANCZOS)
                 logger.info(f"Resized image: {original_width}x{original_height} → {new_width}x{new_height}")
-            
-            # Optimize based on image format
-            if file_ext in ['.jpg', '.jpeg']:
-                img_without_exif.save(
-                    image_path, 
-                    format="JPEG", 
-                    optimize=True, 
-                    quality=85
-                )
-            elif file_ext == '.png':
-                img_without_exif.save(
-                    image_path, 
-                    format="PNG", 
-                    optimize=True, 
-                    compress_level=9
-                )
-            else:
-                # For other formats, just save with default settings
-                img_without_exif.save(image_path)
-            
-            # Get new file size for logging
-            new_size = os.path.getsize(image_path)
-            size_reduction = (1 - new_size / original_size) * 100 if original_size > 0 else 0
-            
-            logger.info(
-                f"Optimized {os.path.basename(image_path)}: "
-                f"{original_format} {original_size/1024:.1f}KB → {new_size/1024:.1f}KB "
-                f"({size_reduction:.1f}% reduction)"
-            )
-            
-            # Create WebP version as well (but don't replace the original in HTML)
-            try:
-                webp_path = os.path.splitext(image_path)[0] + '.webp'
-                
-                # Convert to RGB mode if needed (WebP doesn't support CMYK or other modes)
-                if img_without_exif.mode not in ('RGB', 'RGBA'):
-                    webp_img = img_without_exif.convert('RGB')
-                else:
-                    webp_img = img_without_exif
-                
-                # Save as WebP with high quality
-                webp_img.save(
-                    webp_path,
-                    format="WEBP",
-                    quality=85,  # High quality WebP
-                    method=6,    # Highest compression method (slower but better)
-                    lossless=False
-                )
-                
-                # Get WebP file size for logging
-                webp_size = os.path.getsize(webp_path)
-                webp_reduction = (1 - webp_size / original_size) * 100 if original_size > 0 else 0
-                
-                logger.info(
-                    f"Created WebP version: {os.path.basename(webp_path)}: "
-                    f"{webp_size/1024:.1f}KB ({webp_reduction:.1f}% reduction from original)"
-                )
-            except Exception as webp_error:
-                logger.warning(f"Error creating WebP version of {os.path.basename(image_path)}: {webp_error}")
-            
-            return True
     except Exception as error:
         logger.warning(f"Error optimizing image {os.path.basename(image_path)}: {error}")
         return False
@@ -490,7 +429,7 @@ def process_single_blog(blog, rocmblogs):
                     for img_path in possible_image_paths:
                         if os.path.exists(img_path) and os.path.isfile(img_path):
                             logger.info(f"Optimizing image from image_paths: {img_path}")
-                            optimize_image(img_path, thumbnails)
+                            optimize_image(img_path)
                             break
 
             blog_images_dir = os.path.join(blog_dir, "images")
@@ -502,7 +441,7 @@ def process_single_blog(blog, rocmblogs):
                         _, ext = os.path.splitext(filename)
                         if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif']:
                             logger.info(f"Optimizing image from blog/images directory: {img_path}")
-                            optimize_image(img_path, thumbnails)
+                            optimize_image(img_path)
 
         word_count = count_words_in_markdown(content)
         blog.set_word_count(word_count)
@@ -583,38 +522,34 @@ def process_single_blog(blog, rocmblogs):
         
         try:
             rel_path = blog_path.relative_to(blogs_dir)
+
             depth = len(rel_path.parts) - 1
             logger.info(f"Blog depth: {depth} for {blog.file_path}")
-            
-            parent_dirs = "../" * (depth + 1)
 
-            logger.info(f"Blog path: {blog_path}")
-            logger.info(f"Blogs dir: {blogs_dir}")
-            logger.info(f"Relative path: {rel_path}")
-            logger.info(f"Depth: {depth}")
-            logger.info(f"Parent dirs: {parent_dirs}")
-
-            if depth == 1 and parent_dirs == "../../":
-                pass
-            elif depth == 2 and parent_dirs == "../../../":
-                pass
-            elif depth == 3 and parent_dirs == "../../../../":
-                parent_dirs = "../../../"
-                logger.info(f"Corrected parent dirs for depth 3: {parent_dirs}")
+            parent_dirs = "../" * depth
             
+            logger.info(f"Using {parent_dirs} for blog at depth {depth}: {blog.file_path}")
+
             if blog.image_paths:
-                blog_image = f"{parent_dirs}_images/{blog.image_paths[0]}"
+                image_filename = os.path.basename(blog.image_paths[0])
             else:
-                blog_image = f"{parent_dirs}_images/generic.jpg"
-                
-            logger.info(f"Using image path: {blog_image}")
+                image_filename = "generic.jpg"
+
+            blog_image = f"{parent_dirs}_images/{image_filename}"
+            
+            logger.info(f"Using image path for blog: {blog_image}")
+
         except ValueError:
-            # If the blog is not relative to blogs_dir, fall back to default
             logger.warning(f"Could not determine relative path for {blog.file_path}, using default image path")
             if blog.image_paths:
                 blog_image = f"../../_images/{blog.image_paths[0]}"
             else:
                 blog_image = "../../_images/generic.jpg"
+
+        image_template_filled = (
+            image_html.replace("{IMAGE}", blog_image)
+            .replace("{TITLE}", getattr(blog, "blog_title", ""))
+        )
 
         image_template_filled = (
             image_html.replace("{IMAGE}", blog_image)
