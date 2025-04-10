@@ -732,9 +732,9 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
         # Register event handlers
         sphinx_app.connect("builder-inited", update_index_file)
         sphinx_app.connect("builder-inited", blog_generation)
-        sphinx_app.connect("builder-inited", run_metadata_generator)
         sphinx_app.connect("builder-inited", update_posts_file)
         sphinx_app.connect("builder-inited", update_category_pages)
+        sphinx_app.connect("builder-inited", run_metadata_generator)
         sphinx_app.connect("build-finished", log_total_build_time)
         
         sphinx_diagnostics.info(
