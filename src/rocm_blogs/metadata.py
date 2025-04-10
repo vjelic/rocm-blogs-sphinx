@@ -53,6 +53,7 @@ myst:
         "property=og:url": "https://rocm.blogs.amd.com{blog_url}"
         "property=og:site_name": "ROCm Blogs"
         "property=og:locale": "en_US"
+        "property=og:image": "https://rocm.blogs.amd.com/_images/{thumbnail}"
         "property=article:published_time": "{amd_blog_releasedate}"
         "property=article:author": "{author}"
         "property=article:tag": "{keywords}"
@@ -382,14 +383,18 @@ myst:
                             
                         # Date parsing with multiple formats
                         date_formats = [
-                            "%d %B %Y",    # 8 April 2025
-                            "%d %b %Y",    # 8 Apr 2025
-                            "%d-%B-%Y",    # 8-April-2025
-                            "%d-%b-%Y",    # 8-Apr-2025
-                            "%d/%m/%Y",    # 8/04/2025
-                            "%Y-%m-%d",    # 2025-04-08
-                            "%B %d, %Y",   # April 8, 2025
-                            "%b %d, %Y",   # Apr 8, 2025
+                            "%d-%m-%Y",  # e.g. 8-08-2024
+                            "%d/%m/%Y",  # e.g. 8/08/2024
+                            "%d-%B-%Y",  # e.g. 8-August-2024
+                            "%d-%b-%Y",  # e.g. 8-Aug-2024
+                            "%d %B %Y",  # e.g. 8 August 2024
+                            "%d %b %Y",  # e.g. 8 Aug 2024
+                            "%d %B, %Y",  # e.g. 8 August, 2024
+                            "%d %b, %Y",  # e.g. 8 Aug, 2024
+                            "%B %d, %Y",  # e.g. August 8, 2024
+                            "%b %d, %Y",  # e.g. Aug 8, 2024
+                            "%B %d %Y",  # e.g. August 8 2024
+                            "%b %d %Y",  # e.g. Aug 8 2024
                         ]
                         
                         parsed_date = None
@@ -431,21 +436,6 @@ myst:
 
                         valid_release_date = False
                         valid_release_date_format = "%a %b %d, %H:%M:%S %Z%Y"
-
-                        date_formats = [
-                            "%d-%m-%Y",  # e.g. 8-08-2024
-                            "%d/%m/%Y",  # e.g. 8/08/2024
-                            "%d-%B-%Y",  # e.g. 8-August-2024
-                            "%d-%b-%Y",  # e.g. 8-Aug-2024
-                            "%d %B %Y",  # e.g. 8 August 2024
-                            "%d %b %Y",  # e.g. 8 Aug 2024
-                            "%d %B, %Y",  # e.g. 8 August, 2024
-                            "%d %b, %Y",  # e.g. 8 Aug, 2024
-                            "%B %d, %Y",  # e.g. August 8, 2024
-                            "%b %d, %Y",  # e.g. Aug 8, 2024
-                            "%B %d %Y",  # e.g. August 8 2024
-                            "%b %d %Y",  # e.g. Aug 8 2024
-                        ]
 
                         if release_date_str:
                                 
