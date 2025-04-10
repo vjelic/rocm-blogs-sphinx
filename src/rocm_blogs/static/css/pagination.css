@@ -1,4 +1,4 @@
-
+/* Pagination Styles */
 .pagination-container {
   display: flex;
   justify-content: center;
@@ -20,7 +20,7 @@
   margin: 0 1rem;
 }
 
-
+/* Style pagination buttons like the "See All" button from the homepage */
 .pagination-button {
   border: none;
   background-color: var(--card-bg-light);
@@ -53,7 +53,7 @@
   box-shadow: 0 8px 24px var(--hover-shadow-light);
 }
 
-
+/* Next button arrow */
 .pagination-button.next::after {
   content: "→";
   margin-left: 8px;
@@ -61,7 +61,7 @@
   will-change: transform;
 }
 
-
+/* Previous button arrow */
 .pagination-button.previous::before {
   content: "←";
   margin-right: 8px;
@@ -85,7 +85,7 @@
   box-shadow: 0 4px 12px var(--shadow-light);
 }
 
-
+/* Dark theme support */
 html[data-theme="dark"] .pagination-button {
   background-color: var(--card-bg-dark);
   box-shadow: 0 4px 12px var(--shadow-dark);
@@ -112,7 +112,7 @@ html[data-theme="dark"] .pagination-button.disabled {
   margin-left: 0.5rem;
 }
 
-
+/* Responsive adjustments */
 @media (max-width: 768px) {
   .pagination {
     flex-wrap: wrap;
@@ -125,4 +125,3 @@ html[data-theme="dark"] .pagination-button.disabled {
     margin-top: 0.5rem;
   }
 }
-
