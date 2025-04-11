@@ -5,11 +5,14 @@ Blog class for ROCmBlogs package.
 import io
 import os
 import pathlib
-import logging
 from datetime import datetime
 from typing import Optional, List, Union, Dict, Any
 
 from PIL import Image
+from sphinx.util import logging as sphinx_logging
+
+# Initialize logger
+sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
 class Blog:
     """
@@ -21,14 +24,18 @@ class Blog:
     
     # Define date formats once as a class variable to avoid recreation
     DATE_FORMATS = [
-        "%d-%m-%Y",     # e.g. 8-08-2024
-        "%d/%m/%Y",     # e.g. 8/08/2024
-        "%d-%B-%Y",     # e.g. 8-August-2024
-        "%d-%b-%Y",     # e.g. 8-Aug-2024
-        "%d %B %Y",     # e.g. 8 August 2024
-        "%d %b %Y",     # e.g. 8 Aug 2024
-        "%d %B, %Y",    # e.g. 8 August, 2024
-        "%d %b, %Y",    # e.g. 8 Aug, 2024
+        "%d-%m-%Y",  # e.g. 8-08-2024
+        "%d/%m/%Y",  # e.g. 8/08/2024
+        "%d-%B-%Y",  # e.g. 8-August-2024
+        "%d-%b-%Y",  # e.g. 8-Aug-2024
+        "%d %B %Y",  # e.g. 8 August 2024
+        "%d %b %Y",  # e.g. 8 Aug 2024
+        "%d %B, %Y",  # e.g. 8 August, 2024
+        "%d %b, %Y",  # e.g. 8 Aug, 2024
+        "%B %d, %Y",  # e.g. August 8, 2024
+        "%b %d, %Y",  # e.g. Aug 8, 2024
+        "%B %d %Y",  # e.g. August 8 2024
+        "%b %d %Y",  # e.g. Aug 8 2024
     ]
     
     # Month name normalization mapping
@@ -37,14 +44,7 @@ class Blog:
     }
     
     def __init__(self, file_path: str, metadata: Dict[str, Any], image: Optional[bytes] = None):
-        """
-        Initialize a Blog instance.
-        
-        Args:
-            file_path: Path to the blog's markdown file
-            metadata: Dictionary containing blog metadata
-            image: Optional binary image data
-        """
+        """Initialize a Blog instance."""
         self.file_path = file_path
         self.metadata = metadata
         self.image = image
@@ -59,33 +59,15 @@ class Blog:
         self.date = self.parse_date(metadata.get("date")) if "date" in metadata else None
 
     def set_word_count(self, word_count: int) -> None:
-        """
-        Set the word count for the blog.
-        
-        Args:
-            word_count: Number of words in the blog content
-        """
+        """Set the word count for the blog."""
         self.word_count = word_count
 
     def set_file_path(self, file_path: str) -> None:
-        """
-        Set the file path for the blog.
-        
-        Args:
-            file_path: Path to the blog's markdown file
-        """
+        """Set the file path for the blog."""
         self.file_path = file_path
 
     def normalize_date_string(self, date_str: str) -> str:
-        """
-        Normalize the date string for consistent parsing.
-        
-        Args:
-            date_str: Date string to normalize
-            
-        Returns:
-            Normalized date string
-        """
+        """Normalize the date string for consistent parsing."""
         # Apply all normalizations from the mapping
         for original, replacement in self.MONTH_NORMALIZATION.items():
             date_str = date_str.replace(original, replacement)
@@ -93,61 +75,47 @@ class Blog:
         return date_str
 
     def load_image_to_memory(self, image_path: str, format: str = "PNG") -> None:
-        """
-        Load an image into memory.
-        
-        Args:
-            image_path: Path to the image file
-            format: Image format for saving (default: PNG)
-        """
+        """Load an image into memory."""
         try:
             with Image.open(image_path) as img:
                 buffer = io.BytesIO()
                 img.save(buffer, format=format)
                 buffer.seek(0)
                 self.image = buffer.getvalue()
-                logging.info(f"Image loaded into memory; size: {len(self.image)} bytes.")
+                sphinx_diagnostics.info(
+                    f"Image loaded into memory; size: {len(self.image)} bytes."
+                )
         except Exception as error:
-            logging.error(f"Error loading image to memory: {error}")
+            sphinx_diagnostics.error(
+                f"Error loading image to memory: {error}"
+            )
 
     def save_image(self, output_path: str) -> None:
-        """
-        Save the image to disk.
-        
-        Args:
-            output_path: Path where the image will be saved
-        """
+        """Save the image to disk."""
         if self.image is None:
-            logging.warning("No image data available in memory to save.")
+            sphinx_diagnostics.warning(
+                "No image data available in memory to save."
+            )
             return
             
         try:
             # Use binary mode without encoding parameter (encoding is for text files)
             with open(output_path, "wb") as file:
                 file.write(self.image)
-                logging.info(f"Image saved to disk at: {output_path}")
+                sphinx_diagnostics.info(
+                    f"Image saved to disk at: {output_path}"
+                )
         except Exception as error:
-            logging.error(f"Error saving image to disk: {error}")
+            sphinx_diagnostics.error(
+                f"Error saving image to disk: {error}"
+            )
 
     def save_image_path(self, image_path: str) -> None:
-        """
-        Save the image path for later use.
-        
-        Args:
-            image_path: Path to the image file
-        """
+        """Save the image path for later use."""
         self.image_paths.append(image_path)
 
     def parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        """
-        Parse the date string into a datetime object.
-        
-        Args:
-            date_str: Date string to parse
-            
-        Returns:
-            Parsed datetime object or None if parsing fails
-        """
+        """Parse the date string into a datetime object."""
         if not date_str:
             return None
             
@@ -161,28 +129,17 @@ class Blog:
             except ValueError:
                 continue
                 
-        logging.warning(f"Invalid date format in {self.file_path}: {date_str}")
+        sphinx_diagnostics.warning(
+            f"Invalid date format in {self.file_path}: {date_str}"
+        )
         return None
 
     def grab_href(self) -> str:
-        """
-        Generate the HTML href for the blog.
-        
-        Returns:
-            HTML href string
-        """
+        """Generate the HTML href for the blog."""
         return self.file_path.replace(".md", ".html").replace("\\", "/")
 
     def grab_authors(self, authors_list: List[Union[str, List[str]]]) -> str:
-        """
-        Generate HTML links for authors, but only if their bio file exists.
-        
-        Args:
-            authors_list: A list of author names or lists of names
-            
-        Returns:
-            HTML links for the authors with existing bios, or plain text for authors without bios
-        """
+        """Generate HTML links for authors, but only if their bio file exists."""
         # Filter out invalid authors
         valid_authors = []
         for author in authors_list:
@@ -215,17 +172,11 @@ class Blog:
         return ", ".join(author_elements)
         
     def _find_author_file(self, author: str) -> Optional[str]:
-        """
-        Find the author's bio file.
-        
-        Args:
-            author: Author name
-            
-        Returns:
-            Path to the author's bio file or None if not found
-        """
+        """Find the author's bio file."""
         if not hasattr(self, "file_path"):
-            logging.warning(f"Blog has no file_path, cannot check for author file: {author}")
+            sphinx_diagnostics.warning(
+                f"Blog has no file_path, cannot check for author file: {author}"
+            )
             return None
             
         # Get authors directory
@@ -234,7 +185,9 @@ class Blog:
         authors_dir = os.path.join(blogs_dir, "authors")
         
         if not os.path.exists(authors_dir):
-            logging.warning(f"Authors directory not found: {authors_dir}")
+            sphinx_diagnostics.warning(
+                f"Authors directory not found: {authors_dir}"
+            )
             return None
             
         # Special case for Yu Wang
@@ -268,20 +221,14 @@ class Blog:
                 if all(part in file_lower for part in name_parts):
                     return os.path.join(authors_dir, file)
         except Exception as e:
-            logging.error(f"Error during flexible author matching: {e}")
+            sphinx_diagnostics.error(
+                f"Error during flexible author matching: {e}"
+            )
             
         return None
         
     def _generate_author_filename_variations(self, author: str) -> List[str]:
-        """
-        Generate possible filename variations for an author.
-        
-        Args:
-            author: Author name
-            
-        Returns:
-            List of possible filename variations
-        """
+        """Generate possible filename variations for an author."""
         variations = [
             author.replace(" ", "-").lower() + ".md",  # standard: "yu-wang.md"
             author.lower().replace(" ", "-") + ".md",  # all lowercase: "yu-wang.md"
@@ -297,15 +244,7 @@ class Blog:
         return list(set(variations))
 
     def grab_image(self, rocmblogs) -> pathlib.Path:
-        """
-        Find the image for the blog and return its path.
-        
-        Args:
-            rocmblogs: The ROCmBlogs instance
-            
-        Returns:
-            Path to the blog image
-        """
+        """Find the image for the blog and return its path."""
         # Get the thumbnail from metadata
         image = getattr(self, "thumbnail", None)
         
@@ -368,16 +307,7 @@ class Blog:
         return self._get_relative_path(full_image_path, rocmblogs.blogs_directory)
         
     def _find_image_in_directories(self, image: str, blogs_directory: str) -> Optional[pathlib.Path]:
-        """
-        Search for an image in various directories.
-        
-        Args:
-            image: Image filename
-            blogs_directory: Base directory for blogs
-            
-        Returns:
-            Path to the image or None if not found
-        """
+        """Search for an image in various directories."""
         blog_dir = pathlib.Path(self.file_path).parent
         blogs_dir = pathlib.Path(blogs_directory)
         
@@ -443,7 +373,9 @@ class Blog:
             if path.exists() and path.is_file():
                 # If we found a WebP version, log it
                 if str(path).lower().endswith('.webp'):
-                    logging.info(f"Using WebP version for image: {path}")
+                    sphinx_diagnostics.info(
+                        f"Using WebP version for image: {path}"
+                    )
                 return path
                 
         # Try partial matching in the global images directory
@@ -453,7 +385,9 @@ class Blog:
             webp_base = os.path.splitext(image)[0].lower()
             for img_file in images_dir.glob("*.webp"):
                 if img_file.is_file() and webp_base in img_file.name.lower():
-                    logging.info(f"Found WebP version by partial matching: {img_file}")
+                    sphinx_diagnostics.info(
+                        f"Found WebP version by partial matching: {img_file}"
+                    )
                     return img_file
             
             # If no WebP version found, try to find original image by partial matching
@@ -484,33 +418,30 @@ class Blog:
                                     new_height = int(original_height * scaling_factor)
                                     
                                     webp_img = webp_img.resize((new_width, new_height), resample=Image.LANCZOS)
-                                    logging.info(f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}")
+                                    sphinx_diagnostics.info(
+                                        f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}"
+                                    )
                                 
                                 # Save as WebP
                                 webp_path = os.path.splitext(str(img_file))[0] + '.webp'
                                 webp_img.save(webp_path, format="WEBP", quality=85, method=6)
                                 
                                 # Return the WebP version
-                                logging.info(f"Successfully converted {img_file} to WebP: {webp_path}")
+                                sphinx_diagnostics.info(
+                                    f"Successfully converted {img_file} to WebP: {webp_path}"
+                                )
                                 return pathlib.Path(webp_path)
                         except Exception as e:
-                            logging.warning(f"Failed to convert {img_file} to WebP: {e}")
+                            sphinx_diagnostics.warning(
+                                f"Failed to convert {img_file} to WebP: {e}"
+                            )
                     
                     return img_file
                     
         return None
         
     def _get_relative_path(self, full_path: pathlib.Path, base_dir: str) -> pathlib.Path:
-        """
-        Convert an absolute path to a relative path.
-        
-        Args:
-            full_path: Absolute path to convert
-            base_dir: Base directory for the relative path
-            
-        Returns:
-            Relative path
-        """
+        """Convert an absolute path to a relative path."""
         relative_path = os.path.relpath(str(full_path), str(base_dir))
         relative_path = relative_path.replace("\\", "/")
         
@@ -520,10 +451,5 @@ class Blog:
         return pathlib.Path(relative_path)
 
     def __repr__(self) -> str:
-        """
-        Return a string representation of the class.
-        
-        Returns:
-            String representation
-        """
+        """Return a string representation of the class."""
         return f"Blog(file_path='{self.file_path}', metadata={self.metadata})"
