@@ -373,13 +373,32 @@ myst:
                     
                     # If no release date exists, generate one from the blog's date
                     if not amd_blog_releasedate:
-                        # Process the blog date to generate a properly formatted release date
+                        
                         blog_date = extracted_metadata.get("date", "")
                         
                         # Normalize date format - remove leading zeros to avoid octal literals
                         if blog_date.startswith("0"):
                             day_part = blog_date.split()[0].lstrip("0")
                             blog_date = " ".join([day_part] + blog_date.split()[1:])
+
+                        month_day_year_regex = re.compile(r'([A-Za-z]{3,9})\s+(\d{1,2})\s+(\d{4})')
+                        mmm_dd_yyyy_match = month_day_year_regex.search(blog_date)
+
+                        if mmm_dd_yyyy_match:
+                            month, day, year = mmm_dd_yyyy_match.groups()
+                            
+                            # Map month names to numbers (case insensitive)
+                            month_mapping = {
+                                'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                                'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+                            }
+                            
+                            # Get month number
+                            month_num = month_mapping.get(month.lower()[:3])
+                            
+                            if month_num:
+                                # Create a date object
+                                parsed_date = datetime(int(year), month_num, int(day))
                             
                         # Date parsing with multiple formats
                         date_formats = [
