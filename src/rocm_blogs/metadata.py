@@ -45,7 +45,7 @@ myst:
         "amd_blog_deployment_tools": "{amd_blog_deployment_tools}"
         "amd_applications": "{amd_applications}"
         "amd_blog_category_topic": "{amd_blog_category_topic}"
-        "amd_blog_authors": "{author}"
+        "amd_blog_authors": "{release_author}"
         "amd_blog_releasedate": "{amd_blog_releasedate}"
         "property=og:title": "{blog_title}"
         "property=og:description": "{description}"
@@ -55,7 +55,7 @@ myst:
         "property=og:locale": "en_US"
         "property=og:image": "https://rocm.blogs.amd.com/_images/{thumbnail}"
         "property=article:published_time": "{amd_blog_releasedate}"
-        "property=article:author": "{author}"
+        "property=article:author": "{release_author}"
         "property=article:tag": "{keywords}"
 ---
 """
@@ -271,6 +271,7 @@ myst:
                         sphinx_diagnostics.debug(
                             f"Author: {extracted_metadata['author']}"
                         )
+                        release_author = ";".join(extracted_metadata['author'].split(",")
                         metadata_log_file_handle.write(f"Author: {extracted_metadata['author']}\n")
 
                     if "thumbnail" not in extracted_metadata:
@@ -569,6 +570,7 @@ myst:
                         amd_applications=amd_applications,
                         amd_blog_category_topic=amd_blog_category_topic,
                         amd_blog_releasedate=amd_blog_releasedate,
+                        release_author=release_author,
                     )
                     sphinx_diagnostics.debug(
                         f"Generated metadata content for {blog_filepath}"
