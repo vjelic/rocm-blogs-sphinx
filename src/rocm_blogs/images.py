@@ -25,7 +25,6 @@ WEBP_CONVERSION_STATISTICS = {
     "total_size_webp": 0,
 }
 
-
 def convert_to_webp(source_image_path):
     """Convert an image to WebP format with proper resizing."""
     source_image_filename = os.path.basename(source_image_path)
@@ -105,7 +104,6 @@ def convert_to_webp(source_image_path):
             os.remove(webp_image_path)
         return False, None
 
-
 def optimize_image(source_image_path, blog_thumbnail_filenames=None):
     """Optimize images for web display and convert to WebP format."""
     source_image_filename = os.path.basename(source_image_path)
@@ -176,7 +174,6 @@ def optimize_image(source_image_path, blog_thumbnail_filenames=None):
         WEBP_CONVERSION_STATISTICS["failed"] += 1
         return False, None
 
-
 def _should_optimize_image(source_image_path, source_image_filename, blog_thumbnail_filenames):
     """Check if the image should be optimized."""
     if blog_thumbnail_filenames is not None:
@@ -203,7 +200,6 @@ def _should_optimize_image(source_image_path, source_image_filename, blog_thumbn
 
     return True
 
-
 def _create_backup(source_image_path, backup_image_path):
     """Create a backup of the original image."""
     try:
@@ -214,7 +210,6 @@ def _create_backup(source_image_path, backup_image_path):
             f"Failed to create backup of {source_image_path}: {backup_error}"
         )
         return False
-
 
 def _restore_from_backup(backup_image_path, source_image_path, source_image_filename):
     """Restore the original image from backup."""
@@ -230,7 +225,6 @@ def _restore_from_backup(backup_image_path, source_image_path, source_image_file
                 f"Error restoring from backup: {restore_error}"
             )
 
-
 def _verify_image_integrity(pil_image, source_image_path, backup_image_path, source_image_filename):
     """Verify the image is not corrupted."""
     try:
@@ -242,7 +236,6 @@ def _verify_image_integrity(pil_image, source_image_path, backup_image_path, sou
         )
         _restore_from_backup(backup_image_path, source_image_path, source_image_filename)
         return False
-
 
 def _handle_problematic_image(pil_image, source_image_path, backup_image_path, source_image_filename):
     """Apply extremely conservative optimization for known problematic images."""
@@ -287,7 +280,6 @@ def _handle_problematic_image(pil_image, source_image_path, backup_image_path, s
         WEBP_CONVERSION_STATISTICS["failed"] += 1
         return False, None
 
-
 def _create_webp_version(optimized_image, webp_image_path, original_image_path, original_file_size):
     """Create a WebP version of the image."""
     try:
@@ -326,7 +318,6 @@ def _create_webp_version(optimized_image, webp_image_path, original_image_path, 
             os.remove(webp_image_path)
         WEBP_CONVERSION_STATISTICS["failed"] += 1
         return False
-
 
 def _process_image(pil_image, source_image_path, source_image_mode, source_image_width, source_image_height, backup_image_path, source_image_filename):
     """Process the image by stripping metadata and resizing if needed."""
@@ -367,7 +358,6 @@ def _process_image(pil_image, source_image_path, source_image_mode, source_image
         _restore_from_backup(backup_image_path, source_image_path, source_image_filename)
         return None
 
-
 def _resize_image(pil_image, target_width, target_height, force_exact=False, source_image_filename=None):
     """Resize image to target dimensions."""
     try:
@@ -384,7 +374,6 @@ def _resize_image(pil_image, target_width, target_height, force_exact=False, sou
             f"Error resizing image: {resize_error}"
         )
         return pil_image
-
 
 def _resize_content_image(pil_image, source_image_width, source_image_height, source_image_filename=None):
     """Resize content image maintaining aspect ratio if needed."""
@@ -411,7 +400,6 @@ def _resize_content_image(pil_image, source_image_width, source_image_height, so
                 )
 
     return pil_image
-
 
 def _save_optimized_image(optimized_image, optimized_image_path, backup_image_path, source_image_filename):
     """Save the optimized image with format-specific settings."""
@@ -448,7 +436,6 @@ def _save_optimized_image(optimized_image, optimized_image_path, backup_image_pa
         _restore_from_backup(backup_image_path, optimized_image_path, source_image_filename)
         return False
 
-
 def _verify_and_check_size_reduction(optimized_image_path, backup_image_path, original_file_size, source_image_format, source_image_filename):
     """Verify the optimized image and check if size reduction is beneficial."""
     try:
@@ -483,7 +470,6 @@ def _verify_and_check_size_reduction(optimized_image_path, backup_image_path, or
         )
         _restore_from_backup(backup_image_path, optimized_image_path, source_image_filename)
         return False
-
 
 def optimize_generic_image(sphinx_app=None):
     """Optimize the generic.jpg image and convert it to WebP format."""
