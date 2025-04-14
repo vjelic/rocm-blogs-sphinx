@@ -93,7 +93,7 @@ html_meta:
 MAIN_GRID_BLOGS_COUNT = 4
 CATEGORY_GRID_BLOGS_COUNT = 4
 CATEGORY_BLOGS_PER_PAGE = 12
-POST_BLOGS_PER_PAGE = 120
+POST_BLOGS_PER_PAGE = 12
 
 # Image constants
 SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
