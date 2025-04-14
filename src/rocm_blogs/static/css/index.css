@@ -112,10 +112,8 @@ h2 {
     margin: 0 auto;
     border-bottom: 1px solid rgba(0,0,0,0.05);
     margin-bottom: 20px;
-    
     flex-wrap: wrap;
     gap: 10px;
-    
     contain: layout style; 
 }
 
@@ -225,7 +223,7 @@ html[data-theme="dark"] .container {
 .sd-card {
     border-radius: 0 !important;
     box-shadow: 0 4px 12px var(--shadow-light) !important;
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, opacity 0.2s ease-in-out !important;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out !important;
     overflow: hidden;
     margin-bottom: 20px;
     background-color: var(--card-bg-light);
@@ -234,17 +232,15 @@ html[data-theme="dark"] .container {
     display: flex !important;
     flex-direction: column !important;
     
-    will-change: transform, box-shadow, opacity; 
+    will-change: transform, box-shadow; 
     transform: translateZ(0) !important; 
     backface-visibility: hidden; 
     contain: layout style; 
-    opacity: 1;
 }
 
 .sd-card:hover {
     transform: translateY(-2px) scale(1.02) translateZ(0) !important;
     box-shadow: 0 8px 20px var(--hover-shadow-light) !important;
-    opacity: 0.98;
 }
 
 .small-sd-card-img-top.sd-card-img-top {
@@ -257,10 +253,14 @@ html[data-theme="dark"] .container {
     border-bottom: none !important;
     border-radius: 0 !important;
     flex-shrink: 0 !important;
-    
     content-visibility: auto; 
-    will-change: transform; 
+    will-change: transform, filter; 
     contain: layout paint style; 
+    transition: filter 0.2s ease-in-out !important;
+}
+
+.sd-card:hover .small-sd-card-img-top.sd-card-img-top {
+    filter: blur(1px) brightness(0.97);
 }
 
 .small-sd-card.sd-card-body {
@@ -304,7 +304,6 @@ html[data-theme="dark"] .container {
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    
     text-rendering: optimizeSpeed; 
 }
 
@@ -331,7 +330,6 @@ html[data-theme="dark"] .container {
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    
     text-rendering: optimizeSpeed; 
 }
 
@@ -547,12 +545,6 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
         transition: none !important;
         animation: none !important;
     }
-}
-
-
-@font-face {
-    font-family: 'Inter';
-    font-display: swap; 
 }
 
 
