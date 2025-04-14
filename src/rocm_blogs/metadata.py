@@ -271,7 +271,7 @@ myst:
                         sphinx_diagnostics.debug(
                             f"Author: {extracted_metadata['author']}"
                         )
-                        release_author = ";".join(extracted_metadata['author'].split(",")
+                        release_author = ";".join(extracted_metadata['author'].split(","))
                         metadata_log_file_handle.write(f"Author: {extracted_metadata['author']}\n")
 
                     if "thumbnail" not in extracted_metadata:
