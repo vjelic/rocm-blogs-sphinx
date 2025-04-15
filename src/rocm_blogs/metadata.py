@@ -9,6 +9,7 @@ from pathlib import Path
 from sphinx.util import logging as sphinx_logging
 from .utils import calculate_day_of_week
 from rocm_blogs import ROCmBlogs
+from rocm_blogs.constants import SUPPORTED_FORMATS
 
 sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ myst:
         "amd_blog_deployment_tools": "{amd_blog_deployment_tools}"
         "amd_applications": "{amd_applications}"
         "amd_blog_category_topic": "{amd_blog_category_topic}"
-        "amd_blog_authors": "{author}"
+        "amd_blog_authors": "{release_author}"
         "amd_blog_releasedate": "{amd_blog_releasedate}"
         "property=og:title": "{blog_title}"
         "property=og:description": "{description}"
@@ -55,7 +56,7 @@ myst:
         "property=og:locale": "en_US"
         "property=og:image": "https://rocm.blogs.amd.com/_images/{thumbnail}"
         "property=article:published_time": "{amd_blog_releasedate}"
-        "property=article:author": "{author}"
+        "property=article:author": "{release_author}"
         "property=article:tag": "{keywords}"
 ---
 """
@@ -271,6 +272,7 @@ myst:
                         sphinx_diagnostics.debug(
                             f"Author: {extracted_metadata['author']}"
                         )
+                        release_author = ";".join(extracted_metadata.get("author", "").split(","))
                         metadata_log_file_handle.write(f"Author: {extracted_metadata['author']}\n")
 
                     if "thumbnail" not in extracted_metadata:
@@ -283,6 +285,11 @@ myst:
                         sphinx_diagnostics.debug(
                             f"Thumbnail: {extracted_metadata['thumbnail']}"
                         )
+
+                        for f_format in SUPPORTED_FORMATS:
+                            if f_format in extracted_metadata["thumbnail"]:
+                                extracted_metadata["thumbnail"] = extracted_metadata["thumbnail"].replace(f_format, ".webp")
+                                break
                         metadata_log_file_handle.write(f"Thumbnail: {extracted_metadata['thumbnail']}\n")
 
                     if "date" not in extracted_metadata:
@@ -331,17 +338,17 @@ myst:
                     metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
                     
                     amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", 
-                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPU Accelerators"))
+                                                                  html_metadata.get("amd_hardware_deployment", "None"))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
                     
                     amd_blog_deployment_tools = html_metadata.get("amd_blog_deployment_tools", 
-                                                                html_metadata.get("amd_software_deployment", "ROCm Software"))
+                                                                html_metadata.get("amd_software_deployment", "None"))
                     metadata_log_file_handle.write(f"AMD Blog Deployment Tools: {amd_blog_deployment_tools}\n")
                     
-                    amd_applications = html_metadata.get("amd_applications", "AI Inference")
+                    amd_applications = html_metadata.get("amd_applications", "None")
                     metadata_log_file_handle.write(f"AMD Applications: {amd_applications}\n")
                     
-                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems; Industry Applications & Use Cases")
+                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "None")
                     metadata_log_file_handle.write(f"AMD Blog Category Topic: {amd_blog_category_topic}\n")
                     
                 except Exception as default_field_exception:
@@ -440,12 +447,9 @@ myst:
                         month = parsed_date.strftime("%b")  # Abbreviated month name
                         year = parsed_date.year
                         
-                        # Calculate day of week
                         day_of_week = calculate_day_of_week(year, parsed_date.month, day)
                         
-                        # Generate properly formatted release date: "Tues Apr 08, 12:00:00 PST 2025"
-                        # Using string format to avoid leading zeros being interpreted as octal
-                        amd_blog_releasedate = f"{day_of_week} {month} {day}, 12:00:00 PST {year}"
+                        amd_blog_releasedate = f"{day_of_week} {month} {day}, 12:00:00 EST {year}"
                         
                         sphinx_diagnostics.debug(f"Generated release date: {amd_blog_releasedate}")
                         metadata_log_file_handle.write(f"Generated release date: {amd_blog_releasedate}\n")
@@ -494,11 +498,10 @@ myst:
 
                                 day_of_week = calculate_day_of_week(year, d_month, day)
 
-                                # day of week, month, day, 12:00:00 PST year
                                 amd_blog_releasedate = datetime.strptime(
-                                    f"{day_of_week} {month} {day}, 12:00:00 PST {year}",
-                                    "%a %b %d, 12:00:00 PST %Y",
-                                ).strftime("%a %b %d, 12:00:00 PST %Y")
+                                    f"{day_of_week} {month} {day}, 12:00:00 EST {year}",
+                                    "%a %b %d, 12:00:00 EST %Y",
+                                ).strftime("%a %b %d, 12:00:00 EST %Y")
 
                             except ValueError:
                                 sphinx_diagnostics.warning(
@@ -515,7 +518,7 @@ myst:
                     try:
                         relative_blog_path = os.path.relpath(blog_filepath, rocm_blogs_instance.blogs_directory)
                         blog_directory = os.path.dirname(relative_blog_path)
-                        generated_blog_url = f"/blogs/{blog_directory}"
+                        generated_blog_url = f"/{blog_directory}"
                         sphinx_diagnostics.debug(
                             f"Generated blog URL: {generated_blog_url}"
                         )
@@ -569,6 +572,7 @@ myst:
                         amd_applications=amd_applications,
                         amd_blog_category_topic=amd_blog_category_topic,
                         amd_blog_releasedate=amd_blog_releasedate,
+                        release_author=release_author,
                     )
                     sphinx_diagnostics.debug(
                         f"Generated metadata content for {blog_filepath}"
