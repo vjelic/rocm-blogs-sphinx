@@ -112,6 +112,45 @@ _BUILD_START_TIME = time.time()
 
 _BUILD_PHASES = {"setup": 0, "update_index": 0, "blog_generation": 0, "other": 0}
 
+def create_step_log_file(step_name):
+    """Create a log file for a specific build step.
+    
+    Args:
+        step_name: The name of the build step
+        
+    Returns:
+        A tuple containing the log file path and the file handle
+    """
+    try:
+        # Create logs directory if it doesn't exist
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        
+        # Create a log file for this step
+        log_filepath = logs_dir / f"{step_name}.log"
+        log_file_handle = open(log_filepath, "w", encoding="utf-8")
+        
+        # Write header to the log file
+        current_time = datetime.now()
+        log_file_handle.write(
+            f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
+        )
+        log_file_handle.write("=" * 80 + "\n\n")
+        
+        sphinx_diagnostics.info(
+            f"Detailed logs for {step_name} will be written to: {log_filepath}"
+        )
+        
+        return log_filepath, log_file_handle
+    except Exception as error:
+        sphinx_diagnostics.error(
+            f"Error creating log file for {step_name}: {error}"
+        )
+        sphinx_diagnostics.debug(
+            f"Traceback: {traceback.format_exc()}"
+        )
+        return None, None
+
 def log_total_build_time(sphinx_app, build_exception):
     """Log the total time taken for the entire build process."""
     try:
@@ -406,6 +445,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             
         # Filter out featured blogs from the main grid
         non_featured_blogs = [blog for blog in all_blogs if id(blog) not in featured_blog_ids]
+
         main_grid_items = _generate_grid_items(rocm_blogs, non_featured_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs, True)
         
         if log_file_handle:
@@ -415,6 +455,12 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners" and id(blog) not in featured_blog_ids]
         application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models" and id(blog) not in featured_blog_ids]
         software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations" and id(blog) not in featured_blog_ids]
+        
+        if log_file_handle:
+            log_file_handle.write(f"Filtered blogs by category:\n")
+            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n")
+            log_file_handle.write(f"  - Applications & models: {len(application_blogs)} blogs\n")
+            log_file_handle.write(f"  - Software tools & optimizations: {len(software_blogs)} blogs\n")
         
         if log_file_handle:
             log_file_handle.write(f"Filtered blogs by category:\n")
@@ -451,6 +497,48 @@ def update_index_file(sphinx_app: Sphinx) -> None:
                 else:
                     log_file_handle.write("Featured blogs list is empty, skipping grid item generation\n")
             except Exception as featured_error:
+                sphinx_diagnostics.warning(
+                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
+                )
+                sphinx_diagnostics.debug(
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                
+                if log_file_handle:
+                    log_file_handle.write(f"WARNING: Error generating featured grid items: {featured_error}\n")
+                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    log_file_handle.write("Continuing without featured blogs\n")
+        else:
+            if log_file_handle:
+                log_file_handle.write("No featured blogs to display\n")
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated category grid items:\n")
+            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n")
+            log_file_handle.write(f"  - Applications & models: {len(application_grid_items)} grid items\n")
+            log_file_handle.write(f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n")
+        
+        # Generate featured grid items if we have featured blogs
+        featured_grid_items = []
+        if featured_blogs:
+            if log_file_handle:
+                log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} featured blogs\n")
+                
+            try:
+                # Only generate grid items if we have at least one featured blog
+                if len(featured_blogs) > 0:
+                    # Generate grid items for featured blogs
+                    # Set skip_used=False to ensure all featured blogs are included
+                    # even if they've been used in other sections
+                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, skip_used=False)
+                    
+                    if log_file_handle:
+                        log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
+                else:
+                    if log_file_handle:
+                        log_file_handle.write("Featured blogs list is empty, skipping grid item generation\n")
+            except Exception as featured_error:
+                # Log the error but continue with the build
                 sphinx_diagnostics.warning(
                     f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
                 )
