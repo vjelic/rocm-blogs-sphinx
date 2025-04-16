@@ -82,19 +82,7 @@ def calculate_day_of_week(y: int, m: int, d: int) -> str:
     return ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")[wd]
     
 def count_words_in_markdown(content: str) -> int:
-    """
-    Count the number of words in a markdown file.
-    
-    This function strips away markdown syntax elements and counts
-    only the actual content words. It handles YAML front matter,
-    code blocks, HTML tags, and other markdown formatting.
-    
-    Args:
-        content: The markdown content as a string
-        
-    Returns:
-        The number of words in the content
-    """
+    """Count the number of words in a markdown file."""
     try:
         if not content:
             return 0

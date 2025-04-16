@@ -5,6 +5,8 @@ BlogHolder class to hold the blogs.
 """
 
 import os
+import csv
+import traceback
 from datetime import datetime
 from sphinx.util import logging as sphinx_logging
 
@@ -13,15 +15,15 @@ from .blog import Blog
 # Initialize logger
 sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
-
 class BlogHolder:
     def __init__(self) -> None:
         """Initialize the BlogHolder class."""
 
-        self.blogs: dict[tuple[str, datetime], Blog] = {}
+        self.blogs: dict[str, Blog] = {}
         self.blogs_categories: dict[str, list[Blog]] = {}
+        self.blogs_featured: dict[str, list[Blog]] = {}
 
-    def _make_key(self, blog: Blog) -> tuple[str, datetime]:
+    def _make_key(self, blog: Blog) -> str:
         """Make a key for the blog."""
 
         if not isinstance(blog, Blog):
@@ -60,7 +62,7 @@ class BlogHolder:
         sphinx_diagnostics.debug(
             f"Created key for blog: ({title}, {date})"
         )
-        return (title, date)
+        return title
 
     def add_blog(self, blog: Blog) -> None:
         """Add a blog to the list of blogs."""
@@ -68,14 +70,14 @@ class BlogHolder:
         key = self._make_key(blog)
         if key in self.blogs:
             sphinx_diagnostics.warning(
-                f"Duplicate blog detected: '{key[0]}' with date '{key[1]}'"
+                f"Duplicate blog detected: '{key}'"
             )
             raise KeyError(
-                f"Blog with title '{key[0]}' and date '{key[1]}' already exists."
+                f"Blog with title '{key}' already exists."
             )
         self.blogs[key] = blog
         sphinx_diagnostics.debug(
-            f"Added blog: '{key[0]}' with date '{key[1]}'"
+            f"Added blog: '{key}'"
         )
 
     def remove_blog(self, blog: Blog) -> None:
@@ -106,6 +108,159 @@ class BlogHolder:
                 f"Cannot remove blog: '{title}' with date '{date}' not found"
             )
             raise KeyError("Blog not found.")
+        
+    def write_to_file(self, filename: str = "blogs.csv") -> None:
+        """Write blog information to a CSV file."""
+        try:
+            with open(filename, "w", newline='') as file:
+                writer = csv.writer(file)
+                # Write header row
+                writer.writerow(["title", "date", "author", "category", "tags", "thumbnail", "file_path"])
+                
+                # Write data rows
+                for blog in self.blogs.values():
+                    title = blog.blog_title if hasattr(blog, "blog_title") else "Untitled"
+                    date = blog.date.strftime("%Y-%m-%d") if hasattr(blog, "date") and blog.date else ""
+                    author = blog.author if hasattr(blog, "author") else ""
+                    category = blog.category if hasattr(blog, "category") else ""
+                    tags = blog.tags if hasattr(blog, "tags") else ""
+                    thumbnail = blog.thumbnail if hasattr(blog, "thumbnail") else ""
+                    file_path = blog.file_path if hasattr(blog, "file_path") else ""
+                    
+                    writer.writerow([title, date, author, category, tags, thumbnail, file_path])
+                    
+            sphinx_diagnostics.info(
+                f"Successfully wrote {len(self.blogs)} blog entries to {filename}"
+            )
+        except Exception as error:
+            sphinx_diagnostics.error(
+                f"Error writing blogs to file: {error}"
+            )
+            raise
+            
+    def create_features_template(self, filename: str = "features_template.csv") -> None:
+        """Create a template features.csv file with all available blog titles."""
+        try:
+            with open(filename, "w", newline='') as file:
+                writer = csv.writer(file)
+                
+                # Add a comment line explaining how to use the file
+                writer.writerow(["# Features template - Remove this line and uncomment the blog titles you want to feature"])
+                writer.writerow(["# One blog title per line - Titles must match exactly"])
+                writer.writerow(["# "])
+                
+                # Write all available blog titles, commented out
+                for blog in self.blogs.values():
+                    if hasattr(blog, "blog_title") and blog.blog_title:
+                        # Comment out each title with # so users can uncomment the ones they want
+                        writer.writerow([f"# {blog.blog_title}"])
+                
+            sphinx_diagnostics.info(
+                f"Successfully created features template at {filename}"
+            )
+            sphinx_diagnostics.info(
+                f"Edit this file to select which blogs to feature, then rename it to 'features.csv'"
+            )
+            
+            return filename
+            
+        except Exception as error:
+            sphinx_diagnostics.error(
+                f"Error creating features template: {error}"
+            )
+            raise
+            
+    def load_featured_blogs_from_csv(self, filename: str = "features.csv") -> list[Blog]:
+        """Load featured blog titles from a CSV file and return the corresponding blogs."""
+        featured_blogs = []
+        
+        try:
+            if not os.path.exists(filename):
+                sphinx_diagnostics.warning(
+                    f"Featured blogs file not found: {filename}"
+                )
+                return featured_blogs
+            
+            sphinx_diagnostics.info(
+                f"Reading featured blogs from: {os.path.abspath(filename)}"
+            )
+                
+            with open(filename, "r", newline='') as file:
+                reader = csv.reader(file)
+                raw_rows = list(reader)
+                sphinx_diagnostics.debug(
+                    f"Raw CSV content: {raw_rows}"
+                )
+                
+                featured_titles = [row[0] for row in raw_rows if row]  # Get the first column (title)
+                
+            sphinx_diagnostics.info(
+                f"Found {len(featured_titles)} featured blog titles in {filename}"
+            )
+            
+            # Log all available blog titles for comparison
+            available_blog_titles = [blog.blog_title for blog in self.blogs.values() 
+                                    if hasattr(blog, "blog_title") and blog.blog_title]
+            sphinx_diagnostics.debug(
+                f"Available blog titles in system: {available_blog_titles}"
+            )
+            
+            for index, title in enumerate(featured_titles):
+                sphinx_diagnostics.debug(
+                    f"Featured title {index+1}: '{title}' (length: {len(title)})"
+                )
+            
+            # Find blogs with matching titles
+            for title in featured_titles:
+                blog = self.get_blog_by_title(title)
+                if blog:
+                    if blog not in featured_blogs:
+                        sphinx_diagnostics.debug(
+                            f"Adding blog '{title}' to featured blogs"
+                        )
+                        featured_blogs.append(blog)
+                    else:
+                        sphinx_diagnostics.warning(
+                            f"Duplicate featured blog found: '{title}'"
+                        )
+                    sphinx_diagnostics.debug(
+                        f"Found featured blog: '{title}'"
+                    )
+                else:
+                    close_matches = []
+                    for available_title in available_blog_titles:
+                        if title.lower() in available_title.lower() or available_title.lower() in title.lower():
+                            close_matches.append(available_title)
+                    
+                    if close_matches:
+                        sphinx_diagnostics.warning(
+                            f"Featured blog not found: '{title}'. Possible close matches: {close_matches}"
+                        )
+                    else:
+                        sphinx_diagnostics.warning(
+                            f"Featured blog not found: '{title}'. No close matches found."
+                        )
+            
+            sphinx_diagnostics.info(
+                f"Loaded {len(featured_blogs)} featured blogs out of {len(featured_titles)} titles"
+            )
+            
+            if not featured_blogs:
+                sphinx_diagnostics.warning(
+                    "No featured blogs found. Please check the CSV file."
+                )
+            self.blogs_featured["featured"] = featured_blogs
+            
+            return featured_blogs
+            
+        except Exception as error:
+            sphinx_diagnostics.error(
+                f"Error loading featured blogs from file: {error}"
+            )
+            sphinx_diagnostics.debug(
+                f"Traceback: {traceback.format_exc()}"
+            )
+            return []
 
     def get_blog_by_key(self, key: tuple[str, datetime]) -> Blog:
         """Get a blog by its key."""
@@ -213,18 +368,49 @@ class BlogHolder:
         """Get a blog by its title."""
         
         sphinx_diagnostics.debug(
-            f"Searching for blog with title: {title}"
+            f"Searching for blog with title: '{title}'"
         )
         
+        # First try exact match
         for blog in self.blogs.values():
-            if blog.blog_title == title:
+            if hasattr(blog, "blog_title") and blog.blog_title == title:
                 sphinx_diagnostics.debug(
-                    f"Found blog with title: {title}"
+                    f"Found exact match for blog title: '{title}'"
                 )
                 return blog
-
+        
+        # Try case-insensitive match
+        title_lower = title.lower()
+        for blog in self.blogs.values():
+            if hasattr(blog, "blog_title") and blog.blog_title.lower() == title_lower:
+                sphinx_diagnostics.debug(
+                    f"Found case-insensitive match for blog title: '{title}' -> '{blog.blog_title}'"
+                )
+                return blog
+        
+        # Try normalized match (remove extra whitespace, special chars)
+        def normalize_title(t):
+            if not t:
+                return ""
+            # Replace multiple spaces with single space
+            t = ' '.join(t.split())
+            # Remove common punctuation
+            for char in [',', '.', ':', ';', '!', '?', '"', "'", '(', ')', '[', ']', '{', '}']:
+                t = t.replace(char, '')
+            return t.lower().strip()
+        
+        normalized_title = normalize_title(title)
+        for blog in self.blogs.values():
+            if hasattr(blog, "blog_title"):
+                normalized_blog_title = normalize_title(blog.blog_title)
+                if normalized_blog_title == normalized_title:
+                    sphinx_diagnostics.debug(
+                        f"Found normalized match for blog title: '{title}' -> '{blog.blog_title}'"
+                    )
+                    return blog
+        
         sphinx_diagnostics.debug(
-            f"No blog found with title: {title}"
+            f"No blog found with title: '{title}' (tried exact, case-insensitive, and normalized matching)"
         )
         return None
 

@@ -75,18 +75,7 @@ def quickshare(blog_entry) -> str:
         return ""
     
 def _create_pagination_controls(pagination_template, current_page, total_pages, base_name):
-    """
-    Create pagination controls for navigation between pages.
-    
-    Args:
-        pagination_template: The HTML template for pagination
-        current_page: The current page number
-        total_pages: The total number of pages
-        base_name: The base name for pagination URLs
-        
-    Returns:
-        HTML string with pagination controls
-    """
+    """Create pagination controls for navigation between pages."""
     # Create previous button
     if current_page > 1:
         previous_page = current_page - 1
@@ -148,6 +137,13 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
     # Generate all grid items in parallel with lazy loading
     all_grid_items = _generate_lazy_loaded_grid_items(rocm_blogs, category_blogs)
     
+    # Check if any grid items were generated
+    if not all_grid_items:
+        sphinx_diagnostics.warning(
+            f"No grid items were generated for category: {category_name}. Skipping page generation."
+        )
+        return
+    
     # Generate each page
     for page_num in range(1, total_pages + 1):
         # Get grid items for this page
@@ -193,8 +189,9 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
             f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})"
         )
 
-def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs):
+def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used=True):
     """Generate grid items in parallel using thread pool."""
+
     try:
         grid_items = []
         item_count = 0
@@ -217,10 +214,16 @@ def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs):
             grid_futures = {}
 
             for blog_entry in blog_list:
-                if blog_entry not in used_blogs and item_count < max_items:
+                # Check if we should skip this blog because it's already used
+                if (skip_used and blog_entry in used_blogs) or item_count >= max_items:
+                    continue
+                    
+                # Add blog to used_blogs list to avoid using it again in other sections
+                if blog_entry not in used_blogs:
                     used_blogs.append(blog_entry)
-                    grid_futures[executor.submit(generate_grid, rocm_blogs, blog_entry)] = blog_entry
-                    item_count += 1
+                    
+                grid_futures[executor.submit(generate_grid, rocm_blogs, blog_entry)] = blog_entry
+                item_count += 1
 
             for future in grid_futures:
                 try:
@@ -247,15 +250,23 @@ def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs):
                         f"Traceback: {traceback.format_exc()}"
                     )
         
-        # Log a warning if no grid items were generated
+        # Handle the case where no grid items were generated
         if not grid_items:
-            sphinx_diagnostics.critical(
-                "No grid items were generated. Check for errors in the generate_grid function."
+            # If there were no blogs to process or all were skipped, just return an empty list
+            if item_count == 0:
+                sphinx_diagnostics.warning(
+                    "No blogs were available to generate grid items. Returning empty list."
+                )
+                return []
+            
+            # If we tried to process blogs but none succeeded, log a warning but don't raise an error
+            sphinx_diagnostics.warning(
+                "No grid items were generated despite having blogs to process. Check for errors in the generate_grid function."
             )
             sphinx_diagnostics.debug(
                 f"Traceback: {traceback.format_exc()}"
             )
-            raise ROCmBlogsError("No grid items were generated")
+            return []
         
         # Log errors and completion status
         elif error_count > 0:
@@ -328,19 +339,35 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                     f"Traceback: {traceback.format_exc()}"
                 )
         
-        # Log a warning if no grid items were generated
+        # Handle the case where no grid items were generated
         if not lazy_grid_items:
-            sphinx_diagnostics.critical(
-                "No grid items were generated. Check for errors in the generate_grid function."
+            # If there were no blogs to process, just return an empty list
+            if not blog_list:
+                sphinx_diagnostics.warning(
+                    "No blogs were provided to generate lazy-loaded grid items. Returning empty list."
+                )
+                return []
+            
+            # If we tried to process blogs but none succeeded, log a warning but don't raise an error
+            sphinx_diagnostics.warning(
+                "No lazy-loaded grid items were generated despite having blogs to process. Check for errors in the generate_grid function."
             )
-            raise ROCmBlogsError("No grid items were generated")
+            sphinx_diagnostics.debug(
+                f"Traceback: {traceback.format_exc()}"
+            )
+            return []
+            
+        # Log errors and completion status
         elif error_count > 0:
             sphinx_diagnostics.warning(
-                f"Generated {len(lazy_grid_items)} grid items with {error_count} errors"
+                f"Generated {len(lazy_grid_items)} lazy-loaded grid items with {error_count} errors"
+            )
+            sphinx_diagnostics.debug(
+                f"Traceback: {traceback.format_exc()}"
             )
         else:
             sphinx_diagnostics.info(
-                f"Successfully generated {len(lazy_grid_items)} grid items"
+                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items"
             )
             
         return lazy_grid_items
