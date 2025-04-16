@@ -188,47 +188,111 @@ def update_index_file(sphinx_app: Sphinx) -> None:
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
     phase_name = "update_index"
+    
+    # Create a log file for this step
+    log_filepath, log_file_handle = create_step_log_file(phase_name)
+    
+    # Track statistics for summary
+    total_blogs_processed = 0
+    total_blogs_successful = 0
+    total_blogs_error = 0
+    total_blogs_warning = 0
+    total_blogs_skipped = 0
+    all_error_details = []
 
     try:
+        if log_file_handle:
+            log_file_handle.write("Starting index file update process\n")
+            log_file_handle.write("-" * 80 + "\n\n")
+        
         # Load templates and styles
         template_html = import_file("rocm_blogs.templates", "index.html")
         css_content = import_file("rocm_blogs.static.css", "index.css")
-        
-        # Format the index template
-        index_template = INDEX_TEMPLATE.format(
-            CSS=css_content, HTML=template_html
-        )
+
+        if log_file_handle:
+            log_file_handle.write("Successfully loaded templates and styles\n")
         
         # Initialize ROCmBlogs and load blog data
         rocm_blogs = ROCmBlogs()
         blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
         
         if not blogs_directory:
-            sphinx_diagnostics.error(
-                "Could not find blogs directory"
-            )
-            sphinx_diagnostics.debug(
-                f"Traceback: {traceback.format_exc()}"
-            )
+            error_message = "Could not find blogs directory"
+            sphinx_diagnostics.error(error_message)
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            
+            if log_file_handle:
+                log_file_handle.write(f"ERROR: {error_message}\n")
+                log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                
             _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError("Could not find blogs directory")
+            raise ROCmBlogsError(error_message)
             
         rocm_blogs.blogs_directory = str(blogs_directory)
-        rocm_blogs.find_readme_files()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+        
+        readme_count = rocm_blogs.find_readme_files()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Found {readme_count} README files\n")
+            
         rocm_blogs.create_blog_objects()
+
+        rocm_blogs.blogs.write_to_file()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Created blog objects\n")
+        
+        # Write blogs to CSV file for reference
+        blogs_csv_path = Path(blogs_directory) / "blogs.csv"
+        rocm_blogs.blogs.write_to_file(str(blogs_csv_path))
+        
+        if log_file_handle:
+            log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
+        
+        # Check for features.csv file
+        features_csv_path = Path(blogs_directory) / "features.csv"
+        featured_blogs = []
+        
+        if features_csv_path.exists():
+            if log_file_handle:
+                log_file_handle.write(f"Found features.csv file at {features_csv_path}\n")
+                
+            featured_blogs = rocm_blogs.blogs.load_featured_blogs_from_csv(str(features_csv_path))
+            
+            if log_file_handle:
+                log_file_handle.write(f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n")
+        else:
+            if log_file_handle:
+                log_file_handle.write(f"Features.csv file not found at {features_csv_path}, no featured blogs will be displayed\n")
         
         # Sort the blogs (this happens on all blogs before filtering)
         rocm_blogs.blogs.sort_blogs_by_date()
+        
+        if log_file_handle:
+            log_file_handle.write("Sorted blogs by date\n")
         
         # Extract category keys from BLOG_CATEGORIES to use for sorting
         category_keys = [category_info.get("category_key", category_info["name"]) for category_info in BLOG_CATEGORIES]
         sphinx_diagnostics.info(
             f"Using category keys for sorting: {category_keys}"
         )
+        
+        if log_file_handle:
+            log_file_handle.write(f"Using category keys for sorting: {category_keys}\n")
+            
         rocm_blogs.blogs.sort_blogs_by_category(category_keys)
+        
+        if log_file_handle:
+            log_file_handle.write("Sorted blogs by category\n")
         
         # Get all blogs
         all_blogs = rocm_blogs.blogs.get_blogs()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Retrieved {len(all_blogs)} total blogs\n")
         
         # Filter blogs to only include real blog posts
         filtered_blogs = []
@@ -238,23 +302,36 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             # Check if this is a genuine blog post (has the blogpost flag set to true)
             if hasattr(blog, "blogpost") and blog.blogpost:
                 filtered_blogs.append(blog)
+                total_blogs_processed += 1
+                if log_file_handle:
+                    log_file_handle.write(f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n")
             else:
                 skipped_count += 1
+                total_blogs_skipped += 1
                 sphinx_diagnostics.debug(
                     f"Skipping non-blog README file for index page: {getattr(blog, 'file_path', 'Unknown')}"
                 )
+                if log_file_handle:
+                    log_file_handle.write(f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n")
         
         sphinx_diagnostics.info(
             f"Filtered out {skipped_count} non-blog README files for index page, kept {len(filtered_blogs)} genuine blog posts"
         )
         
+        if log_file_handle:
+            log_file_handle.write(f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n")
+        
         # Replace all_blogs with filtered_blogs
         all_blogs = filtered_blogs
         
         if not all_blogs:
-            sphinx_diagnostics.warning(
-                "No valid blogs found to display on index page"
-            )
+            warning_message = "No valid blogs found to display on index page"
+            sphinx_diagnostics.warning(warning_message)
+            
+            if log_file_handle:
+                log_file_handle.write(f"WARNING: {warning_message}\n")
+                
+            total_blogs_warning += 1
             return
         
         # Track blogs that have been used to avoid duplication
@@ -265,31 +342,107 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             "Generating grid items for index page sections"
         )
         
-        main_grid_items = _generate_grid_items(rocm_blogs, all_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs)
+        if log_file_handle:
+            log_file_handle.write("Generating grid items for index page sections\n")
+
+        # Create a list of featured blog IDs to exclude them from the main grid
+        featured_blog_ids = [id(blog) for blog in featured_blogs]
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n")
+            log_file_handle.write(f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n")
+            
+        # Filter out featured blogs from the main grid
+        non_featured_blogs = [blog for blog in all_blogs if id(blog) not in featured_blog_ids]
+        main_grid_items = _generate_grid_items(rocm_blogs, non_featured_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs)
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated {len(main_grid_items)} main grid items\n")
         
         # Filter blogs by category and ensure they're all blog posts
         ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners"]
         application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models"]
         software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations"]
         
+        if log_file_handle:
+            log_file_handle.write(f"Filtered blogs by category:\n")
+            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n")
+            log_file_handle.write(f"  - Applications & models: {len(application_blogs)} blogs\n")
+            log_file_handle.write(f"  - Software tools & optimizations: {len(software_blogs)} blogs\n")
+        
         # Generate grid items for each category
+        if log_file_handle:
+            log_file_handle.write(f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category\n")
+            
         ecosystem_grid_items = _generate_grid_items(rocm_blogs, ecosystem_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs)
         application_grid_items = _generate_grid_items(rocm_blogs, application_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs)
         software_grid_items = _generate_grid_items(rocm_blogs, software_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs)
         
+        if log_file_handle:
+            log_file_handle.write(f"Generated category grid items:\n")
+            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n")
+            log_file_handle.write(f"  - Applications & models: {len(application_grid_items)} grid items\n")
+            log_file_handle.write(f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n")
+        
+        # Generate featured grid items if we have featured blogs
+        featured_grid_items = []
+        if featured_blogs:
+            if log_file_handle:
+                log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} featured blogs\n")
+                
+            try:
+                # Only generate grid items if we have at least one featured blog
+                if len(featured_blogs) > 0:
+                    # Generate grid items for featured blogs
+                    # Set skip_used=False to ensure all featured blogs are included
+                    # even if they've been used in other sections
+                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, skip_used=False)
+                    
+                    if log_file_handle:
+                        log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
+                else:
+                    if log_file_handle:
+                        log_file_handle.write("Featured blogs list is empty, skipping grid item generation\n")
+            except Exception as featured_error:
+                # Log the error but continue with the build
+                sphinx_diagnostics.warning(
+                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
+                )
+                sphinx_diagnostics.debug(
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                
+                if log_file_handle:
+                    log_file_handle.write(f"WARNING: Error generating featured grid items: {featured_error}\n")
+                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    log_file_handle.write("Continuing without featured blogs\n")
+        else:
+            if log_file_handle:
+                log_file_handle.write("No featured blogs to display\n")
+        
         # Replace placeholders in the template
+        if log_file_handle:
+            log_file_handle.write("Replacing placeholders in the template\n")
+            
         updated_html = (
             index_template
             .replace("{grid_items}", "\n".join(main_grid_items))
             .replace("{eco_grid_items}", "\n".join(ecosystem_grid_items))
             .replace("{application_grid_items}", "\n".join(application_grid_items))
             .replace("{software_grid_items}", "\n".join(software_grid_items))
+            .replace("{featured_grid_items}", "\n".join(featured_grid_items))
         )
         
         # Write the updated HTML to blogs/index.md
         output_path = Path(blogs_directory) / "index.md"
+        
+        if log_file_handle:
+            log_file_handle.write(f"Writing updated HTML to {output_path}\n")
+            
         with output_path.open("w", encoding="utf-8") as output_file:
             output_file.write(updated_html)
+            
+        total_blogs_successful += 1
         
         # Record timing information
         phase_duration = time.time() - phase_start_time
@@ -298,20 +451,54 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             f"Successfully updated {output_path} with new content in \033[96m{phase_duration:.2f} seconds\033[0m"
         )
         
+        if log_file_handle:
+            log_file_handle.write(f"Successfully updated {output_path} with new content in {phase_duration:.2f} seconds\n")
+        
     except ROCmBlogsError:
         # Re-raise ROCmBlogsError to stop the build
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
+        
+        if log_file_handle:
+            log_file_handle.write(f"ERROR: ROCmBlogsError occurred\n")
+            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            
         raise
     except Exception as error:
-        sphinx_diagnostics.critical(
-            f"Error updating index file: {error}"
-        )
-        sphinx_diagnostics.debug(
-            f"Traceback: {traceback.format_exc()}"
-        )
+        error_message = f"Error updating index file: {error}"
+        sphinx_diagnostics.critical(error_message)
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        if log_file_handle:
+            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
+            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
-        raise ROCmBlogsError(f"Error updating index file: {error}") from error
+        raise ROCmBlogsError(error_message) from error
+    finally:
+        # Write summary to log file
+        if log_file_handle:
+            end_time = time.time()
+            total_duration = end_time - phase_start_time
+            
+            log_file_handle.write("\n" + "=" * 80 + "\n")
+            log_file_handle.write("INDEX UPDATE SUMMARY\n")
+            log_file_handle.write("-" * 80 + "\n")
+            log_file_handle.write(f"Total blogs processed: {total_blogs_processed}\n")
+            log_file_handle.write(f"Successful: {total_blogs_successful}\n")
+            log_file_handle.write(f"Errors: {total_blogs_error}\n")
+            log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
+            log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
+            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            
+            if all_error_details:
+                log_file_handle.write("\nERROR DETAILS:\n")
+                log_file_handle.write("-" * 80 + "\n")
+                for index, error_detail in enumerate(all_error_details):
+                    log_file_handle.write(f"{index+1}. Blog: {error_detail['blog']}\n")
+                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+            
+            log_file_handle.close()
 
 def blog_generation(sphinx_app: Sphinx) -> None:
     """Generate blog pages with styling and metadata."""
