@@ -2,7 +2,7 @@ import os
 from sphinx.util import logging as sphinx_logging
 
 # Initialize logger
-logger = sphinx_logging.getLogger(__name__)
+sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
 def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
     """
@@ -17,7 +17,9 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
         HTML string containing the grid item
     """
     
-    logger.debug(f"Generating grid item for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+    sphinx_diagnostics.debug(
+        f"Generating grid item for blog: {getattr(blog, 'blog_title', 'Unknown')}"
+    )
 
     # Choose the appropriate grid template based on lazy_load parameter
     if lazy_load:
@@ -57,10 +59,14 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
 """
 
     title = blog.blog_title if hasattr(blog, "blog_title") else "No Title"
-    logger.debug(f"Grid item title: {title}")
+    sphinx_diagnostics.debug(
+        f"Grid item title: {title}"
+    )
 
     date = blog.date.strftime("%B %d, %Y") if blog.date else "No Date"
-    logger.debug(f"Grid item date: {date}")
+    sphinx_diagnostics.debug(
+        f"Grid item date: {date}"
+    )
 
     # Get description from myst metadata
     description = "No Description"
@@ -68,12 +74,18 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
         html_meta = blog.myst.get("html_meta", {})
         if html_meta and "description lang=en" in html_meta:
             description = html_meta["description lang=en"]
-            logger.debug(f"Using description from myst html_meta")
+            sphinx_diagnostics.debug(
+                f"Using description from myst html_meta"
+            )
     else:
-        logger.debug(f"No myst metadata found, using default description")
+        sphinx_diagnostics.debug(
+            f"No myst metadata found, using default description"
+        )
 
     authors_list = getattr(blog, "author", "").split(",")
-    logger.debug(f"Authors list for grid item: {authors_list}")
+    sphinx_diagnostics.debug(
+        f"Authors list for grid item: {authors_list}"
+    )
 
     # Check if WebP version exists before calling grab_image
     # This ensures we use the WebP version if available
@@ -84,17 +96,25 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
         
         # If the WebP version exists, update the thumbnail to use it
         if os.path.exists(os.path.join(ROCmBlogs.blogs_directory, webp_thumbnail_path)):
-            logger.info(f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}")
+            sphinx_diagnostics.info(
+                f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}"
+            )
             blog.thumbnail = webp_thumbnail_path
         elif os.path.exists(os.path.join(os.path.dirname(blog.file_path), webp_thumbnail_path)):
-            logger.info(f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}")
+            sphinx_diagnostics.info(
+                f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}"
+            )
             blog.thumbnail = webp_thumbnail_path
         elif os.path.exists(os.path.join(os.path.dirname(blog.file_path), "images", webp_thumbnail_path)):
-            logger.info(f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}")
+            sphinx_diagnostics.info(
+                f"Using WebP version for grid item thumbnail: {webp_thumbnail_path}"
+            )
             blog.thumbnail = webp_thumbnail_path
 
     # Get the image path
-    logger.debug(f"Getting image for grid item: {title}")
+    sphinx_diagnostics.debug(
+        f"Getting image for grid item: {title}"
+    )
     image = blog.grab_image(ROCmBlogs)
  
     image_str = str(image)
@@ -105,7 +125,9 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
         if os.path.exists(generic_webp_path):
 
             image = str(image).replace("generic.jpg", "generic.webp").replace("generic.JPG", "generic.webp")
-            logger.info(f"Using WebP version for generic image: {image}")
+            sphinx_diagnostics.info(
+                f"Using WebP version for generic image: {image}"
+            )
 
     elif any(image_str.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.gif', '.JPG', '.JPEG', '.PNG', '.GIF')):
         # Get the base name without extension
@@ -131,10 +153,14 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
             webp_exists = True
             
         if webp_exists:
-            logger.info(f"Using WebP version for grid item image: {image}")
+            sphinx_diagnostics.info(
+                f"Using WebP version for grid item image: {image}"
+            )
         else:
             # If WebP doesn't exist, try to convert it
-            logger.info(f"WebP version not found for {image_str}, attempting to convert")
+            sphinx_diagnostics.info(
+                f"WebP version not found for {image_str}, attempting to convert"
+            )
             
             # Find the original image file
             original_image_path = None
@@ -175,7 +201,9 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
                             new_height = int(original_height * scaling_factor)
                             
                             webp_img = webp_img.resize((new_width, new_height), resample=Image.LANCZOS)
-                            logger.info(f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}")
+                            sphinx_diagnostics.info(
+                                f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}"
+                            )
                         
                         # Save as WebP
                         webp_path = os.path.splitext(original_image_path)[0] + '.webp'
@@ -183,11 +211,17 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
                         
                         # Update the image path to use the WebP version
                         image = webp_image
-                        logger.info(f"Successfully converted {image_str} to WebP: {webp_path}")
+                        sphinx_diagnostics.info(
+                            f"Successfully converted {image_str} to WebP: {webp_path}"
+                        )
                 except Exception as e:
-                    logger.warning(f"Failed to convert {image_str} to WebP: {e}")
+                    sphinx_diagnostics.warning(
+                        f"Failed to convert {image_str} to WebP: {e}"
+                    )
     
-    logger.debug(f"Using image for grid item: {image}")
+    sphinx_diagnostics.debug(
+        f"Using image for grid item: {image}"
+    )
 
     # Initialize authors_html
     authors_html = ""
@@ -195,23 +229,33 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False) -> str:
     # Get author HTML if there are authors
     if authors_list:
         authors_html = blog.grab_authors(authors_list)
-        logger.debug(f"Generated authors HTML: {authors_html}")
+        sphinx_diagnostics.debug(
+            f"Generated authors HTML: {authors_html}"
+        )
 
     # Only add "by" prefix if there are valid authors
     if authors_html:
         authors_html = f"by {authors_html}"
-        logger.debug(f"Final authors HTML with prefix: {authors_html}")
+        sphinx_diagnostics.debug(
+            f"Final authors HTML with prefix: {authors_html}"
+        )
     else:
-        logger.debug(f"No valid authors found for grid item")
+        sphinx_diagnostics.debug(
+            f"No valid authors found for grid item"
+        )
 
     raw_href = blog.grab_href()
     if hasattr(raw_href, "split"):
         href = "." + raw_href.split("/blogs")[-1].replace("\\", "/")
     else:
         href = "." + str(raw_href).split("/blogs")[-1].replace("\\", "/")
-    logger.debug(f"Grid item href: {href}")
+    sphinx_diagnostics.debug(
+        f"Grid item href: {href}"
+    )
 
-    logger.info(f"Generated grid item for '{title}'")
+    sphinx_diagnostics.info(
+        f"Generated grid item for '{title}'"
+    )
     return grid_template.format(
         title=title,
         date=date,

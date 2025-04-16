@@ -205,7 +205,6 @@ class BlogHolder:
                 f"Available blog titles in system: {available_blog_titles}"
             )
             
-            # Log each featured title with exact character representation
             for index, title in enumerate(featured_titles):
                 sphinx_diagnostics.debug(
                     f"Featured title {index+1}: '{title}' (length: {len(title)})"

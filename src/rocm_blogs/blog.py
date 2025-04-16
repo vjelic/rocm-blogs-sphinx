@@ -3,6 +3,7 @@ Blog class for ROCmBlogs package.
 """
 
 import io
+import json
 import os
 import pathlib
 from datetime import datetime
@@ -89,6 +90,17 @@ class Blog:
             sphinx_diagnostics.error(
                 f"Error loading image to memory: {error}"
             )
+
+    def to_json(self) -> str:
+        """Convert the blog metadata to JSON format."""
+        # Convert metadata dictionary to JSON string
+        try:
+            return json.dumps(self.metadata, indent=4)
+        except Exception as error:
+            sphinx_diagnostics.error(
+                f"Error converting metadata to JSON: {error}"
+            )
+            return "{}"
 
     def save_image(self, output_path: str) -> None:
         """Save the image to disk."""
