@@ -73,6 +73,45 @@ _BUILD_START_TIME = time.time()
 
 _BUILD_PHASES = {"setup": 0, "update_index": 0, "blog_generation": 0, "other": 0}
 
+def create_step_log_file(step_name):
+    """Create a log file for a specific build step.
+    
+    Args:
+        step_name: The name of the build step
+        
+    Returns:
+        A tuple containing the log file path and the file handle
+    """
+    try:
+        # Create logs directory if it doesn't exist
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        
+        # Create a log file for this step
+        log_filepath = logs_dir / f"{step_name}.log"
+        log_file_handle = open(log_filepath, "w", encoding="utf-8")
+        
+        # Write header to the log file
+        current_time = datetime.now()
+        log_file_handle.write(
+            f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
+        )
+        log_file_handle.write("=" * 80 + "\n\n")
+        
+        sphinx_diagnostics.info(
+            f"Detailed logs for {step_name} will be written to: {log_filepath}"
+        )
+        
+        return log_filepath, log_file_handle
+    except Exception as error:
+        sphinx_diagnostics.error(
+            f"Error creating log file for {step_name}: {error}"
+        )
+        sphinx_diagnostics.debug(
+            f"Traceback: {traceback.format_exc()}"
+        )
+        return None, None
+
 def log_total_build_time(sphinx_app, build_exception):
     """Log the total time taken for the entire build process."""
     try:
