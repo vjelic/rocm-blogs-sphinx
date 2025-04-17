@@ -260,7 +260,7 @@ html[data-theme="dark"] .container {
 }
 
 .sd-card:hover .small-sd-card-img-top.sd-card-img-top {
-    filter: blur(1px) brightness(0.97);
+    filter: blur(0.1px) brightness(0.97);
 }
 
 .small-sd-card.sd-card-body {

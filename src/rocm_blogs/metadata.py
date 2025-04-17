@@ -43,9 +43,9 @@ myst:
         "amd_asset_type": "Blog"
         "amd_technical_blog_type": "{amd_technical_blog_type}"
         "amd_blog_hardware_platforms": "{amd_blog_hardware_platforms}"
-        "amd_blog_deployment_tools": "{amd_blog_deployment_tools}"
-        "amd_applications": "{amd_applications}"
-        "amd_blog_category_topic": "{amd_blog_category_topic}"
+        "amd_blog_development_tools": "{amd_blog_deployment_tools}"
+        "amd_blog_applications": "{amd_applications}"
+        "amd_blog_topic_categories": "{amd_blog_category_topic}"
         "amd_blog_authors": "{release_author}"
         "amd_blog_releasedate": "{amd_blog_releasedate}"
         "property=og:title": "{blog_title}"
@@ -54,7 +54,7 @@ myst:
         "property=og:url": "https://rocm.blogs.amd.com{blog_url}"
         "property=og:site_name": "ROCm Blogs"
         "property=og:locale": "en_US"
-        "property=og:image": "https://rocm.blogs.amd.com/_images/{thumbnail}"
+        "property=og:image": "https://rocm.blogs.amd.com/_images/{og_image}"
         "property=article:published_time": "{amd_blog_releasedate}"
         "property=article:author": "{release_author}"
         "property=article:tag": "{keywords}"
@@ -277,6 +277,7 @@ myst:
 
                     if "thumbnail" not in extracted_metadata:
                         extracted_metadata["thumbnail"] = ""
+                        extracted_metadata["og_image"] = ""
                         sphinx_diagnostics.debug(
                             f"No thumbnail specified for blog: {blog_filepath}"
                         )
@@ -285,12 +286,18 @@ myst:
                         sphinx_diagnostics.debug(
                             f"Thumbnail: {extracted_metadata['thumbnail']}"
                         )
-
+                        
+                        # Store original thumbnail for og:image (non-webp)
+                        extracted_metadata["og_image"] = extracted_metadata["thumbnail"]
+                        
+                        # Convert thumbnail to webp for regular use
                         for f_format in SUPPORTED_FORMATS:
                             if f_format in extracted_metadata["thumbnail"]:
                                 extracted_metadata["thumbnail"] = extracted_metadata["thumbnail"].replace(f_format, ".webp")
                                 break
+                        
                         metadata_log_file_handle.write(f"Thumbnail: {extracted_metadata['thumbnail']}\n")
+                        metadata_log_file_handle.write(f"OG Image: {extracted_metadata['og_image']}\n")
 
                     if "date" not in extracted_metadata:
                         extracted_metadata["date"] = datetime.now().strftime("%d %B %Y")
@@ -430,8 +437,7 @@ myst:
                                 break
                             except ValueError:
                                 continue
-                        
-                        # If couldn't parse the date, use current date
+
                         if not parsed_date:
                             parsed_date = datetime.now()
                             sphinx_diagnostics.warning(
@@ -444,12 +450,12 @@ myst:
                         
                         # Extract day, month, year components
                         day = parsed_date.day
-                        month = parsed_date.strftime("%b")  # Abbreviated month name
+                        month = parsed_date.month
                         year = parsed_date.year
                         
                         day_of_week = calculate_day_of_week(year, parsed_date.month, day)
                         
-                        amd_blog_releasedate = f"{day_of_week} {month} {day}, 12:00:00 EST {year}"
+                        amd_blog_releasedate = f"{year}/{month}/{day}@00:00:00"
                         
                         sphinx_diagnostics.debug(f"Generated release date: {amd_blog_releasedate}")
                         metadata_log_file_handle.write(f"Generated release date: {amd_blog_releasedate}\n")
@@ -458,7 +464,7 @@ myst:
                         release_date_str = html_metadata.get("amd_blog_releasedate", html_metadata.get("amd_release_date", ""))
 
                         valid_release_date = False
-                        valid_release_date_format = "%a %b %d, %H:%M:%S %Z%Y"
+                        valid_release_date_format = "%Y/%m/%d@%H:%M:%S"
 
                         if release_date_str:
                                 
@@ -495,13 +501,14 @@ myst:
 
                                 day = int(day)
                                 year = int(year)
+                                month = int(d_month)
 
                                 day_of_week = calculate_day_of_week(year, d_month, day)
 
                                 amd_blog_releasedate = datetime.strptime(
-                                    f"{day_of_week} {month} {day}, 12:00:00 EST {year}",
-                                    "%a %b %d, 12:00:00 EST %Y",
-                                ).strftime("%a %b %d, 12:00:00 EST %Y")
+                                    f"{year}/{month}/{day}@00:00:00",
+                                    "%Y/%m/%d@%H:%M:%S",
+                                ).strftime("%Y/%m/%d@%H:%M:%S")
 
                             except ValueError:
                                 sphinx_diagnostics.warning(
@@ -561,6 +568,7 @@ myst:
                         date=extracted_metadata["date"],
                         author=extracted_metadata["author"],
                         thumbnail=extracted_metadata["thumbnail"],
+                        og_image=extracted_metadata["og_image"],
                         tags=extracted_metadata.get("tags", ""),
                         category=extracted_metadata.get("category", "ROCm Blog"),
                         description=blog_description,

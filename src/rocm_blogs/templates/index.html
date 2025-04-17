@@ -27,15 +27,12 @@
 <script src="/_static/js/performance.js" defer></script>
 
 <script>
-  // Optimized event listener for buttons
   document.addEventListener('DOMContentLoaded', function() {
-    // Performance mark for DOMContentLoaded
     if (window.performance && window.performance.mark) {
       window.performance.mark('dom-content-loaded');
-      window.performance.measure('dom-processing', 'index-start', 'dom-content-loaded');
+      window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
     }
     
-    // Use requestIdleCallback for non-critical operations
     const scheduleIdleTask = (callback) => {
       if ('requestIdleCallback' in window) {
         window.requestIdleCallback(callback, { timeout: 2000 });
@@ -44,64 +41,48 @@
       }
     };
     
-    // Button wrapper optimization
-    scheduleIdleTask(() => {
-      const buttonWrappers = document.querySelectorAll('#buttonWrapper');
-      
-      buttonWrappers.forEach(buttonWrapper => {
-        // Use Intersection Observer to only process visible buttons
-        if ('IntersectionObserver' in window) {
-          const buttonObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-              if (entry.isIntersecting) {
-                setupButtonWrapper(buttonWrapper);
-                buttonObserver.unobserve(buttonWrapper);
-              }
-            });
-          });
-          
-          buttonObserver.observe(buttonWrapper);
-        } else {
-          // Fallback for browsers without IntersectionObserver
-          setupButtonWrapper(buttonWrapper);
-        }
-      });
-    });
+    const scheduleAnimation = (callback) => {
+      return window.requestAnimationFrame(callback);
+    };
     
-    function setupButtonWrapper(buttonWrapper) {
-      const observer = new MutationObserver((mutationsList) => {
-        for (const mutation of mutationsList) {
-          if (mutation.type === 'attributes' && mutation.attributeName === 'data-mode') {
-            const newMode = buttonWrapper.getAttribute('data-mode');
-            console.log(`Data mode changed to: ${newMode}`);
-            if (newMode === 'light') {
-              buttonWrapper.style.setProperty('--original-background', 'white');
-              buttonWrapper.style.setProperty('--hover-background-colour', 'white');
-            } else {
-              buttonWrapper.style.setProperty('--original-background', 'black');
-              buttonWrapper.style.setProperty('--hover-background-colour', 'black');
-            }
-          }
-        }
+    function wrapImagesWithContainer() {
+      document.querySelectorAll('img[data-src]').forEach(img => {
+        
+        if (img.parentNode.classList.contains('image-container')) return;
+
+        const container = document.createElement('div');
+        container.className = 'image-container';
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-placeholder';
+
+        img.parentNode.insertBefore(container, img);
+        container.appendChild(placeholder);
+        container.appendChild(img);
+
+        const hash = img.dataset.src.split('').reduce((a, b) => {
+          a = ((a << 5) - a) + b.charCodeAt(0);
+          return a & a;
+        }, 0);
+
+        const hue = Math.abs(hash % 360);
+        const saturation = 15 + Math.abs((hash >> 8) % 20);
+        const lightness = 85 + Math.abs((hash >> 16) % 10);
+        
+        placeholder.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
       });
-      
-      // Start observing the button wrapper
-      observer.observe(buttonWrapper, { attributes: true });
-      
-      // Remove hover effects for better performance
     }
-
+    
     if ('IntersectionObserver' in window) {
-
       const uniqueDomains = new Set();
       document.querySelectorAll('img[data-src]').forEach(img => {
         try {
           const url = new URL(img.dataset.src);
           uniqueDomains.add(url.origin);
-        } catch (e) {
+        } catch (error) {
         }
       });
-
+      
       uniqueDomains.forEach(domain => {
         const link = document.createElement('link');
         link.rel = 'preconnect';
@@ -109,77 +90,155 @@
         document.head.appendChild(link);
       });
 
+      wrapImagesWithContainer();
+
       const lazyImages = document.querySelectorAll('img[data-src]');
-
-      const imageObserver = new IntersectionObserver((entries, observer) => {
+      
+      // Preload images before they enter viewport
+      const preloadObserver = new IntersectionObserver((entries, observer) => {
         entries.forEach(entry => {
-
           if (entry.isIntersecting) {
             const img = entry.target;
 
+            const imgUrl = img.dataset.src;
+            
             if (window.performance && window.performance.mark) {
-              window.performance.mark(`image-load-start-${img.dataset.src}`);
+              window.performance.mark(`image-preload-start-${imgUrl}`);
             }
 
-            const tempImage = new Image();
-            
-            tempImage.onload = function() {
+            const preloader = new Image();
+            preloader.onload = function() {
 
-              img.src = img.dataset.src;
-
-              img.removeAttribute('data-src');
-
-              img.classList.add('loaded');
-
+              img.dataset.preloaded = 'true';
+              
               if (window.performance && window.performance.mark) {
-                window.performance.mark(`image-load-end-${img.src}`);
+                window.performance.mark(`image-preload-end-${imgUrl}`);
                 window.performance.measure(
-                  `image-load-time-${img.src}`,
-                  `image-load-start-${img.src}`,
-                  `image-load-end-${img.src}`
+                  `image-preload-time-${imgUrl}`,
+                  `image-preload-start-${imgUrl}`,
+                  `image-preload-end-${imgUrl}`
                 );
               }
             };
-            
-            tempImage.src = img.dataset.src;
+            preloader.src = imgUrl;
 
             observer.unobserve(img);
           }
         });
       }, {
-        rootMargin: '600px 0px',
-        threshold: 0.01 
+        rootMargin: '1500px 0px',
+        threshold: 0.01,
+      });
+
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            
+            if (window.performance && window.performance.mark) {
+              window.performance.mark(`image-display-start-${img.dataset.src}`);
+            }
+            
+            img.src = img.dataset.src;
+
+            setTimeout(() => {
+              img.classList.add('loaded');
+
+              const placeholder = img.previousElementSibling;
+              if (placeholder && placeholder.classList.contains('image-placeholder')) {
+                placeholder.classList.add('lqip-hidden');
+              }
+
+              if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-display-end-${img.dataset.src}`);
+                window.performance.measure(
+                  `image-display-time-${img.dataset.src}`,
+                  `image-display-start-${img.dataset.src}`,
+                  `image-display-end-${img.dataset.src}`
+                );
+              }
+            
+              img.removeAttribute('data-src');
+              img.removeAttribute('data-preloaded');
+            }, 50);
+            
+            observer.unobserve(img);
+          }
+        });
+      }, {
+        rootMargin: '300px 0px',
+        threshold: 0.01,
       });
 
       lazyImages.forEach(img => {
+        preloadObserver.observe(img);
         imageObserver.observe(img);
+      });
+    } else {
+      scheduleIdleTask(() => {
+        wrapImagesWithContainer();
+        
+        const lazyImages = document.querySelectorAll('img[data-src]');
+        lazyImages.forEach(img => {
+          const placeholder = img.previousElementSibling;
+          
+          const tempImage = new Image();
+          tempImage.onload = function() {
+            img.src = img.dataset.src;
+            img.classList.add('loaded');
+            if (placeholder && placeholder.classList.contains('image-placeholder')) {
+              placeholder.classList.add('lqip-hidden');
+            }
+            img.removeAttribute('data-src');
+          };
+          tempImage.src = img.dataset.src;
+        });
       });
     }
 
+    scheduleAnimation(() => {
+      const gridItems = document.querySelectorAll('.sd-col');
+      gridItems.forEach((item, index) => {
+        item.style.animationDelay = `${index * 0.05}s`;
+      });
+    });
+
     if (window.performance && window.performance.getEntriesByType) {
       scheduleIdleTask(() => {
-
         const perfEntries = performance.getEntriesByType('measure');
 
         console.log('Performance metrics:', perfEntries);
+
+        if (window.navigator.sendBeacon) {
+          try {
+            const metrics = JSON.stringify(perfEntries);
+            navigator.sendBeacon('/analytics', metrics);
+          } catch (error) {
+            console.error('Failed to send performance metrics', error);
+          }
+        }
       });
     }
   });
 
   window.addEventListener('scroll', function() {
-
   }, { passive: true });
 
   window.addEventListener('load', function() {
     if (window.performance && window.performance.mark) {
-      window.performance.mark('index-fully-loaded');
-      window.performance.measure('full-page-load', 'index-start', 'index-fully-loaded');
+      window.performance.mark('posts-fully-loaded');
+      window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
 
       const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
       console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
     }
   });
 </script>
+
+::::{grid} 1 2 3 4
+:margin 2
+{featured_grid_items}
+::::
 
 <div class="container">
   <h2>Recent Posts</h2>
