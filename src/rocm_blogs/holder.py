@@ -236,6 +236,21 @@ class BlogHolder:
                         sphinx_diagnostics.warning(
                             f"Featured blog not found: '{title}'. Possible close matches: {close_matches}"
                         )
+                        title = close_matches[0]
+                        blog = self.get_blog_by_title(title)
+                        if blog:
+                            if blog not in featured_blogs:
+                                sphinx_diagnostics.debug(
+                                    f"Adding blog '{title}' to featured blogs"
+                                )
+                                featured_blogs.append(blog)
+                            else:
+                                sphinx_diagnostics.warning(
+                                    f"Duplicate featured blog found: '{title}'"
+                                )
+                            sphinx_diagnostics.debug(
+                                f"Found featured blog: '{title}'"
+                            )
                     else:
                         sphinx_diagnostics.warning(
                             f"Featured blog not found: '{title}'. No close matches found."
