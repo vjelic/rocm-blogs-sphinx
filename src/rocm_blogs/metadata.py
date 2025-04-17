@@ -345,7 +345,7 @@ myst:
                     metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
                     
                     amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", 
-                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPU Accelerators"))
+                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPU"))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
                     
                     amd_blog_deployment_tools = html_metadata.get("amd_blog_deployment_tools", 
