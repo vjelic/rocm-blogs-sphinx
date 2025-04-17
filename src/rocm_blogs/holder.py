@@ -139,7 +139,7 @@ class BlogHolder:
             raise
             
     def create_features_template(self, filename: str = "features_template.csv") -> None:
-        """Create a template features.csv file with all available blog titles."""
+        """Create a template featured-blogs.csv file with all available blog titles."""
         try:
             with open(filename, "w", newline='') as file:
                 writer = csv.writer(file)
@@ -159,7 +159,7 @@ class BlogHolder:
                 f"Successfully created features template at {filename}"
             )
             sphinx_diagnostics.info(
-                f"Edit this file to select which blogs to feature, then rename it to 'features.csv'"
+                f"Edit this file to select which blogs to feature, then rename it to 'featured-blogs.csv'"
             )
             
             return filename
@@ -170,7 +170,7 @@ class BlogHolder:
             )
             raise
             
-    def load_featured_blogs_from_csv(self, filename: str = "features.csv") -> list[Blog]:
+    def load_featured_blogs_from_csv(self, filename: str = "featured-blogs.csv") -> list[Blog]:
         """Load featured blog titles from a CSV file and return the corresponding blogs."""
         featured_blogs = []
         
