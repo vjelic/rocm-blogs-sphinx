@@ -336,7 +336,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
         
         # Check for features.csv file
-        features_csv_path = Path(blogs_directory) / "features.csv"
+        features_csv_path = Path(blogs_directory) / "featured-blogs.csv"
         featured_blogs = []
         
         if features_csv_path.exists():
