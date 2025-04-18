@@ -47,7 +47,7 @@ myst:
         "amd_blog_applications": "{amd_applications}"
         "amd_blog_topic_categories": "{amd_blog_category_topic}"
         "amd_blog_authors": "{release_author}"
-        "amd_blog_releasedate": "{amd_blog_releasedate}"
+        "amd_releasedate": "{amd_blog_releasedate}"
         "property=og:title": "{blog_title}"
         "property=og:description": "{description}"
         "property=og:type": "article"
