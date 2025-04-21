@@ -139,7 +139,7 @@ class BlogHolder:
             raise
             
     def create_features_template(self, filename: str = "features_template.csv") -> None:
-        """Create a template featured-blogs.csv file with all available blog titles."""
+        """Create a template features.csv file with all available blog titles."""
         try:
             with open(filename, "w", newline='') as file:
                 writer = csv.writer(file)
@@ -159,7 +159,7 @@ class BlogHolder:
                 f"Successfully created features template at {filename}"
             )
             sphinx_diagnostics.info(
-                f"Edit this file to select which blogs to feature, then rename it to 'featured-blogs.csv'"
+                f"Edit this file to select which blogs to feature, then rename it to 'features.csv'"
             )
             
             return filename
@@ -170,7 +170,7 @@ class BlogHolder:
             )
             raise
             
-    def load_featured_blogs_from_csv(self, filename: str = "featured-blogs.csv") -> list[Blog]:
+    def load_featured_blogs_from_csv(self, filename: str = "features.csv") -> list[Blog]:
         """Load featured blog titles from a CSV file and return the corresponding blogs."""
         featured_blogs = []
         
@@ -205,6 +205,7 @@ class BlogHolder:
                 f"Available blog titles in system: {available_blog_titles}"
             )
             
+            # Log each featured title with exact character representation
             for index, title in enumerate(featured_titles):
                 sphinx_diagnostics.debug(
                     f"Featured title {index+1}: '{title}' (length: {len(title)})"
@@ -236,21 +237,6 @@ class BlogHolder:
                         sphinx_diagnostics.warning(
                             f"Featured blog not found: '{title}'. Possible close matches: {close_matches}"
                         )
-                        title = close_matches[0]
-                        blog = self.get_blog_by_title(title)
-                        if blog:
-                            if blog not in featured_blogs:
-                                sphinx_diagnostics.debug(
-                                    f"Adding blog '{title}' to featured blogs"
-                                )
-                                featured_blogs.append(blog)
-                            else:
-                                sphinx_diagnostics.warning(
-                                    f"Duplicate featured blog found: '{title}'"
-                                )
-                            sphinx_diagnostics.debug(
-                                f"Found featured blog: '{title}'"
-                            )
                     else:
                         sphinx_diagnostics.warning(
                             f"Featured blog not found: '{title}'. No close matches found."

@@ -8,7 +8,6 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-
   // Performance metrics logging
   if (window.performance) {
     const perfData = window.performance.timing;
@@ -18,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Optimize script loading
   function loadScriptsAsync() {
-
+    // Find all script tags that have the 'defer-load' attribute
     const scripts = document.querySelectorAll('script[defer-load]');
     
     scripts.forEach(function(script) {
@@ -49,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(loadScriptsAsync, 1000);
   }
 
+  // Use passive event listeners for better scrolling performance
   window.addEventListener('scroll', function() {
+    // Empty handler with passive option for better performance
   }, { passive: true });
 });

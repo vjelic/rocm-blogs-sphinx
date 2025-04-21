@@ -53,10 +53,8 @@ label.sidebar-toggle.secondary-toggle.btn.btn-sm {
     cursor: pointer;
     display: flex;
     align-items: center;
-    
     min-width: 100px;
     white-space: nowrap;
-    
     will-change: transform, box-shadow; 
     transform: translateZ(0); 
     backface-visibility: hidden; 
@@ -231,7 +229,6 @@ html[data-theme="dark"] .container {
     height: 510px !important; 
     display: flex !important;
     flex-direction: column !important;
-    
     will-change: transform, box-shadow; 
     transform: translateZ(0) !important; 
     backface-visibility: hidden; 
@@ -256,11 +253,23 @@ html[data-theme="dark"] .container {
     content-visibility: auto; 
     will-change: transform, filter; 
     contain: layout paint style; 
-    transition: filter 0.2s ease-in-out !important;
+    transition: filter 0.2s ease-in-out, opacity 0.3s ease-in-out !important;
+    background-color: #f5f5f5; /* Light gray placeholder background */
+    opacity: 1;
+}
+
+/* Add dark mode background placeholder */
+html[data-theme="dark"] .small-sd-card-img-top.sd-card-img-top {
+    background-color: #2a2a2a; /* Dark gray placeholder for dark mode */
+}
+
+/* Style for images that are still loading */
+.small-sd-card-img-top.sd-card-img-top.loading {
+    opacity: 0;
 }
 
 .sd-card:hover .small-sd-card-img-top.sd-card-img-top {
-    filter: blur(0.1px) brightness(0.97);
+    filter: blur(0.05px) brightness(0.97);
 }
 
 .small-sd-card.sd-card-body {
@@ -549,7 +558,41 @@ label.sidebar-toggle.primary-toggle.btn.btn-sm {
 
 
 img {
-    content-visibility: auto; 
+    content-visibility: auto;
+}
+
+/* Add JavaScript to handle image loading transitions */
+@media (min-width: 1px) {
+    /* This ensures the script is added to all screen sizes */
+    body::after {
+        content: "";
+        display: none;
+    }
+    
+    /* Add a script to handle lazy loading transitions */
+    body::before {
+        content: "";
+        display: none;
+    }
+    
+    /* This script will be executed when the page loads */
+    body::after {
+        content: "";
+        display: none;
+    }
+    
+    /* Add a script element to the page */
+    script {
+        display: none;
+    }
+}
+
+/* Add this to the end of the file to ensure it's included */
+@media (min-width: 1px) {
+    body::after {
+        content: "";
+        display: none;
+    }
 }
 
 

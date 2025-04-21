@@ -20,6 +20,7 @@ from sphinx.errors import SphinxError
 from ._rocmblogs import ROCmBlogs
 from ._version import __version__
 from .metadata import *
+from .banner import *
 from .constants import *
 from .images import *
 from .utils import *
@@ -111,45 +112,6 @@ _CRITICAL_ERROR_OCCURRED = False
 _BUILD_START_TIME = time.time()
 
 _BUILD_PHASES = {"setup": 0, "update_index": 0, "blog_generation": 0, "other": 0}
-
-def create_step_log_file(step_name):
-    """Create a log file for a specific build step.
-    
-    Args:
-        step_name: The name of the build step
-        
-    Returns:
-        A tuple containing the log file path and the file handle
-    """
-    try:
-        # Create logs directory if it doesn't exist
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
-        
-        # Create a log file for this step
-        log_filepath = logs_dir / f"{step_name}.log"
-        log_file_handle = open(log_filepath, "w", encoding="utf-8")
-        
-        # Write header to the log file
-        current_time = datetime.now()
-        log_file_handle.write(
-            f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
-        )
-        log_file_handle.write("=" * 80 + "\n\n")
-        
-        sphinx_diagnostics.info(
-            f"Detailed logs for {step_name} will be written to: {log_filepath}"
-        )
-        
-        return log_filepath, log_file_handle
-    except Exception as error:
-        sphinx_diagnostics.error(
-            f"Error creating log file for {step_name}: {error}"
-        )
-        sphinx_diagnostics.debug(
-            f"Traceback: {traceback.format_exc()}"
-        )
-        return None, None
 
 def log_total_build_time(sphinx_app, build_exception):
     """Log the total time taken for the entire build process."""
@@ -286,13 +248,14 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         # Load templates and styles
         template_html = import_file("rocm_blogs.templates", "index.html")
         css_content = import_file("rocm_blogs.static.css", "index.css")
+        banner_css_content = import_file("rocm_blogs.static.css", "banner-slider.css")
 
         if log_file_handle:
             log_file_handle.write("Successfully loaded templates and styles\n")
 
         # Format the index template
         index_template = INDEX_TEMPLATE.format(
-            CSS=css_content, HTML=template_html
+            CSS=css_content, BANNER_CSS=banner_css_content, HTML=template_html
         )
         
         # Initialize ROCmBlogs and load blog data
@@ -336,7 +299,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
         
         # Check for features.csv file
-        features_csv_path = Path(blogs_directory) / "featured-blogs.csv"
+        features_csv_path = Path(blogs_directory) / "features.csv"
         featured_blogs = []
         
         if features_csv_path.exists():
@@ -419,6 +382,27 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         
         # Track blogs that have been used to avoid duplication
         used_blogs = []
+      
+        # Use featured blogs for banner slider if available, otherwise use the first N blogs
+        # Limit the number of featured blogs to BANNER_BLOGS_COUNT
+        if featured_blogs:
+            max_banner_blogs = min(len(featured_blogs), BANNER_BLOGS_COUNT)
+            banner_blogs = featured_blogs[:max_banner_blogs]
+        else:
+            banner_blogs = all_blogs[:BANNER_BLOGS_COUNT]
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generating banner slider with {len(banner_blogs)} blogs (using featured blogs: {bool(featured_blogs)})\n")
+            if featured_blogs:
+                log_file_handle.write(f"Using {len(banner_blogs)} featured blogs for banner slider (limited to BANNER_BLOGS_COUNT={BANNER_BLOGS_COUNT})\n")
+            else:
+                log_file_handle.write(f"No featured blogs found, using first {BANNER_BLOGS_COUNT} blogs for banner slider\n")
+            
+        # Generate banner slider content
+        banner_content = _generate_banner_slider(rocm_blogs, banner_blogs, used_blogs)
+        
+        if log_file_handle:
+            log_file_handle.write("Banner slider generation completed\n")
         
         # Generate grid items for different sections
         sphinx_diagnostics.info(
@@ -429,38 +413,24 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             log_file_handle.write("Generating grid items for index page sections\n")
 
         # Create a list of featured blog IDs to exclude them from the main grid
-
-        log_file_handle.write("Here are the featured blogs:\n")
-
-        for blog in featured_blogs:
-            log_file_handle.write(f"  - {getattr(blog, 'file_path', 'Unknown')}\n")
-
         featured_blog_ids = [id(blog) for blog in featured_blogs]
-
-        log_file_handle.write(f"Featured blog IDs: {featured_blog_ids}\n")
         
+        # Main grid items - will exclude banner blogs and featured blogs
         if log_file_handle:
             log_file_handle.write(f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n")
             log_file_handle.write(f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n")
             
         # Filter out featured blogs from the main grid
         non_featured_blogs = [blog for blog in all_blogs if id(blog) not in featured_blog_ids]
-
         main_grid_items = _generate_grid_items(rocm_blogs, non_featured_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs, True)
         
         if log_file_handle:
             log_file_handle.write(f"Generated {len(main_grid_items)} main grid items\n")
         
         # Filter blogs by category and ensure they're all blog posts
-        ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners" and id(blog) not in featured_blog_ids]
-        application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models" and id(blog) not in featured_blog_ids]
-        software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations" and id(blog) not in featured_blog_ids]
-        
-        if log_file_handle:
-            log_file_handle.write(f"Filtered blogs by category:\n")
-            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n")
-            log_file_handle.write(f"  - Applications & models: {len(application_blogs)} blogs\n")
-            log_file_handle.write(f"  - Software tools & optimizations: {len(software_blogs)} blogs\n")
+        ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners"]
+        application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models"]
+        software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations"]
         
         if log_file_handle:
             log_file_handle.write(f"Filtered blogs by category:\n")
@@ -491,46 +461,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             try:
                 # Only generate grid items if we have at least one featured blog
                 if len(featured_blogs) > 0:
-                    log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} blogs\n")
                     featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, False)
-                    log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
-                else:
-                    log_file_handle.write("Featured blogs list is empty, skipping grid item generation\n")
-            except Exception as featured_error:
-                sphinx_diagnostics.warning(
-                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
-                )
-                sphinx_diagnostics.debug(
-                    f"Traceback: {traceback.format_exc()}"
-                )
-                
-                if log_file_handle:
-                    log_file_handle.write(f"WARNING: Error generating featured grid items: {featured_error}\n")
-                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
-                    log_file_handle.write("Continuing without featured blogs\n")
-        else:
-            if log_file_handle:
-                log_file_handle.write("No featured blogs to display\n")
-        
-        if log_file_handle:
-            log_file_handle.write(f"Generated category grid items:\n")
-            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n")
-            log_file_handle.write(f"  - Applications & models: {len(application_grid_items)} grid items\n")
-            log_file_handle.write(f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n")
-        
-        # Generate featured grid items if we have featured blogs
-        featured_grid_items = []
-        if featured_blogs:
-            if log_file_handle:
-                log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} featured blogs\n")
-                
-            try:
-                # Only generate grid items if we have at least one featured blog
-                if len(featured_blogs) > 0:
-                    # Generate grid items for featured blogs
-                    # Set skip_used=False to ensure all featured blogs are included
-                    # even if they've been used in other sections
-                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, skip_used=False)
                     
                     if log_file_handle:
                         log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
@@ -565,6 +496,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             .replace("{application_grid_items}", "\n".join(application_grid_items))
             .replace("{software_grid_items}", "\n".join(software_grid_items))
             .replace("{featured_grid_items}", "\n".join(featured_grid_items))
+            .replace("{banner_slider}", banner_content)
         )
         
         # Write the updated HTML to blogs/index.md
@@ -828,6 +760,91 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             
             log_file_handle.close()
     
+def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
+    """ Generate banner slider content for the index page. """
+    try:
+        banner_start_time = time.time()
+        sphinx_diagnostics.info("Generating banner slider content")
+        
+        # Generate banner slides and navigation items directly without parameter checking
+        # The functions are already defined with the correct parameters
+        
+        banner_slides = []
+        banner_navigation = []
+        error_count = 0
+        
+        # Generate banner slides and navigation items
+        for i, blog in enumerate(banner_blogs):
+            try:
+                slide_html = generate_banner_slide(blog, rocmblogs, i, i == 0)
+                nav_html = generate_banner_navigation_item(blog, i, i == 0)
+                
+                if not slide_html or not slide_html.strip():
+                    sphinx_diagnostics.warning(f"Empty banner slide HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+                    error_count += 1
+                    continue
+                
+                if not nav_html or not nav_html.strip():
+                    sphinx_diagnostics.warning(f"Empty banner navigation HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+                    error_count += 1
+                    continue
+                
+                banner_slides.append(slide_html)
+                banner_navigation.append(nav_html)
+                # Add banner blogs to the used list to avoid duplication
+                used_blogs.append(blog)
+                sphinx_diagnostics.debug(f"Successfully generated banner slide for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+            except Exception as blog_error:
+                error_count += 1
+                sphinx_diagnostics.error(f"Error generating banner slide for blog {getattr(blog, 'blog_title', 'Unknown')}: {blog_error}")
+                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        # Check if any slides were generated
+        if not banner_slides:
+            sphinx_diagnostics.critical("No banner slides were generated. Check for errors in the banner slide generation functions.")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            raise ROCmBlogsError("No banner slides were generated")
+        
+        # Load banner slider template
+        try:
+            banner_slider_template = import_file("rocm_blogs.templates", "banner-slider.html")
+            sphinx_diagnostics.debug("Successfully loaded banner slider template")
+        except Exception as template_error:
+            sphinx_diagnostics.critical(f"Failed to load banner slider template: {template_error}")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            return ""
+        
+        # Fill in the banner slider template
+        banner_html = (
+            banner_slider_template
+            .replace("{banner_slides}", "\n".join(banner_slides))
+            .replace("{banner_navigation}", "\n".join(banner_navigation))
+        )
+
+        banner_slider_content = f"""
+```{{raw}} html
+{banner_html}
+```
+"""
+        
+        banner_elapsed_time = time.time() - banner_start_time
+        
+        if error_count > 0:
+            sphinx_diagnostics.warning(f"Generated {len(banner_slides)} banner slides with {error_count} errors")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        else:
+            sphinx_diagnostics.info(f"Successfully generated {len(banner_slides)} banner slides")
+            
+        sphinx_diagnostics.info(f"Banner slider generation completed in \033[96m{banner_elapsed_time:.4f} seconds\033[0m")
+        
+        return banner_slider_content
+    except ROCmBlogsError:
+        raise
+    except Exception as error:
+        sphinx_diagnostics.error(f"Error generating banner slider: {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        return ""
+
 def run_metadata_generator(sphinx_app: Sphinx) -> None:
     """Run the metadata generator during the build process."""
     global _CRITICAL_ERROR_OCCURRED

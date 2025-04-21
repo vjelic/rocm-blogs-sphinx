@@ -11,11 +11,6 @@ src/rocm_blogs/images.py
 src/rocm_blogs/metadata.py
 src/rocm_blogs/process.py
 src/rocm_blogs/utils.py
-src/rocm_blogs.egg-info/PKG-INFO
-src/rocm_blogs.egg-info/SOURCES.txt
-src/rocm_blogs.egg-info/dependency_links.txt
-src/rocm_blogs.egg-info/requires.txt
-src/rocm_blogs.egg-info/top_level.txt
 src/rocm_blogs/constants/__init__.py
 src/rocm_blogs/static/css/banner-slider.css
 src/rocm_blogs/static/css/blog.css
@@ -34,3 +29,8 @@ src/rocm_blogs/templates/pagination.html
 src/rocm_blogs/templates/posts.html
 src/rocm_blogs/templates/social-bar.html
 src/rocm_blogs/templates/software-tools.html
+src/rocm_blogs_sphinx.egg-info/PKG-INFO
+src/rocm_blogs_sphinx.egg-info/SOURCES.txt
+src/rocm_blogs_sphinx.egg-info/dependency_links.txt
+src/rocm_blogs_sphinx.egg-info/requires.txt
+src/rocm_blogs_sphinx.egg-info/top_level.txt
