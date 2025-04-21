@@ -293,10 +293,13 @@ myst:
                         # Convert thumbnail to webp for regular use
                         for f_format in SUPPORTED_FORMATS:
                             if f_format in extracted_metadata["thumbnail"]:
-                                extracted_metadata["thumbnail"] = extracted_metadata["thumbnail"].replace(f_format, ".webp")
+                                og_image_extracted = extracted_metadata["thumbnail"].replace(f_format, ".webp")
                                 break
+
+                        if not og_image_extracted.contains(".webp"):
+                            og_image_extracted = og_image_extracted.split(".")[0] + ".webp"
                         
-                        metadata_log_file_handle.write(f"Thumbnail: {extracted_metadata['thumbnail']}\n")
+                        metadata_log_file_handle.write(f"Thumbnail: {og_image_extracted}\n")
                         metadata_log_file_handle.write(f"OG Image: {extracted_metadata['og_image']}\n")
 
                     if "date" not in extracted_metadata:
@@ -455,7 +458,7 @@ myst:
                         
                         day_of_week = calculate_day_of_week(year, parsed_date.month, day)
                         
-                        amd_blog_releasedate = f"{year}/{month}/{day}@00:00:00"
+                        amd_blog_releasedate = f"{year}/{month}/{day}"
                         
                         sphinx_diagnostics.debug(f"Generated release date: {amd_blog_releasedate}")
                         metadata_log_file_handle.write(f"Generated release date: {amd_blog_releasedate}\n")
@@ -506,7 +509,7 @@ myst:
                                 day_of_week = calculate_day_of_week(year, d_month, day)
 
                                 amd_blog_releasedate = datetime.strptime(
-                                    f"{year}/{month}/{day}@00:00:00",
+                                    f"{year}/{month}/{day}",
                                     "%Y/%m/%d@%H:%M:%S",
                                 ).strftime("%Y/%m/%d@%H:%M:%S")
 
@@ -567,7 +570,7 @@ myst:
                         blog_title=extracted_metadata["blog_title"],
                         date=extracted_metadata["date"],
                         author=extracted_metadata["author"],
-                        thumbnail=extracted_metadata["thumbnail"],
+                        thumbnail=og_image_extracted,
                         og_image=extracted_metadata["og_image"],
                         tags=extracted_metadata.get("tags", ""),
                         category=extracted_metadata.get("category", "ROCm Blog"),
