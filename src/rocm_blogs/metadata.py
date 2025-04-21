@@ -296,7 +296,7 @@ myst:
                                 og_image_extracted = extracted_metadata["thumbnail"].replace(f_format, ".webp")
                                 break
 
-                        if not og_image_extracted.contains(".webp"):
+                        if ".webp" not in og_image_extracted:
                             og_image_extracted = og_image_extracted.split(".")[0] + ".webp"
                         
                         metadata_log_file_handle.write(f"Thumbnail: {og_image_extracted}\n")
