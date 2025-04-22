@@ -47,7 +47,7 @@ myst:
         "amd_blog_applications": "{amd_applications}"
         "amd_blog_topic_categories": "{amd_blog_category_topic}"
         "amd_blog_authors": "{release_author}"
-        "amd_blog_releasedate": "{amd_blog_releasedate}"
+        "amd_release_date": "{amd_blog_releasedate}"
         "property=og:title": "{blog_title}"
         "property=og:description": "{description}"
         "property=og:type": "article"
@@ -293,10 +293,13 @@ myst:
                         # Convert thumbnail to webp for regular use
                         for f_format in SUPPORTED_FORMATS:
                             if f_format in extracted_metadata["thumbnail"]:
-                                extracted_metadata["thumbnail"] = extracted_metadata["thumbnail"].replace(f_format, ".webp")
+                                og_image_extracted = extracted_metadata["thumbnail"].replace(f_format, ".webp")
                                 break
+
+                        if ".webp" not in og_image_extracted:
+                            og_image_extracted = og_image_extracted.split(".")[0] + ".webp"
                         
-                        metadata_log_file_handle.write(f"Thumbnail: {extracted_metadata['thumbnail']}\n")
+                        metadata_log_file_handle.write(f"Thumbnail: {og_image_extracted}\n")
                         metadata_log_file_handle.write(f"OG Image: {extracted_metadata['og_image']}\n")
 
                     if "date" not in extracted_metadata:
@@ -345,7 +348,7 @@ myst:
                     metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
                     
                     amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", 
-                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPU"))
+                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPUs"))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
                     
                     amd_blog_deployment_tools = html_metadata.get("amd_blog_deployment_tools", 
@@ -355,7 +358,7 @@ myst:
                     amd_applications = html_metadata.get("amd_applications", "AI Inference")
                     metadata_log_file_handle.write(f"AMD Applications: {amd_applications}\n")
                     
-                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems, Industry Appliocations & Use Cases")
+                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems, Industry Applications & Use Cases")
                     metadata_log_file_handle.write(f"AMD Blog Category Topic: {amd_blog_category_topic}\n")
                     
                 except Exception as default_field_exception:
@@ -455,7 +458,7 @@ myst:
                         
                         day_of_week = calculate_day_of_week(year, parsed_date.month, day)
                         
-                        amd_blog_releasedate = f"{year}/{month}/{day}@00:00:00"
+                        amd_blog_releasedate = f"{year}/{month}/{day}"
                         
                         sphinx_diagnostics.debug(f"Generated release date: {amd_blog_releasedate}")
                         metadata_log_file_handle.write(f"Generated release date: {amd_blog_releasedate}\n")
@@ -506,7 +509,7 @@ myst:
                                 day_of_week = calculate_day_of_week(year, d_month, day)
 
                                 amd_blog_releasedate = datetime.strptime(
-                                    f"{year}/{month}/{day}@00:00:00",
+                                    f"{year}/{month}/{day}",
                                     "%Y/%m/%d@%H:%M:%S",
                                 ).strftime("%Y/%m/%d@%H:%M:%S")
 
@@ -567,8 +570,8 @@ myst:
                         blog_title=extracted_metadata["blog_title"],
                         date=extracted_metadata["date"],
                         author=extracted_metadata["author"],
-                        thumbnail=extracted_metadata["thumbnail"],
-                        og_image=extracted_metadata["og_image"],
+                        thumbnail=extracted_metadata['thumbnail'],
+                        og_image=og_image_extracted,
                         tags=extracted_metadata.get("tags", ""),
                         category=extracted_metadata.get("category", "ROCm Blog"),
                         description=blog_description,
