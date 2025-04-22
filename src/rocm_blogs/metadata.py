@@ -348,7 +348,7 @@ myst:
                     metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
                     
                     amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", 
-                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPU"))
+                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPUs"))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
                     
                     amd_blog_deployment_tools = html_metadata.get("amd_blog_deployment_tools", 
@@ -358,7 +358,7 @@ myst:
                     amd_applications = html_metadata.get("amd_applications", "AI Inference")
                     metadata_log_file_handle.write(f"AMD Applications: {amd_applications}\n")
                     
-                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems, Industry Appliocations & Use Cases")
+                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems, Industry Applications & Use Cases")
                     metadata_log_file_handle.write(f"AMD Blog Category Topic: {amd_blog_category_topic}\n")
                     
                 except Exception as default_field_exception:
