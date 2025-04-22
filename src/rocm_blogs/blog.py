@@ -149,6 +149,34 @@ class Blog:
     def grab_href(self) -> str:
         """Generate the HTML href for the blog."""
         return self.file_path.replace(".md", ".html").replace("\\", "/")
+    
+    def grab_authors_list(self) -> List[str]:
+        """Extract authors from the metadata."""
+        
+        sphinx_diagnostics.info(
+            f"Extracting authors from metadata: {self.file_path}"
+        )
+
+        sphinx_diagnostics.info(
+            f"Authors metadata: {self.author}"
+        )
+
+        if not self.author:
+            return []
+        
+        sphinx_diagnostics.info(
+            f"Author type: {type(self.author)}"
+        )
+            
+        # Ensure authors is a list
+        if isinstance(self.author, str):
+            authors = list(self.author.split(", "))
+
+        sphinx_diagnostics.info(
+            f"Authors after split: {authors}"
+        )
+            
+        return authors
 
     def grab_authors(self, authors_list: List[Union[str, List[str]]]) -> str:
         """Generate HTML links for authors, but only if their bio file exists."""

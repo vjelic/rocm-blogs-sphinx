@@ -21,6 +21,7 @@ class BlogHolder:
 
         self.blogs: dict[str, Blog] = {}
         self.blogs_categories: dict[str, list[Blog]] = {}
+        self.blogs_authors: dict[str, list[Blog]] = {}
         self.blogs_featured: dict[str, list[Blog]] = {}
 
     def _make_key(self, blog: Blog) -> str:
@@ -76,9 +77,33 @@ class BlogHolder:
                 f"Blog with title '{key}' already exists."
             )
         self.blogs[key] = blog
-        sphinx_diagnostics.debug(
-            f"Added blog: '{key}'"
+        sphinx_diagnostics.info(
+            f"Added blog: '{blog}'"
         )
+        if hasattr(blog, "author"):
+            sphinx_diagnostics.debug(
+                f"Adding blog '{key}' to author '{blog.author}'"
+            )
+            for author in blog.grab_authors_list():
+                if author not in self.blogs_authors:
+                    self.blogs_authors[author] = []
+                    sphinx_diagnostics.debug(
+                        f"Initialized author list for: {author}, {self.blogs_authors}"
+                    )
+                # Append blog to the author's list
+                if blog not in self.blogs_authors[author]:
+                    sphinx_diagnostics.debug(
+                        f"Adding blog '{key}' to author '{author}'"
+                    )
+                    self.blogs_authors[author].append(blog)
+                else:
+                    sphinx_diagnostics.warning(
+                        f"Blog '{key}' already exists in author's list: {author}"
+                    )
+        else:
+            sphinx_diagnostics.warning(
+                f"Blog '{key}' has no author specified"
+            )
 
     def remove_blog(self, blog: Blog) -> None:
         """Remove a blog from the list of blogs."""
@@ -139,7 +164,7 @@ class BlogHolder:
             raise
             
     def create_features_template(self, filename: str = "features_template.csv") -> None:
-        """Create a template features.csv file with all available blog titles."""
+        """Create a template featured-blogs.csv file with all available blog titles."""
         try:
             with open(filename, "w", newline='') as file:
                 writer = csv.writer(file)
@@ -159,7 +184,7 @@ class BlogHolder:
                 f"Successfully created features template at {filename}"
             )
             sphinx_diagnostics.info(
-                f"Edit this file to select which blogs to feature, then rename it to 'features.csv'"
+                f"Edit this file to select which blogs to feature, then rename it to 'featured-blogs.csv'"
             )
             
             return filename
@@ -170,7 +195,7 @@ class BlogHolder:
             )
             raise
             
-    def load_featured_blogs_from_csv(self, filename: str = "features.csv") -> list[Blog]:
+    def load_featured_blogs_from_csv(self, filename: str = "featured-blogs.csv") -> list[Blog]:
         """Load featured blog titles from a CSV file and return the corresponding blogs."""
         featured_blogs = []
         
@@ -318,7 +343,7 @@ class BlogHolder:
         
         sphinx_diagnostics.debug("Blogs sorted by date")
         return list(self.blogs.values())
-
+    
     def sort_blogs_by_category(self, categories) -> list[Blog]:
         """Sort the blogs by category."""
         

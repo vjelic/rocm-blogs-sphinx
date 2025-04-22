@@ -19,8 +19,11 @@ class ROCmBlogs:
         """Initialize the ROCmBlogs class."""
 
         self.blogs_directory = ""
+        self.sphinx_app = None
+        self.sphinx_env = None
         self.blogs = BlogHolder()
         self.blog_paths: list[str] = []
+        self.author_paths: list[str] = []
         self.categories = []
         self.tags = []
         self.yaml_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -130,6 +133,63 @@ class ROCmBlogs:
         )
 
         self.blog_paths = readme_files
+
+    def process_path(self, path: Path) -> str | None:
+        """Check if the path is a file and return the path if it is."""
+
+        if path.is_file():
+            return str(path.resolve())
+        return None
+
+    def find_author_files(self) -> None:
+
+        """Find all author files in the blogs directory."""
+
+        root = Path(self.blogs_directory)
+
+        sphinx_diagnostics.debug(
+            f"Current working directory: {os.getcwd()}"
+        )
+        sphinx_diagnostics.info(
+            f"Scanning {root} for author directory"
+        )
+
+        author_directory = root / "authors"
+        if not author_directory.exists():
+            sphinx_diagnostics.critical(
+                f"The directory '{author_directory}' does not exist."
+            )
+            raise FileNotFoundError(
+                f"The directory '{author_directory}' does not exist."
+            )
+        
+        candidates = list(author_directory.rglob("*.md"))
+        sphinx_diagnostics.debug(
+            f"Found {len(candidates)} candidate author files"
+        )
+
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(self.process_path, candidates))
+
+        author_files = [result for result in results if result is not None]
+
+        for author in author_files:
+            if not author.endswith(".md"):
+                sphinx_diagnostics.info(
+                    f"Found markdown file: {author}"
+                )
+
+        if not author_files:
+            sphinx_diagnostics.critical(
+                "No 'author.md' files found in the blogs directory"
+            )
+            raise FileNotFoundError("No 'author.md' files found.")
+
+        sphinx_diagnostics.info(
+            f"Found {len(author_files)} 'author.md' file(s)."
+        )
+
+        self.author_paths = author_files
 
     def find_blogs_directory(self, working_directory: str) -> Path:
         """Find the 'blogs' directory starting from the given working directory."""

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rocm-blogs-sphinx
-Version: 1.5.0
+Version: 1.7.0
 Summary: ROCm Blogs
 Author-email: Danny Guan <danny.guan@amd.com>
 Requires-Python: >=3.10

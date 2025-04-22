@@ -61,14 +61,7 @@ def setup_file_logging():
         return None
 
 def create_step_log_file(step_name):
-    """Create a log file for a specific build step.
-    
-    Args:
-        step_name: The name of the build step
-        
-    Returns:
-        A tuple containing the log file path and the file handle
-    """
+    """Create a log file for a specific build step."""
     try:
         # Create logs directory if it doesn't exist
         logs_dir = Path("logs")
@@ -223,6 +216,47 @@ def log_time(func):
             raise
     return wrapper
 
+def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
+    """Update author files with blog information."""
+
+    global _CRITICAL_ERROR_OCCURRED
+    phase_start_time = time.time()
+    phase_name = "update_author_files"
+
+    # find author files
+
+    rocm_blogs.find_author_files()
+    rocm_blogs.blogs.blogs_authors
+
+    sphinx_diagnostics.info(
+        f"Author files to be updated: {rocm_blogs.author_paths}"
+    )
+
+    sphinx_diagnostics.info(
+        f"Authors found: {rocm_blogs.blogs.blogs_authors}"
+    )
+
+    for author in rocm_blogs.blogs.blogs_authors:
+        sphinx_diagnostics.info(
+            f"Processing author: {author}"
+        )
+
+        first_name, last_name = author.split(" ", 1)
+
+        first_name = first_name.lower()
+        last_name = last_name.lower()
+
+        author_file_path = Path(rocm_blogs.blogs_directory) / f"authors/{first_name}_{last_name}.md"
+
+        if not author_file_path.exists():
+            sphinx_diagnostics.warning(
+                f"Author file not found: {author_file_path}"
+            )
+        else:
+            sphinx_diagnostics.info(
+                f"Updating author file: {author_file_path}"
+            )
+
 def update_index_file(sphinx_app: Sphinx) -> None:
     """Update the index file with new blog posts."""
     global _CRITICAL_ERROR_OCCURRED
@@ -287,6 +321,10 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         rocm_blogs.create_blog_objects()
 
         rocm_blogs.blogs.write_to_file()
+
+        rocm_blogs.find_author_files()
+
+        update_author_files(sphinx_app, rocm_blogs)
         
         if log_file_handle:
             log_file_handle.write(f"Created blog objects\n")
@@ -298,13 +336,12 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         if log_file_handle:
             log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
         
-        # Check for features.csv file
-        features_csv_path = Path(blogs_directory) / "features.csv"
+        features_csv_path = Path(blogs_directory) / "featured-blogs.csv"
         featured_blogs = []
         
         if features_csv_path.exists():
             if log_file_handle:
-                log_file_handle.write(f"Found features.csv file at {features_csv_path}\n")
+                log_file_handle.write(f"Found featured-blogs.csv file at {features_csv_path}\n")
                 
             featured_blogs = rocm_blogs.blogs.load_featured_blogs_from_csv(str(features_csv_path))
             
@@ -312,7 +349,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
                 log_file_handle.write(f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n")
         else:
             if log_file_handle:
-                log_file_handle.write(f"Features.csv file not found at {features_csv_path}, no featured blogs will be displayed\n")
+                log_file_handle.write(f"featured-blogs.csv file not found at {features_csv_path}, no featured blogs will be displayed\n")
         
         # Sort the blogs (this happens on all blogs before filtering)
         rocm_blogs.blogs.sort_blogs_by_date()
@@ -592,6 +629,9 @@ def blog_generation(sphinx_app: Sphinx) -> None:
         build_env = sphinx_app.builder.env
         source_dir = Path(build_env.srcdir)
         rocm_blogs = ROCmBlogs()
+
+        rocm_blogs.sphinx_app = sphinx_app
+        rocm_blogs.sphinx_env = build_env
         
         # Find and process blogs
         blogs_directory = rocm_blogs.find_blogs_directory(str(source_dir))
@@ -608,6 +648,8 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             raise ROCmBlogsError(error_message)
             
         rocm_blogs.blogs_directory = str(blogs_directory)
+
+        rocm_blogs.find_author_files()
         
         if log_file_handle:
             log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")

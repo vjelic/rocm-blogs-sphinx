@@ -387,7 +387,7 @@ myst:
 
                 try:
                     # Check if release date is already present in metadata
-                    amd_blog_releasedate = html_metadata.get("amd_blog_releasedate", "")
+                    amd_blog_releasedate = ""
                     
                     # If no release date exists, generate one from the blog's date
                     if not amd_blog_releasedate:
