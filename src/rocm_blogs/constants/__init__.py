@@ -45,6 +45,7 @@ html_meta:
 
 <style>
 {CSS}
+{BANNER_CSS}
 </style>
 {HTML}
 """
