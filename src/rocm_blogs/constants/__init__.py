@@ -31,6 +31,24 @@ MARKDOWN_PATTERNS = {
     'whitespace': re.compile(r"\s+")
 }
 
+AUTHOR_TEMPLATE = """
+
+<style>
+{author_css}
+</style>
+
+
+
+<div class="container">
+  <h2>Posts by {author}</h2>
+</div>
+
+::::{grid} 1 2 3 4
+:margin 2
+{author_blogs}
+::::
+"""
+
 # Template constants
 INDEX_TEMPLATE = """---
 title: ROCm Blogs
@@ -45,6 +63,7 @@ html_meta:
 
 <style>
 {CSS}
+{BANNER_CSS}
 </style>
 {HTML}
 """

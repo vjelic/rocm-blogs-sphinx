@@ -74,6 +74,15 @@ class Blog:
             date_str = date_str.replace(original, replacement)
             
         return date_str
+    
+    def grab_og_image(self) -> str:
+        return self.metadata.get("myst").get("html_meta").get("property=og:image", "https://rocm.blogs.amd.com/_images/generic.jpg")
+    
+    def grab_og_description(self) -> str:
+        return self.metadata.get("myst").get("html_meta").get("property=og:description", "No description available.")
+    
+    def grab_og_href(self) -> str:
+        return self.metadata.get("myst").get("html_meta").get("property=og:url", "https://rocm.blogs.amd.com/")
 
     def load_image_to_memory(self, image_path: str, format: str = "PNG") -> None:
         """Load an image into memory."""
@@ -149,6 +158,34 @@ class Blog:
     def grab_href(self) -> str:
         """Generate the HTML href for the blog."""
         return self.file_path.replace(".md", ".html").replace("\\", "/")
+    
+    def grab_authors_list(self) -> List[str]:
+        """Extract authors from the metadata."""
+        
+        sphinx_diagnostics.info(
+            f"Extracting authors from metadata: {self.file_path}"
+        )
+
+        sphinx_diagnostics.info(
+            f"Authors metadata: {self.author}"
+        )
+
+        if not self.author:
+            return []
+        
+        sphinx_diagnostics.info(
+            f"Author type: {type(self.author)}"
+        )
+            
+        # Ensure authors is a list
+        if isinstance(self.author, str):
+            authors = list(self.author.split(", "))
+
+        sphinx_diagnostics.info(
+            f"Authors after split: {authors}"
+        )
+            
+        return authors
 
     def grab_authors(self, authors_list: List[Union[str, List[str]]]) -> str:
         """Generate HTML links for authors, but only if their bio file exists."""
@@ -242,14 +279,15 @@ class Blog:
     def _generate_author_filename_variations(self, author: str) -> List[str]:
         """Generate possible filename variations for an author."""
         variations = [
-            author.replace(" ", "-").lower() + ".md",  # standard: "yu-wang.md"
-            author.lower().replace(" ", "-") + ".md",  # all lowercase: "yu-wang.md"
-            author.replace(" ", "").lower() + ".md",   # no spaces: "yuwang.md"
-            author.replace(" ", "_").lower() + ".md",  # underscores: "yu_wang.md"
-            author.replace("-", " ").replace(" ", "-").lower() + ".md",  # handle already hyphenated names
-            author.replace(" ", "-").title().replace(" ", "") + ".md",  # "YuWang.md"
-            author.replace(" ", "-") + ".md",  # preserve original case with hyphens
-            author + ".md",  # original name with .md
+            "-".join(author.split(" ")).lower() + ".md",
+            author.replace(" ", "-").lower() + ".md",
+            author.lower().replace(" ", "-") + ".md",
+            author.replace(" ", "").lower() + ".md",
+            author.replace(" ", "_").lower() + ".md",
+            author.replace("-", " ").replace(" ", "-").lower() + ".md",
+            author.replace(" ", "-").title().replace(" ", "").lower() + ".md",
+            author.replace(" ", "-").lower() + ".md",
+            author.lower() + ".md",
         ]
         
         # Remove duplicates and return

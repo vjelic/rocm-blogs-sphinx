@@ -7,6 +7,7 @@ from datetime import datetime
 import importlib.resources as pkg_resources
 import os
 import time
+import re
 import functools
 import traceback
 import logging
@@ -60,14 +61,7 @@ def setup_file_logging():
         return None
 
 def create_step_log_file(step_name):
-    """Create a log file for a specific build step.
-    
-    Args:
-        step_name: The name of the build step
-        
-    Returns:
-        A tuple containing the log file path and the file handle
-    """
+    """Create a log file for a specific build step."""
     try:
         # Create logs directory if it doesn't exist
         logs_dir = Path("logs")
@@ -111,45 +105,6 @@ _CRITICAL_ERROR_OCCURRED = False
 _BUILD_START_TIME = time.time()
 
 _BUILD_PHASES = {"setup": 0, "update_index": 0, "blog_generation": 0, "other": 0}
-
-def create_step_log_file(step_name):
-    """Create a log file for a specific build step.
-    
-    Args:
-        step_name: The name of the build step
-        
-    Returns:
-        A tuple containing the log file path and the file handle
-    """
-    try:
-        # Create logs directory if it doesn't exist
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
-        
-        # Create a log file for this step
-        log_filepath = logs_dir / f"{step_name}.log"
-        log_file_handle = open(log_filepath, "w", encoding="utf-8")
-        
-        # Write header to the log file
-        current_time = datetime.now()
-        log_file_handle.write(
-            f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
-        )
-        log_file_handle.write("=" * 80 + "\n\n")
-        
-        sphinx_diagnostics.info(
-            f"Detailed logs for {step_name} will be written to: {log_filepath}"
-        )
-        
-        return log_filepath, log_file_handle
-    except Exception as error:
-        sphinx_diagnostics.error(
-            f"Error creating log file for {step_name}: {error}"
-        )
-        sphinx_diagnostics.debug(
-            f"Traceback: {traceback.format_exc()}"
-        )
-        return None, None
 
 def log_total_build_time(sphinx_app, build_exception):
     """Log the total time taken for the entire build process."""
@@ -261,6 +216,115 @@ def log_time(func):
             raise
     return wrapper
 
+def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
+    """Update author files with blog information."""
+
+    global _CRITICAL_ERROR_OCCURRED
+    phase_start_time = time.time()
+    phase_name = "update_author_files"
+
+    # find author files
+
+    rocm_blogs.find_author_files()
+    rocm_blogs.blogs.blogs_authors
+
+    log_filepath, log_file_handle = create_step_log_file(phase_name)
+
+    if log_file_handle:
+            log_file_handle.write(f"Starting {phase_name} process\n")
+
+    for blog in rocm_blogs.blogs.get_blogs():
+        log_file_handle.write(f"Blog: {blog}\n")
+
+    sphinx_diagnostics.info(
+        f"Author files to be updated: {rocm_blogs.author_paths}"
+    )
+
+    sphinx_diagnostics.info(
+        f"Authors found: {rocm_blogs.blogs.blogs_authors}"
+    )
+
+    for author in rocm_blogs.blogs.blogs_authors:
+        sphinx_diagnostics.info(
+            f"Processing author: {author}"
+        )
+
+        name = "-".join(author.split(" ")).lower()
+
+        author_file_path = Path(rocm_blogs.blogs_directory) / f"authors/{name}.md"
+
+        if not author_file_path.exists():
+            sphinx_diagnostics.warning(
+                f"Author file not found: {author_file_path}"
+            )
+        else:
+            sphinx_diagnostics.info(
+                f"Updating author file: {author_file_path}"
+            )
+
+            with author_file_path.open("r", encoding="utf-8") as author_file:
+                author_content = author_file.read()
+
+            author_blogs = rocm_blogs.blogs.get_blogs_by_author(author)
+
+            author_blogs.sort(key=lambda x: x.date, reverse=True)
+
+            author_grid_items = _generate_grid_items(rocm_blogs, author_blogs, 999, [], False, True)
+
+            # copy all blog images to authors/images directory
+            for blog in author_blogs:
+                blog_images = blog.image_paths
+                for image in blog_images:
+                    image_path = Path(image)
+                    if image_path.exists():
+                        destination_path = Path(rocm_blogs.blogs_directory) / f"authors/images/{image}"
+                        destination_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy(image_path, destination_path)
+            try:
+                sphinx_diagnostics.info(
+                    f"Generating grid items for author: {author}"
+                )
+
+                author_css = import_file("rocm_blogs.static.css", "index.css")
+
+                author_content = author_content + "\n" + AUTHOR_TEMPLATE
+
+                updated_author_content = \
+                    author_content \
+                        .replace("{author_blogs}", "".join(author_grid_items)) \
+                        .replace("{author}", author) \
+                        .replace("{author_css}", author_css) \
+
+                if "{author_blogs}" in updated_author_content:
+                    sphinx_diagnostics.warning(
+                        f"Error: replacement failed for {author_file_path}"
+                    )
+                else:
+                    sphinx_diagnostics.info(
+                        f"Successfully updated author file: {author_file_path}"
+                    )
+            except Exception as error:
+                sphinx_diagnostics.error(
+                    f"Error processing author file: {error}"
+                )
+                sphinx_diagnostics.debug(
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                _CRITICAL_ERROR_OCCURRED = True
+                raise ROCmBlogsError(f"Error processing author file: {error}")
+
+            with author_file_path.open("w", encoding="utf-8") as author_file:
+                author_file.write(updated_author_content)
+
+                if author_content != updated_author_content:
+                    sphinx_diagnostics.info(
+                        f"Author file updated successfully: {author_file_path}"
+                    )
+                else:
+                    sphinx_diagnostics.warning(
+                        f"Author file content unchanged: {author_file_path}"
+                    )
+
 def update_index_file(sphinx_app: Sphinx) -> None:
     """Update the index file with new blog posts."""
     global _CRITICAL_ERROR_OCCURRED
@@ -324,6 +388,10 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         rocm_blogs.create_blog_objects()
 
         rocm_blogs.blogs.write_to_file()
+
+        rocm_blogs.find_author_files()
+
+        update_author_files(sphinx_app, rocm_blogs)
         
         if log_file_handle:
             log_file_handle.write(f"Created blog objects\n")
@@ -335,13 +403,12 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         if log_file_handle:
             log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
         
-        # Check for features.csv file
         features_csv_path = Path(blogs_directory) / "featured-blogs.csv"
         featured_blogs = []
         
         if features_csv_path.exists():
             if log_file_handle:
-                log_file_handle.write(f"Found features.csv file at {features_csv_path}\n")
+                log_file_handle.write(f"Found featured-blogs.csv file at {features_csv_path}\n")
                 
             featured_blogs = rocm_blogs.blogs.load_featured_blogs_from_csv(str(features_csv_path))
             
@@ -349,7 +416,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
                 log_file_handle.write(f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n")
         else:
             if log_file_handle:
-                log_file_handle.write(f"Features.csv file not found at {features_csv_path}, no featured blogs will be displayed\n")
+                log_file_handle.write(f"featured-blogs.csv file not found at {features_csv_path}, no featured blogs will be displayed\n")
         
         # Sort the blogs (this happens on all blogs before filtering)
         rocm_blogs.blogs.sort_blogs_by_date()
@@ -429,38 +496,19 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             log_file_handle.write("Generating grid items for index page sections\n")
 
         # Create a list of featured blog IDs to exclude them from the main grid
-
-        log_file_handle.write("Here are the featured blogs:\n")
-
-        for blog in featured_blogs:
-            log_file_handle.write(f"  - {getattr(blog, 'file_path', 'Unknown')}\n")
-
         featured_blog_ids = [id(blog) for blog in featured_blogs]
-
-        log_file_handle.write(f"Featured blog IDs: {featured_blog_ids}\n")
-        
-        if log_file_handle:
-            log_file_handle.write(f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n")
-            log_file_handle.write(f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n")
             
         # Filter out featured blogs from the main grid
         non_featured_blogs = [blog for blog in all_blogs if id(blog) not in featured_blog_ids]
-
-        main_grid_items = _generate_grid_items(rocm_blogs, non_featured_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs, True)
+        main_grid_items = _generate_grid_items(rocm_blogs, non_featured_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs, True, False)
         
         if log_file_handle:
             log_file_handle.write(f"Generated {len(main_grid_items)} main grid items\n")
         
         # Filter blogs by category and ensure they're all blog posts
-        ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners" and id(blog) not in featured_blog_ids]
-        application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models" and id(blog) not in featured_blog_ids]
-        software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations" and id(blog) not in featured_blog_ids]
-        
-        if log_file_handle:
-            log_file_handle.write(f"Filtered blogs by category:\n")
-            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n")
-            log_file_handle.write(f"  - Applications & models: {len(application_blogs)} blogs\n")
-            log_file_handle.write(f"  - Software tools & optimizations: {len(software_blogs)} blogs\n")
+        ecosystem_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners"]
+        application_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Applications & models"]
+        software_blogs = [blog for blog in all_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations"]
         
         if log_file_handle:
             log_file_handle.write(f"Filtered blogs by category:\n")
@@ -472,9 +520,9 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         if log_file_handle:
             log_file_handle.write(f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category\n")
             
-        ecosystem_grid_items = _generate_grid_items(rocm_blogs, ecosystem_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True)
-        application_grid_items = _generate_grid_items(rocm_blogs, application_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True)
-        software_grid_items = _generate_grid_items(rocm_blogs, software_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True)
+        ecosystem_grid_items = _generate_grid_items(rocm_blogs, ecosystem_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
+        application_grid_items = _generate_grid_items(rocm_blogs, application_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
+        software_grid_items = _generate_grid_items(rocm_blogs, software_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
         
         if log_file_handle:
             log_file_handle.write(f"Generated category grid items:\n")
@@ -491,46 +539,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             try:
                 # Only generate grid items if we have at least one featured blog
                 if len(featured_blogs) > 0:
-                    log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} blogs\n")
-                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, False)
-                    log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
-                else:
-                    log_file_handle.write("Featured blogs list is empty, skipping grid item generation\n")
-            except Exception as featured_error:
-                sphinx_diagnostics.warning(
-                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
-                )
-                sphinx_diagnostics.debug(
-                    f"Traceback: {traceback.format_exc()}"
-                )
-                
-                if log_file_handle:
-                    log_file_handle.write(f"WARNING: Error generating featured grid items: {featured_error}\n")
-                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
-                    log_file_handle.write("Continuing without featured blogs\n")
-        else:
-            if log_file_handle:
-                log_file_handle.write("No featured blogs to display\n")
-        
-        if log_file_handle:
-            log_file_handle.write(f"Generated category grid items:\n")
-            log_file_handle.write(f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n")
-            log_file_handle.write(f"  - Applications & models: {len(application_grid_items)} grid items\n")
-            log_file_handle.write(f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n")
-        
-        # Generate featured grid items if we have featured blogs
-        featured_grid_items = []
-        if featured_blogs:
-            if log_file_handle:
-                log_file_handle.write(f"Generating featured grid items with {len(featured_blogs)} featured blogs\n")
-                
-            try:
-                # Only generate grid items if we have at least one featured blog
-                if len(featured_blogs) > 0:
-                    # Generate grid items for featured blogs
-                    # Set skip_used=False to ensure all featured blogs are included
-                    # even if they've been used in other sections
-                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, skip_used=False)
+                    featured_grid_items = _generate_grid_items(rocm_blogs, featured_blogs, len(featured_blogs), used_blogs, False, False)
                     
                     if log_file_handle:
                         log_file_handle.write(f"Generated {len(featured_grid_items)} featured grid items\n")
@@ -660,6 +669,9 @@ def blog_generation(sphinx_app: Sphinx) -> None:
         build_env = sphinx_app.builder.env
         source_dir = Path(build_env.srcdir)
         rocm_blogs = ROCmBlogs()
+
+        rocm_blogs.sphinx_app = sphinx_app
+        rocm_blogs.sphinx_env = build_env
         
         # Find and process blogs
         blogs_directory = rocm_blogs.find_blogs_directory(str(source_dir))
@@ -676,6 +688,8 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             raise ROCmBlogsError(error_message)
             
         rocm_blogs.blogs_directory = str(blogs_directory)
+
+        rocm_blogs.find_author_files()
         
         if log_file_handle:
             log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
@@ -1428,9 +1442,9 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
     """Register event handlers for the ROCm Blogs extension."""
     try:
         # Register event handlers
+        sphinx_app.connect("builder-inited", run_metadata_generator)
         sphinx_app.connect("builder-inited", update_index_file)
         sphinx_app.connect("builder-inited", blog_generation)
-        sphinx_app.connect("builder-inited", run_metadata_generator)
         sphinx_app.connect("builder-inited", update_posts_file)
         sphinx_app.connect("builder-inited", update_category_pages)
         sphinx_app.connect("build-finished", log_total_build_time)

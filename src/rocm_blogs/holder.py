@@ -21,6 +21,7 @@ class BlogHolder:
 
         self.blogs: dict[str, Blog] = {}
         self.blogs_categories: dict[str, list[Blog]] = {}
+        self.blogs_authors: dict[str, list[Blog]] = {}
         self.blogs_featured: dict[str, list[Blog]] = {}
 
     def _make_key(self, blog: Blog) -> str:
@@ -76,9 +77,33 @@ class BlogHolder:
                 f"Blog with title '{key}' already exists."
             )
         self.blogs[key] = blog
-        sphinx_diagnostics.debug(
-            f"Added blog: '{key}'"
+        sphinx_diagnostics.info(
+            f"Added blog: '{blog}'"
         )
+        if hasattr(blog, "author"):
+            sphinx_diagnostics.debug(
+                f"Adding blog '{key}' to author '{blog.author}'"
+            )
+            for author in blog.grab_authors_list():
+                if author not in self.blogs_authors:
+                    self.blogs_authors[author] = []
+                    sphinx_diagnostics.debug(
+                        f"Initialized author list for: {author}, {self.blogs_authors}"
+                    )
+                # Append blog to the author's list
+                if blog not in self.blogs_authors[author]:
+                    sphinx_diagnostics.debug(
+                        f"Adding blog '{key}' to author '{author}'"
+                    )
+                    self.blogs_authors[author].append(blog)
+                else:
+                    sphinx_diagnostics.warning(
+                        f"Blog '{key}' already exists in author's list: {author}"
+                    )
+        else:
+            sphinx_diagnostics.warning(
+                f"Blog '{key}' has no author specified"
+            )
 
     def remove_blog(self, blog: Blog) -> None:
         """Remove a blog from the list of blogs."""
@@ -332,7 +357,7 @@ class BlogHolder:
         
         sphinx_diagnostics.debug("Blogs sorted by date")
         return list(self.blogs.values())
-
+    
     def sort_blogs_by_category(self, categories) -> list[Blog]:
         """Sort the blogs by category."""
         
@@ -428,6 +453,21 @@ class BlogHolder:
             f"No blog found with title: '{title}' (tried exact, case-insensitive, and normalized matching)"
         )
         return None
+    
+    def get_blogs_by_author(self, author: str) -> list[Blog]:
+        """Get blogs by author."""
+        
+        if author in self.blogs_authors:
+            blog_count = len(self.blogs_authors[author])
+            sphinx_diagnostics.debug(
+                f"Found {blog_count} blogs by author: {author}"
+            )
+            return self.blogs_authors[author]
+
+        sphinx_diagnostics.debug(
+            f"No blogs found by author: {author}"
+        )
+        return []
 
     def get_blogs_by_category(self, category: str) -> list[Blog]:
         """Get blogs by category."""

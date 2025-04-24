@@ -275,9 +275,12 @@ myst:
                         release_author = ";".join(extracted_metadata.get("author", "").split(","))
                         metadata_log_file_handle.write(f"Author: {extracted_metadata['author']}\n")
 
-                    if "thumbnail" not in extracted_metadata:
-                        extracted_metadata["thumbnail"] = ""
-                        extracted_metadata["og_image"] = ""
+                    if not extracted_metadata.get("thumbnail"):
+                        sphinx_diagnostics.info(
+                            f"Blog: {blog_filepath} does not have a thumbnail specified: {extracted_metadata}"
+                        )
+                        extracted_thumbnail = "generic.webp"
+                        og_image_extracted = "generic.webp"
                         sphinx_diagnostics.debug(
                             f"No thumbnail specified for blog: {blog_filepath}"
                         )
@@ -288,7 +291,8 @@ myst:
                         )
                         
                         # Store original thumbnail for og:image (non-webp)
-                        extracted_metadata["og_image"] = extracted_metadata["thumbnail"]
+                        extracted_og_image = extracted_metadata["thumbnail"]
+                        extracted_thumbnail = extracted_metadata["thumbnail"]
                         
                         # Convert thumbnail to webp for regular use
                         for f_format in SUPPORTED_FORMATS:
@@ -300,7 +304,7 @@ myst:
                             og_image_extracted = og_image_extracted.split(".")[0] + ".webp"
                         
                         metadata_log_file_handle.write(f"Thumbnail: {og_image_extracted}\n")
-                        metadata_log_file_handle.write(f"OG Image: {extracted_metadata['og_image']}\n")
+                        metadata_log_file_handle.write(f"OG Image: {extracted_og_image}\n")
 
                     if "date" not in extracted_metadata:
                         extracted_metadata["date"] = datetime.now().strftime("%d %B %Y")
@@ -342,24 +346,64 @@ myst:
                             f"Category: {extracted_metadata['category']}"
                         )
                         metadata_log_file_handle.write(f"Category: {extracted_metadata['category']}\n")
+
+                    metadata_log_file_handle.write(f"HTML Metadata: {json.dumps(html_metadata, indent=2)}\n")
                         
                     # Extract AMD-specific metadata fields with default values if missing
-                    amd_technical_blog_type = html_metadata.get("amd_technical_blog_type", "Applications and models")
+                    amd_technical_blog_type = html_metadata.get("amd_technical_blog_type", "Applications and Models")
+                    
+                    amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", "Instinct GPUs")
+                    
+                    amd_blog_deployment_tools = html_metadata.get("amd_blog_development_tools", "ROCm Software")
+                    
+                    amd_applications = html_metadata.get("amd_blog_applications", html_metadata.get("amd_applications", "AI & Intelligent Systems; Industry Applications & Use Cases"))
+                    
+                    amd_blog_category_topic = html_metadata.get("amd_blog_topic_categories", "AI & Intelligent Systems; Industry Applications & Use Cases")
+
+                    # any input with commas will cause errors
+                    weird_inputs_amd_blog_applications = ['Design, Simulation & Modeling']
+
+                    if any(weird_input in amd_applications for weird_input in weird_inputs_amd_blog_applications):
+                        # Replace commas with /%2c/ in the input string
+                        for weird_input in weird_inputs_amd_blog_applications:
+                            if weird_input in amd_applications:
+                                amd_applications = amd_applications.replace(weird_input, weird_input.replace(",", "/%2c/"))
+                                amd_applications = ";".join(amd_applications.split(","))
+                                amd_applications = amd_applications.replace("/%2c/", ",")
+                                metadata_log_file_handle.write(f"AMD Blog Applications: {amd_applications}\n")
+                                break
+                    else:
+                        amd_applications = ";".join(amd_applications.split(","))
+                        metadata_log_file_handle.write(f"AMD Blog Applications: {amd_applications}\n")
+
+                    amd_technical_blog_type = ";".join(amd_technical_blog_type.split(","))
                     metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
-                    
-                    amd_blog_hardware_platforms = html_metadata.get("amd_blog_hardware_platforms", 
-                                                                  html_metadata.get("amd_hardware_deployment", "Instinct GPUs"))
+
+                    amd_blog_hardware_platforms = ";".join(amd_blog_hardware_platforms.split(","))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
-                    
-                    amd_blog_deployment_tools = html_metadata.get("amd_blog_deployment_tools", 
-                                                                html_metadata.get("amd_software_deployment", "ROCm Software"))
+
+                    amd_blog_deployment_tools = ";".join(amd_blog_deployment_tools.split(","))
                     metadata_log_file_handle.write(f"AMD Blog Deployment Tools: {amd_blog_deployment_tools}\n")
-                    
-                    amd_applications = html_metadata.get("amd_applications", "AI Inference")
-                    metadata_log_file_handle.write(f"AMD Applications: {amd_applications}\n")
-                    
-                    amd_blog_category_topic = html_metadata.get("amd_blog_category_topic", "AI & Intelligent Systems, Industry Applications & Use Cases")
+
+                    amd_blog_category_topic = ";".join(amd_blog_category_topic.split(","))
                     metadata_log_file_handle.write(f"AMD Blog Category Topic: {amd_blog_category_topic}\n")
+
+                    release_author = ";".join(release_author.split(","))
+                    metadata_log_file_handle.write(f"Release Author: {release_author}\n")
+
+                except KeyError as key_error:
+                    error_message = f"KeyError: {key_error} in {blog_filepath}"
+                    sphinx_diagnostics.error(
+                        f"{error_message}"
+                    )
+                    sphinx_diagnostics.debug(
+                        f"Traceback: {traceback.format_exc()}"
+                    )
+                    metadata_log_file_handle.write(f"ERROR: {error_message}\n")
+                    metadata_log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    all_error_details.append({"blog": blog_filepath, "error": error_message})
+                    total_blogs_error += 1
+                    continue
                     
                 except Exception as default_field_exception:
                     error_message = f"Error setting default values for {blog_filepath}: {default_field_exception}"
@@ -386,7 +430,7 @@ myst:
 
                 try:
                     # Check if release date is already present in metadata
-                    amd_blog_releasedate = html_metadata.get("amd_blog_releasedate", "")
+                    amd_blog_releasedate = ""
                     
                     # If no release date exists, generate one from the blog's date
                     if not amd_blog_releasedate:
@@ -464,7 +508,7 @@ myst:
                         metadata_log_file_handle.write(f"Generated release date: {amd_blog_releasedate}\n")
 
                         # Handle the release date - first try to find it in the blog metadata
-                        release_date_str = html_metadata.get("amd_blog_releasedate", html_metadata.get("amd_release_date", ""))
+                        release_date_str = ""
 
                         valid_release_date = False
                         valid_release_date_format = "%Y/%m/%d@%H:%M:%S"
@@ -528,7 +572,7 @@ myst:
                     try:
                         relative_blog_path = os.path.relpath(blog_filepath, rocm_blogs_instance.blogs_directory)
                         blog_directory = os.path.dirname(relative_blog_path)
-                        generated_blog_url = f"/{blog_directory}"
+                        generated_blog_url = f"/{blog_directory}/README.html"
                         sphinx_diagnostics.debug(
                             f"Generated blog URL: {generated_blog_url}"
                         )
@@ -570,7 +614,7 @@ myst:
                         blog_title=extracted_metadata["blog_title"],
                         date=extracted_metadata["date"],
                         author=extracted_metadata["author"],
-                        thumbnail=extracted_metadata['thumbnail'],
+                        thumbnail=extracted_thumbnail,
                         og_image=og_image_extracted,
                         tags=extracted_metadata.get("tags", ""),
                         category=extracted_metadata.get("category", "ROCm Blog"),
@@ -587,6 +631,9 @@ myst:
                     )
                     sphinx_diagnostics.debug(
                         f"Generated metadata content for {blog_filepath}"
+                    )
+                    metadata_log_file_handle.write(
+                        f"Generated metadata content: {formatted_metadata_content}\n"
                     )
                     metadata_log_file_handle.write(
                         f"Successfully generated metadata content\n"

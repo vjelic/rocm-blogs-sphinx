@@ -2,8 +2,6 @@ from datetime import datetime
 from numpy import remainder as rem
 
 import importlib.resources as pkg_resources
-import os
-import time
 import traceback
 
 from pathlib import Path
@@ -11,13 +9,10 @@ from pathlib import Path
 from sphinx.util import logging as sphinx_logging
 from sphinx.errors import SphinxError
 
-from ._rocmblogs import ROCmBlogs
-from .constants import (
-    AVERAGE_READING_SPEED_WPM, SPECIAL_CHARS_PATTERN, WHITESPACE_PATTERN_FOR_SLUGS,
-    MARKDOWN_PATTERNS
-)
+from ._rocmblogs import *
+from .constants import *
 
-logger = sphinx_logging.getLogger(__name__)
+sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
 class ROCmBlogsError(SphinxError):
     """Custom exception class for ROCm Blogs errors."""
@@ -25,12 +20,16 @@ class ROCmBlogsError(SphinxError):
     category = "ROCm Blogs Error"
 
 def import_file(package: str, resource: str) -> str:
-    """Important file imports aspart of the pypi package."""
+    """Important file imports as part of the pypi package."""
     try:
-        return pkg_resources.read_text(package, resource)
+        sphinx_diagnostics.debug(f"Importing file {resource} from package {package}")
+        content = pkg_resources.read_text(package, resource)
+        if not content:
+            sphinx_diagnostics.warning(f"Imported file {resource} from package {package} is empty")
+        return content
     except Exception as error:
-        logger.error(f"Error importing file {resource} from package {package}: {error}")
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        sphinx_diagnostics.error(f"Error importing file {resource} from package {package}: {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
         raise ROCmBlogsError(f"Error importing file {resource} from package {package}: {error}") from error
     
 def truncate_string(input_string: str) -> str:
@@ -45,8 +44,8 @@ def truncate_string(input_string: str) -> str:
         
         return slug
     except Exception as error:
-        logger.error(f"Error truncating string '{input_string}': {error}")
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        sphinx_diagnostics.error(f"Error truncating string '{input_string}': {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
         # Return a safe default value - the original string or empty string
         return input_string if input_string else ""
     
@@ -58,8 +57,8 @@ def calculate_read_time(words: int) -> int:
         
         return round(words / AVERAGE_READING_SPEED_WPM)
     except Exception as error:
-        logger.error(f"Error calculating read time: {error}")
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        sphinx_diagnostics.error(f"Error calculating read time: {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
         return 0
     
 def is_leap_year(year: int) -> bool:
@@ -106,6 +105,6 @@ def count_words_in_markdown(content: str) -> int:
         return len(words)
         
     except Exception as error:
-        logger.warning(f"Error counting words in markdown: {error}")
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        sphinx_diagnostics.warning(f"Error counting words in markdown: {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
         return 0
