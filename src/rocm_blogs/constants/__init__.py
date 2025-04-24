@@ -63,7 +63,6 @@ html_meta:
 
 <style>
 {CSS}
-{BANNER_CSS}
 </style>
 {HTML}
 """
@@ -109,7 +108,6 @@ html_meta:
 """
 
 # Blog count constants
-BANNER_BLOGS_COUNT = 5
 MAIN_GRID_BLOGS_COUNT = 4
 CATEGORY_GRID_BLOGS_COUNT = 4
 CATEGORY_BLOGS_PER_PAGE = 12
@@ -119,7 +117,6 @@ POST_BLOGS_PER_PAGE = 12
 SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
 PROBLEMATIC_IMAGES = {"2024-10-03-image_classification.jpg", "2024-10-10-seismic.jpeg"}
 CONTENT_MAX_DIMENSIONS = (1280, 720)
-BANNER_DIMENSIONS = (1280, 420)
 MIN_SIZE_REDUCTION_PCT = 5.0
 
 # Image format-specific optimization settings
