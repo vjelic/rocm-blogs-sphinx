@@ -407,6 +407,9 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             first_blog = sorted_blogs[-1] if sorted_blogs else None
 
             author_link = "https://rocm.blogs.amd.com/authors/{author}.html"
+
+            if author == "No Author":
+                author = "ROCm Blogs Team"
             
             # Create author statistics
             author_stat = {
