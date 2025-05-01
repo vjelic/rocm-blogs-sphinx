@@ -448,9 +448,9 @@ window.matchMedia('(prefers-color-scheme: dark)')
     const authorSort = document.getElementById('authorSort');
     
     function filterAndSortAuthors() {
-      const searchTerm = authorSearch.value.toLowerCase();
-      const sortOption = authorSort.value;
-      const rows = Array.from(authorsTable.querySelectorAll('tbody tr'));
+        const searchTerm = authorSearch.value.toLowerCase();
+        const sortOption = authorSort.value;
+        const rows = Array.from(authorsTable.querySelectorAll('tbody tr'));
 
         rows.forEach(row => {
             const authorName = row.querySelector('td:first-child').textContent.toLowerCase();
