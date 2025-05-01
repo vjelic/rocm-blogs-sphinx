@@ -10,7 +10,7 @@ import time
 import re
 import functools
 import traceback
-import patlib
+import pathlib
 import logging
 
 from concurrent.futures import ThreadPoolExecutor
