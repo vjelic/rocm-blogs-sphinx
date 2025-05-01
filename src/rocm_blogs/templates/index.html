@@ -1,242 +1,231 @@
-
-
-<!-- Preconnect to external domains -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<!-- Preload critical resources -->
 <link rel="preload" href="/_static/css/theme.css" as="style">
 <link rel="preload" href="/_static/css/index.css" as="style">
 <link rel="preload" href="/_static/css/bootstrap.min.css" as="style">
 <link rel="preload" href="/_static/js/performance.js" as="script">
-
-<!-- Preload critical fonts -->
 <link rel="preload" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" as="style">
-
-<!-- Enable text compression with gzip -->
 <meta http-equiv="Accept-Encoding" content="gzip, deflate, br">
 
 <script>
-  // Performance monitoring
-  if (window.performance && window.performance.mark) {
-    window.performance.mark('index-start');
-  }
+    if (window.performance && window.performance.mark) {
+        window.performance.mark('index-start');
+    } 
 </script>
 
-<!-- Load the performance optimization script -->
 <script src="/_static/js/performance.js" defer></script>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     if (window.performance && window.performance.mark) {
-      window.performance.mark('dom-content-loaded');
-      window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
+        window.performance.mark('dom-content-loaded');
+        window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
     }
     
     const scheduleIdleTask = (callback) => {
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(callback, { timeout: 2000 });
-      } else {
-        setTimeout(callback, 1);
-      }
+        if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(callback, { timeout: 2000 });
+        } else {
+            setTimeout(callback, 1);
+        }
     };
     
     const scheduleAnimation = (callback) => {
-      return window.requestAnimationFrame(callback);
+        return window.requestAnimationFrame(callback);
     };
     
     function wrapImagesWithContainer() {
-      document.querySelectorAll('img[data-src]').forEach(img => {
-        
-        if (img.parentNode.classList.contains('image-container')) return;
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            
+            if (img.parentNode.classList.contains('image-container')) return;
 
-        const container = document.createElement('div');
-        container.className = 'image-container';
+            const container = document.createElement('div');
+            container.className = 'image-container';
 
-        const placeholder = document.createElement('div');
-        placeholder.className = 'image-placeholder';
+            const placeholder = document.createElement('div');
+            placeholder.className = 'image-placeholder';
 
-        img.parentNode.insertBefore(container, img);
-        container.appendChild(placeholder);
-        container.appendChild(img);
+            img.parentNode.insertBefore(container, img);
+            container.appendChild(placeholder);
+            container.appendChild(img);
 
-        const hash = img.dataset.src.split('').reduce((a, b) => {
-          a = ((a << 5) - a) + b.charCodeAt(0);
-          return a & a;
-        }, 0);
+            const hash = img.dataset.src.split('').reduce((a, b) => {
+                a = ((a << 5) - a) + b.charCodeAt(0);
+                return a & a;
+            }, 0);
 
-        const hue = Math.abs(hash % 360);
-        const saturation = 15 + Math.abs((hash >> 8) % 20);
-        const lightness = 85 + Math.abs((hash >> 16) % 10);
-        
-        placeholder.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-      });
+            const hue = Math.abs(hash % 360);
+            const saturation = 15 + Math.abs((hash >> 8) % 20);
+            const lightness = 85 + Math.abs((hash >> 16) % 10);
+            
+            placeholder.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        });
     }
     
     if ('IntersectionObserver' in window) {
-      const uniqueDomains = new Set();
-      document.querySelectorAll('img[data-src]').forEach(img => {
-        try {
-          const url = new URL(img.dataset.src);
-          uniqueDomains.add(url.origin);
-        } catch (error) {
-        }
-      });
-      
-      uniqueDomains.forEach(domain => {
-        const link = document.createElement('link');
-        link.rel = 'preconnect';
-        link.href = domain;
-        document.head.appendChild(link);
-      });
-
-      wrapImagesWithContainer();
-
-      const lazyImages = document.querySelectorAll('img[data-src]');
-      
-      // Preload images before they enter viewport
-      const preloadObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-
-            const imgUrl = img.dataset.src;
-            
-            if (window.performance && window.performance.mark) {
-              window.performance.mark(`image-preload-start-${imgUrl}`);
+        const uniqueDomains = new Set();
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            try {
+                const url = new URL(img.dataset.src);
+                uniqueDomains.add(url.origin);
+            } catch (error) {
             }
-
-            const preloader = new Image();
-            preloader.onload = function() {
-
-              img.dataset.preloaded = 'true';
-              
-              if (window.performance && window.performance.mark) {
-                window.performance.mark(`image-preload-end-${imgUrl}`);
-                window.performance.measure(
-                  `image-preload-time-${imgUrl}`,
-                  `image-preload-start-${imgUrl}`,
-                  `image-preload-end-${imgUrl}`
-                );
-              }
-            };
-            preloader.src = imgUrl;
-
-            observer.unobserve(img);
-          }
         });
-      }, {
-        rootMargin: '1500px 0px',
-        threshold: 0.01,
-      });
-
-      const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-            
-            if (window.performance && window.performance.mark) {
-              window.performance.mark(`image-display-start-${img.dataset.src}`);
-            }
-            
-            img.src = img.dataset.src;
-
-            setTimeout(() => {
-              img.classList.add('loaded');
-
-              const placeholder = img.previousElementSibling;
-              if (placeholder && placeholder.classList.contains('image-placeholder')) {
-                placeholder.classList.add('lqip-hidden');
-              }
-
-              if (window.performance && window.performance.mark) {
-                window.performance.mark(`image-display-end-${img.dataset.src}`);
-                window.performance.measure(
-                  `image-display-time-${img.dataset.src}`,
-                  `image-display-start-${img.dataset.src}`,
-                  `image-display-end-${img.dataset.src}`
-                );
-              }
-            
-              img.removeAttribute('data-src');
-              img.removeAttribute('data-preloaded');
-            }, 50);
-            
-            observer.unobserve(img);
-          }
+      
+        uniqueDomains.forEach(domain => {
+            const link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = domain;
+            document.head.appendChild(link);
         });
-      }, {
-        rootMargin: '300px 0px',
-        threshold: 0.01,
-      });
 
-      lazyImages.forEach(img => {
-        preloadObserver.observe(img);
-        imageObserver.observe(img);
-      });
-    } else {
-      scheduleIdleTask(() => {
         wrapImagesWithContainer();
-        
+
         const lazyImages = document.querySelectorAll('img[data-src]');
-        lazyImages.forEach(img => {
-          const placeholder = img.previousElementSibling;
-          
-          const tempImage = new Image();
-          tempImage.onload = function() {
-            img.src = img.dataset.src;
-            img.classList.add('loaded');
-            if (placeholder && placeholder.classList.contains('image-placeholder')) {
-              placeholder.classList.add('lqip-hidden');
+        
+        // Preload images before they enter viewport
+        const preloadObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+
+                const imgUrl = img.dataset.src;
+                
+                if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-preload-start-${imgUrl}`);
+                }
+
+                const preloader = new Image();
+                preloader.onload = function() {
+
+                img.dataset.preloaded = 'true';
+                
+                if (window.performance && window.performance.mark) {
+                    window.performance.mark(`image-preload-end-${imgUrl}`);
+                    window.performance.measure(
+                        `image-preload-time-${imgUrl}`,
+                        `image-preload-start-${imgUrl}`,
+                        `image-preload-end-${imgUrl}`
+                    );
+                }
+                };
+                preloader.src = imgUrl;
+
+                observer.unobserve(img);
             }
-            img.removeAttribute('data-src');
-          };
-          tempImage.src = img.dataset.src;
+            });
+        }, {
+            rootMargin: '1500px 0px',
+            threshold: 0.01,
         });
-      });
+
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                
+                if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-display-start-${img.dataset.src}`);
+                }
+                
+                img.src = img.dataset.src;
+
+                setTimeout(() => {
+                img.classList.add('loaded');
+
+                const placeholder = img.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('image-placeholder')) {
+                    placeholder.classList.add('lqip-hidden');
+                }
+
+                if (window.performance && window.performance.mark) {
+                    window.performance.mark(`image-display-end-${img.dataset.src}`);
+                    window.performance.measure(
+                        `image-display-time-${img.dataset.src}`,
+                        `image-display-start-${img.dataset.src}`,
+                        `image-display-end-${img.dataset.src}`
+                    );
+                }
+                
+                img.removeAttribute('data-src');
+                img.removeAttribute('data-preloaded');
+                }, 50);
+                
+                observer.unobserve(img);
+            }
+            });
+        }, {
+            rootMargin: '300px 0px',
+            threshold: 0.01,
+        });
+
+        lazyImages.forEach(img => {
+            preloadObserver.observe(img);
+            imageObserver.observe(img);
+        });
+        } else {
+        scheduleIdleTask(() => {
+            wrapImagesWithContainer();
+            
+            const lazyImages = document.querySelectorAll('img[data-src]');
+            lazyImages.forEach(img => {
+            const placeholder = img.previousElementSibling;
+            
+            const tempImage = new Image();
+            tempImage.onload = function() {
+                img.src = img.dataset.src;
+                img.classList.add('loaded');
+                if (placeholder && placeholder.classList.contains('image-placeholder')) {
+                    placeholder.classList.add('lqip-hidden');
+                }
+                img.removeAttribute('data-src');
+            };
+            tempImage.src = img.dataset.src;
+            });
+        });
     }
 
     scheduleAnimation(() => {
-      const gridItems = document.querySelectorAll('.sd-col');
-      gridItems.forEach((item, index) => {
-        item.style.animationDelay = `${index * 0.05}s`;
-      });
+        const gridItems = document.querySelectorAll('.sd-col');
+        gridItems.forEach((item, index) => {
+            item.style.animationDelay = `${index * 0.05}s`;
+        });
     });
 
     if (window.performance && window.performance.getEntriesByType) {
-      scheduleIdleTask(() => {
-        const perfEntries = performance.getEntriesByType('measure');
+        scheduleIdleTask(() => {
+            const perfEntries = performance.getEntriesByType('measure');
 
-        console.log('Performance metrics:', perfEntries);
+            console.log('Performance metrics:', perfEntries);
 
-        if (window.navigator.sendBeacon) {
-          try {
-            const metrics = JSON.stringify(perfEntries);
-            navigator.sendBeacon('/analytics', metrics);
-          } catch (error) {
-            console.error('Failed to send performance metrics', error);
-          }
+            if (window.navigator.sendBeacon) {
+                try {
+                    const metrics = JSON.stringify(perfEntries);
+                    navigator.sendBeacon('/analytics', metrics);
+                } catch (error) {
+                    console.error('Failed to send performance metrics', error);
+                }
+            }
+        });
+    }
+  });
+
+    window.addEventListener('scroll', function() {
+    }, { passive: true });
+
+    window.addEventListener('load', function() {
+        if (window.performance && window.performance.mark) {
+            window.performance.mark('posts-fully-loaded');
+            window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
+
+            const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
+            console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
         }
-      });
-    }
-  });
-
-  window.addEventListener('scroll', function() {
-  }, { passive: true });
-
-  window.addEventListener('load', function() {
-    if (window.performance && window.performance.mark) {
-      window.performance.mark('posts-fully-loaded');
-      window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
-
-      const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
-      console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
-    }
-  });
+    });
 </script>
 
 <div class="container">
-  <h2>Featured Posts</h2>
+<h2>Featured Posts</h2>
 </div>
 
 ::::{grid} 1 2 3 4
@@ -245,12 +234,12 @@
 ::::
 
 <div class="container">
-  <h2>Recent Posts</h2>
-  <a href="posts.html">
-    <button id="buttonWrapper">
-      See All
-    </button>
-  </a>
+    <h2>Recent Posts</h2>
+    <a href="posts.html">
+        <button id="buttonWrapper">
+            See All
+        </button>
+    </a>
 </div>
 
 ::::{grid} 1 2 3 4
@@ -259,12 +248,12 @@
 ::::
 
 <div class="container">
-  <h2>Ecosystems and partners</h2>
-  <a href="ecosystem-partners.html">
-    <button id="buttonWrapper">
-      See All
-    </button>
-  </a>
+    <h2>Ecosystems and partners</h2>
+    <a href="ecosystem-partners.html">
+        <button id="buttonWrapper">
+            See All
+        </button>
+    </a>
 </div>
 
 ::::{grid} 1 2 3 4
@@ -273,12 +262,12 @@
 ::::
 
 <div class="container">
-  <h2>Applications & models</h2>
-  <a href="applications-models.html">
-    <button id="buttonWrapper">
-      See All
-    </button>
-  </a>
+    <h2>Applications & models</h2>
+    <a href="applications-models.html">
+        <button id="buttonWrapper">
+            See All
+        </button>
+    </a>
 </div>
 
 ::::{grid} 1 2 3 4
@@ -287,12 +276,12 @@
 ::::
 
 <div class="container">
-  <h2>Software tools & optimizations</h2>
-  <a href="software-tools.html">
-    <button id="buttonWrapper">
-      See All
-    </button>
-  </a>
+    <h2>Software tools & optimizations</h2>
+    <a href="software-tools.html">
+        <button id="buttonWrapper">
+            See All
+        </button>
+    </a>
 </div>
 
 ::::{grid} 1 2 3 4
@@ -302,6 +291,7 @@
 
 <h2> Stay informed</h2>
 <ul>
-  <li><a href="blog/atom.xml"> Subscribe to our <i class="fa fa-rss fa-rotate-270"></i> RSS feed</a> (Requires an RSS reader available as browser plugins.) </li>
-  <li><a href="https://www.amd.com/en/forms/sign-up/developer-news.html?temp_comments=ROCm%20Software"> Signup for the ROCm newsletter </a></li>
+    <li><a href="blog/atom.xml"> Subscribe to our <i class="fa fa-rss fa-rotate-270"></i> RSS feed</a> (Requires an RSS reader available as browser plugins.) </li>
+    <li><a href="https://www.amd.com/en/forms/sign-up/developer-news.html?temp_comments=ROCm%20Software"> Signup for the ROCm newsletter </a></li>
+    <li><a href="blog_statistics.html"> View our blog statistics </a></li>
 </ul>

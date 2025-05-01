@@ -1,0 +1,448 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --card-bg-light: white;
+  --card-bg-dark: #1e1e1e;
+  --text-color-light: #333;
+  --text-color-dark: #e0e0e0;
+  --shadow-light: rgba(0, 0, 0, 0.08);
+  --shadow-dark: rgba(0, 0, 0, 0.3);
+  --hover-shadow-light: rgba(0, 0, 0, 0.12);
+  --hover-shadow-dark: rgba(0, 0, 0, 0.5);
+  --paragraph-color-light: #555;
+  --paragraph-color-dark: #b0b0b0;
+  --link-hover-light: #c1c1c1;
+  --link-hover-dark: #c1c1c1;
+  --border-color-light: rgba(0, 0, 0, 0.05);
+  --border-color-dark: rgba(255, 255, 255, 0.05);
+  --primary-color: white;
+  --chart-height: 400px;
+  --scrollbar-thumb-light: #c1c1c1;
+  --scrollbar-thumb-dark: #555;
+  --scrollbar-track-light: #f1f1f1;
+  --scrollbar-track-dark: #2d2d2d;
+}
+
+/* Container styles */
+.statistics-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  contain: layout style;
+}
+
+/* Header styles */
+.statistics-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.statistics-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-color-light);
+  margin-bottom: 1rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.statistics-description {
+  font-size: 1.2rem;
+  color: var(--paragraph-color-light);
+  max-width: 800px;
+  margin: 0 auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Section styles */
+.statistics-section {
+  margin-bottom: 2rem;
+  background-color: var(--card-bg-light);
+  border-radius: 0;
+  box-shadow: 0 4px 12px var(--shadow-light);
+  padding: 2rem;
+  contain: layout style;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.statistics-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px var(--hover-shadow-light);
+}
+
+.statistics-section h2 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: hsl(0, 0%, 0%); /* Light text for dark background */
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--primary-color);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statistics-section h2::after {
+  content: "▼";
+  font-size: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.statistics-section.collapsed h2::after {
+  transform: rotate(-90deg);
+}
+
+.statistics-section-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  max-height: 2000px;
+}
+
+.statistics-section.collapsed .statistics-section-content {
+  max-height: 0;
+}
+
+/* Chart container styles */
+.chart-container {
+  height: var(--chart-height);
+  position: relative;
+  background-color: var(--card-bg-light);
+  margin-bottom: 1rem;
+  contain: layout;
+}
+
+/* Table styles */
+.table-container {
+  overflow-y: scroll; /* Changed from auto to scroll to always show scrollbar */
+  max-height: 600px;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-color-light);
+  /* Custom scrollbar styles */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-light) var(--scrollbar-track-light);
+}
+
+/* Webkit scrollbar styles */
+.table-container::-webkit-scrollbar {
+  width: 10px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-light);
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-light);
+  border-radius: 6px;
+  border: 2px solid var(--scrollbar-track-light);
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #a0a0a0;
+}
+
+.statistics-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 1rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.statistics-table th,
+.statistics-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.statistics-table th {
+  background-color: var(--card-bg-light);
+  font-weight: 600;
+  color: var(--text-color-light);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.statistics-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.statistics-table tbody tr:hover {
+  background-color: rgba(0, 123, 255, 0.05);
+}
+
+.statistics-table .author-name {
+  font-weight: 500;
+  color: black;
+}
+
+.statistics-table .author-name a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.statistics-table .author-name a:hover {
+  color: var(--link-hover-light);
+  text-decoration: underline;
+}
+
+.statistics-table .blog-count {
+  font-weight: 600;
+  color: var(--text-color-light);
+}
+
+.statistics-table .date {
+  color: var(--paragraph-color-light);
+}
+
+.statistics-table .date a {
+  color: var(--text-color-light);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.statistics-table .date a:hover {
+  color: var(--link-hover-light);
+  text-decoration: underline;
+}
+
+.date-text {
+  font-size: 0.9rem;
+  color: var(--paragraph-color-light);
+}
+
+/* Add webkit-clamp for blog titles in the table */
+.statistics-table .blog-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+  color: #007bff; /* Blue links */
+}
+
+/* Table filter controls */
+.table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.table-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color-light);
+  border-radius: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--card-bg-light);
+  color: var(--text-color-light);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.table-search:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.table-sort {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color-light);
+  border-radius: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--card-bg-light);
+  color: var(--text-color-light);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.table-sort:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .statistics-header h1 {
+    font-size: 2rem;
+  }
+  
+  .statistics-description {
+    font-size: 1rem;
+  }
+  
+  .statistics-section h2 {
+    font-size: 1.5rem;
+  }
+  
+  .chart-container {
+    height: 300px;
+  }
+  
+  .statistics-table th,
+  .statistics-table td {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  .table-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 576px) {
+  .statistics-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .statistics-section {
+    padding: 1.5rem;
+  }
+  
+  .chart-container {
+    height: 250px;
+  }
+  
+  .statistics-table th,
+  .statistics-table td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Animation for chart loading */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chart-container canvas {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+/* Dark mode styles */
+html[data-theme="dark"] .statistics-header h1 {
+  color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .chart-container {
+  background-color: var(--card-bg-dark);
+}
+
+html[data-theme="dark"] .statistics-description {
+  color: var(--paragraph-color-dark);
+}
+
+html[data-theme="dark"] .statistics-section {
+  background-color: var(--card-bg-dark);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+}
+
+html[data-theme="dark"] .statistics-section:hover {
+  box-shadow: 0 8px 20px var(--hover-shadow-dark);
+}
+
+html[data-theme="dark"] .statistics-section h2 {
+  color: var(--text-color-dark);
+  border-bottom-color: var(--border-color-dark);
+}
+
+html[data-theme="dark"] .table-container {
+  border-color: var(--border-color-dark);
+  scrollbar-color: var(--scrollbar-thumb-dark) var(--scrollbar-track-dark);
+}
+
+html[data-theme="dark"] .table-container::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-dark);
+}
+
+html[data-theme="dark"] .table-container::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-dark);
+  border: 2px solid var(--scrollbar-track-dark);
+}
+
+html[data-theme="dark"] .table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #777;
+}
+
+html[data-theme="dark"] .statistics-table th {
+  background-color: var(--card-bg-dark);
+  color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .author-name {
+  color: var(--primary-color);
+}
+
+html[data-theme="dark"] .statistics-table td {
+  border-bottom-color: var(--border-color-dark);
+}
+
+html[data-theme="dark"] .statistics-table tbody tr:hover {
+  background-color: rgba(77, 159, 255, 0.05);
+}
+
+html[data-theme="dark"] .statistics-table .blog-count {
+  color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .statistics-table .date {
+  color: var(--paragraph-color-dark);
+}
+
+html[data-theme="dark"] .statistics-table .date a {
+  color: var(--text-color-dark);
+}
+
+html[data-theme="dark"] .statistics-table .date a:hover {
+  color: var(--link-hover-dark);
+}
+
+html[data-theme="dark"] .date-text {
+  color: var(--paragraph-color-dark);
+}
+
+html[data-theme="dark"] .table-search,
+html[data-theme="dark"] .table-sort {
+  background-color: var(--card-bg-dark);
+  color: var(--text-color-dark);
+  border-color: var(--border-color-dark);
+}
+
+html[data-theme="dark"] .table-search:focus,
+html[data-theme="dark"] .table-sort:focus {
+  border-color: var(--link-hover-dark);
+  box-shadow: 0 0 0 2px rgba(77, 159, 255, 0.25);
+}
+
+html[data-theme="dark"] .statistics-table .author-name a:hover {
+  color: var(--link-hover-dark);
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .statistics-section,
+  .statistics-section:hover,
+  .statistics-section h2::after,
+  .statistics-section-content,
+  .statistics-table tbody tr,
+  .statistics-table .author-name a,
+  .statistics-table .date a,
+  .table-search,
+  .table-sort,
+  .chart-container canvas {
+    transition: none !important;
+    animation: none !important;
+  }
+}

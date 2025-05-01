@@ -1,0 +1,517 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preload" href="/_static/css/theme.css" as="style">
+<link rel="preload" href="/_static/css/statistics.css" as="style">
+<link rel="preload" href="/_static/css/bootstrap.min.css" as="style">
+<link rel="preload" href="/_static/js/performance.js" as="script">
+<link rel="preload" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" as="style">
+<meta http-equiv="Accept-Encoding" content="gzip, deflate, br">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+    if (window.performance && window.performance.mark) {
+        window.performance.mark('statistics-start');
+    }
+
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(event) {
+        if (event.matches) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.body.classList.add('dark-mode');
+        } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.body.classList.remove('dark-mode');
+        }
+
+        updateChartsForTheme();
+        });
+    }
+  
+    function isDarkMode() {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+}
+
+function updateThemeStyles() {
+    const colors = getChartColors();
+
+    document.querySelectorAll('.chart-container')
+            .forEach(c => c.style.backgroundColor = colors.background);
+
+    Object.values(Chart.instances).forEach(ch => ch.update());
+}
+
+updateThemeStyles();
+
+window.matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change', updateThemeStyles);
+</script>
+
+<script src="/_static/js/performance.js" defer></script>
+
+<div class="statistics-container">
+  <div class="statistics-header">
+    <p class="statistics-description">Explore the growth of ROCm blogs over time.</p>
+  </div>
+
+  <div class="statistics-section">
+    <h2>Blog Count</h2>
+    <div class="statistics-section-content">
+      <div class="chart-container">
+        <canvas id="blogsGrowthChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="statistics-section">
+    <h2>Monthly Blog Publication</h2>
+    <div class="statistics-section-content">
+      <div class="chart-container">
+        <canvas id="monthlyBlogsChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="statistics-section">
+    <h2>Blogs by Tag</h2>
+    <div class="statistics-section-content">
+      <div class="chart-container">
+        <canvas id="blogsByTagChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="statistics-section">
+    <h2>Top Authors</h2>
+    <div class="statistics-section-content">
+      <div class="table-controls">
+        <input type="text" id="authorSearch" class="table-search" placeholder="Search authors...">
+        <select id="authorSort" class="table-sort">
+          <option value="blog_count_desc">Blogs: High to Low</option>
+          <option value="blog_count_asc">Blogs: Low to High</option>
+          <option value="name_asc">Name: A to Z</option>
+          <option value="name_desc">Name: Z to A</option>
+        </select>
+      </div>
+      <div class="table-container">
+        <table class="statistics-table" id="authorsTable">
+          <thead>
+            <tr>
+              <th>Author</th>
+              <th>Number of Blogs</th>
+              <th>Latest Blog</th>
+              <th>First Blog</th>
+            </tr>
+          </thead>
+          <tbody>
+            {author_rows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="statistics-section">
+    <h2>Blogs by Category</h2>
+    <div class="statistics-section-content">
+      <div class="chart-container">
+        <canvas id="blogsByCategoryChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.performance && window.performance.mark) {
+            window.performance.mark('dom-content-loaded');
+            window.performance.measure('dom-processing', 'statistics-start', 'dom-content-loaded');
+        }
+
+    function getChartColors() {
+        const darkMode = isDarkMode();
+        return {
+            text: darkMode ? '#555' : '#555',
+            grid: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+            background: darkMode ? '#2d2d2d' : 'white',
+            tooltipBackground: darkMode ? 'rgba(50, 50, 50, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+            tooltipText: darkMode ? '#f8f9fa' : '#333333',
+            tooltipBorder: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+        };
+    }
+
+    const colors = getChartColors();
+
+    Chart.defaults.color = colors.text;
+    Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+
+    const defaultChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+            padding: {
+                top: 5,
+                right: 20,
+                bottom: 20,
+                left: 20
+            }
+        },
+        plugins: {
+            legend: {
+            position: 'top',
+            labels: {
+                color: colors.text,
+                font: {
+                    family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                },
+                padding: 5
+            }
+        },
+        title: {
+            color: colors.text,
+            font: {
+                family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+            },
+            padding: {
+                top: 5,
+                bottom: 10
+            }
+        },
+        tooltip: {
+            backgroundColor: colors.tooltipBackground,
+            titleColor: colors.tooltipText,
+            bodyColor: colors.tooltipText,
+            borderColor: colors.tooltipBorder,
+            cornerRadius: 0,
+            titleFont: {
+                family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+            },
+            bodyFont: {
+                family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+            }
+        }
+    },
+    scales: {
+        x: {
+            grid: {
+                color: colors.grid
+            },
+            ticks: {
+                color: colors.text,
+                font: {
+                    family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                },
+                padding: 5
+            },
+            title: {
+                display: true,
+                color: colors.text,
+                font: {
+                    family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                },
+                padding: {
+                    top: 5
+                }
+            }
+        },
+        y: {
+            grid: {
+                color: colors.grid
+            },
+            ticks: {
+                color: colors.text,
+                font: {
+                    family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                },
+                padding: 5
+            },
+            title: {
+                display: true,
+                color: colors.text,
+                font: {
+                    family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                },
+                padding: {
+                    top: 5
+                }
+            }
+        }
+    },
+        elements: {
+            point: {
+                radius: 4,
+                hoverRadius: 6
+            },
+            line: {
+                tension: 0.4
+            }
+        }
+    };
+
+    const statisticsData = {statistics_data};
+    const growthCtx = document.getElementById('blogsGrowthChart').getContext('2d');
+    const growthChart = new Chart(growthCtx, {
+        type: 'line',
+        data: {
+            labels: statisticsData.monthly.labels,
+            datasets: [{
+            label: 'Total Blogs',
+            data: statisticsData.monthly.data.map((_, index) => {
+                // Calculate cumulative sum up to this point
+                return statisticsData.monthly.data.slice(0, index + 1).reduce((sum, val) => sum + val, 0);
+            }),
+            borderColor: '#007bff',
+            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4
+            }]
+        },
+        options: {
+            ...defaultChartOptions,
+            scales: {
+                ...defaultChartOptions.scales,
+                y: {
+                    ...defaultChartOptions.scales.y,
+                    beginAtZero: true,
+                    title: {
+                        ...defaultChartOptions.scales.y.title,
+                        text: 'Number of Blogs'
+                    }
+                },
+                x: {
+                    ...defaultChartOptions.scales.x,
+                    title: {
+                        ...defaultChartOptions.scales.x.title,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+
+    const categoryCtx = document.getElementById('blogsByCategoryChart').getContext('2d');
+    const categoryChart = new Chart(categoryCtx, {
+        type: 'pie',
+        data: {
+            labels: statisticsData.categories.labels,
+            datasets: [{
+            data: statisticsData.categories.data,
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.7)',
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)',
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)',
+                'rgba(199, 199, 199, 0.7)'
+            ],
+            borderColor: [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)',
+                'rgba(255, 159, 64, 1)',
+                'rgba(199, 199, 199, 1)'
+            ],
+            borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 5,
+                    right: 20,
+                    bottom: 20,
+                    left: 20
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: colors.text,
+                        font: {
+                            family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                        },
+                        padding: 5
+                    }
+                },
+                tooltip: {
+                    backgroundColor: colors.tooltipBackground,
+                    titleColor: colors.tooltipText,
+                    bodyColor: colors.tooltipText,
+                    borderColor: colors.tooltipBorder,
+                    cornerRadius: 0,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+            }
+        }
+    });
+
+    const tagCtx = document.getElementById('blogsByTagChart').getContext('2d');
+    const tagChart = new Chart(tagCtx, {
+        type: 'bar',
+        data: {
+            labels: statisticsData.tags.labels,
+            datasets: [{
+                label: 'Number of Blogs',
+                data: statisticsData.tags.data,
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            ...defaultChartOptions,
+            indexAxis: 'x',
+            scales: {
+                ...defaultChartOptions.scales,
+                y: {
+                    ...defaultChartOptions.scales.y,
+                    beginAtZero: true,
+                    title: {
+                    ...defaultChartOptions.scales.y.title,
+                    text: 'Number of Blogs'
+                    }
+                },
+                x: {
+                    ...defaultChartOptions.scales.x,
+                    title: {
+                    ...defaultChartOptions.scales.x.title,
+                    text: 'Tag'
+                    }
+                }
+            }
+        }
+    });
+
+    const monthlyCtx = document.getElementById('monthlyBlogsChart').getContext('2d');
+    const monthlyChart = new Chart(monthlyCtx, {
+        type: 'bar',
+        data: {
+            labels: statisticsData.monthly.labels,
+            datasets: [{
+                label: 'Blogs Published',
+                data: statisticsData.monthly.data,
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            ...defaultChartOptions,
+            scales: {
+                ...defaultChartOptions.scales,
+                y: {
+                    ...defaultChartOptions.scales.y,
+                    beginAtZero: true,
+                    title: {
+                        ...defaultChartOptions.scales.y.title,
+                        text: 'Number of Blogs'
+                    }
+                },
+                x: {
+                    ...defaultChartOptions.scales.x,
+                    title: {
+                        ...defaultChartOptions.scales.x.title,
+                        text: 'Month'
+                    }
+                }
+            }
+        }
+    });
+
+    document.querySelectorAll('.statistics-section h2').forEach(header => {
+        header.addEventListener('click', function() {
+            const section = this.parentElement;
+            section.classList.toggle('collapsed');
+        });
+    });
+
+    const authorsTable = document.getElementById('authorsTable');
+    const authorSearch = document.getElementById('authorSearch');
+    const authorSort = document.getElementById('authorSort');
+    
+    function filterAndSortAuthors() {
+        const searchTerm = authorSearch.value.toLowerCase();
+        const sortOption = authorSort.value;
+        const rows = Array.from(authorsTable.querySelectorAll('tbody tr'));
+
+        rows.forEach(row => {
+            const authorName = row.querySelector('td:first-child').textContent.toLowerCase();
+            if (authorName.includes(searchTerm)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }); 
+
+      const visibleRows = rows.filter(row => row.style.display !== 'none');
+      
+      switch (sortOption) {
+        case 'blog_count_desc':
+            visibleRows.sort((a, b) => {
+                const countA = parseInt(a.querySelector('td:nth-child(2)').textContent);
+                const countB = parseInt(b.querySelector('td:nth-child(2)').textContent);
+                return countB - countA;
+            });
+            break;
+        case 'blog_count_asc':
+            visibleRows.sort((a, b) => {
+                const countA = parseInt(a.querySelector('td:nth-child(2)').textContent);
+                const countB = parseInt(b.querySelector('td:nth-child(2)').textContent);
+                return countA - countB;
+            });
+            break;
+        case 'name_asc':
+            visibleRows.sort((a, b) => {
+                const nameA = a.querySelector('td:first-child').textContent;
+                const nameB = b.querySelector('td:first-child').textContent;
+                return nameA.localeCompare(nameB);
+            });
+            break;
+        case 'name_desc':
+            visibleRows.sort((a, b) => {
+                const nameA = a.querySelector('td:first-child').textContent;
+                const nameB = b.querySelector('td:first-child').textContent;
+                return nameB.localeCompare(nameA);
+            });
+            break;
+        }
+
+        const tbody = authorsTable.querySelector('tbody');
+        visibleRows.forEach(row => tbody.appendChild(row));
+    }
+    
+    authorSearch.addEventListener('input', filterAndSortAuthors);
+    authorSort.addEventListener('change', filterAndSortAuthors);
+    
+    document.querySelectorAll('.statistics-table td a').forEach(link => {
+        link.classList.add('blog-title');
+    });
+});
+
+window.addEventListener('load', function() {
+    if (window.performance && window.performance.mark) {
+        window.performance.mark('statistics-fully-loaded');
+        window.performance.measure('full-page-load', 'statistics-start', 'statistics-fully-loaded');
+
+        const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
+        console.log(`Statistics page fully loaded in ${loadTime.toFixed(2)}ms`);
+    }
+});
+</script>
