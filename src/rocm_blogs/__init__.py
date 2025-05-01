@@ -6,15 +6,15 @@ __init__.py for the rocm_blogs package.
 from datetime import datetime
 import importlib.resources as pkg_resources
 import os
+import pathlib
 import time
 import re
 import functools
 import traceback
-import pathlib
 import logging
-
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
 from sphinx.application import Sphinx
 from sphinx.util import logging as sphinx_logging
 from sphinx.errors import SphinxError
@@ -410,10 +410,18 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             if author == "No author":
                 author = "ROCm Blogs Team"
 
-            if pathlib.Path(rocm_blogs.blogs_directory) / f"authors/{author.replace(' ', '-')}.md":
-                author_link = f"https://rocm.blogs.amd.com/authors/{author.replace(' ', '-')}.html"
+            log_file_handle.write(f"Processing author: {author}\n")
+
+            # check if author has a page
+            if pathlib.Path.exists(Path(rocm_blogs.blogs_directory) / f"authors/{author.replace(' ', '-').lower()}.md"):
+                author_link = f"https://rocm.blogs.amd.com/authors/{author.replace(' ', '-').lower()}.html"
+            else:
+                author_link = "None"
+
+            log_file_handle.write(f"Author link: {author_link}\n")
             
             # Create author statistics
+
             author_stat = {
                 "name": {
                     "name": author,
@@ -431,6 +439,9 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                     "href": first_blog.grab_og_href() if first_blog else "#"
                 }
             }
+
+            if author_link == "None":
+                author_stat["name"]["href"] = ""
             
             author_stats.append(author_stat)
         
@@ -450,7 +461,11 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             first_blog = author_stat["first_blog"]
             
             # Create author name cell
-            author_cell = f'<td class="author"><a href="{author_name["href"]}">{author_name["name"]}</a></td>'
+
+            if author_name["href"]:
+                author_cell = f'<td class="author"><a href="{author_name["href"]}">{author_name["name"]}</a></td>'
+            else:
+                author_cell = f'<td class="author">{author_name["name"]}</td>'
             
             # Create blog count cell
             blog_count_cell = f'<td class="blog-count">{blog_count}</td>'
