@@ -21,6 +21,7 @@ from sphinx.errors import SphinxError
 from ._rocmblogs import ROCmBlogs
 from ._version import __version__
 from .metadata import *
+from .banner import *
 from .constants import *
 from .images import *
 from .utils import *
@@ -325,6 +326,353 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                         f"Author file content unchanged: {author_file_path}"
                     )
 
+def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
+    """Generate statistics page with blog author and category information."""
+    global _CRITICAL_ERROR_OCCURRED
+    phase_start_time = time.time()
+    phase_name = "blog_statistics"
+    
+    # Create a log file for this step
+    log_filepath, log_file_handle = create_step_log_file(phase_name)
+    
+    try:
+        if log_file_handle:
+            log_file_handle.write("Starting blog statistics generation process\n")
+            log_file_handle.write("-" * 80 + "\n\n")
+            
+        sphinx_diagnostics.info("Generating blog statistics page...")
+        
+        # Load templates and styles
+        blog_statistics_css = import_file("rocm_blogs.static.css", "blog_statistics.css")
+        blog_statistics_template = import_file("rocm_blogs.templates", "blog_statistics_template.html")
+        
+        if log_file_handle:
+            log_file_handle.write("Successfully loaded templates and styles\n")
+        
+        # Get all blogs
+        all_blogs = rocm_blogs.blogs.get_blogs()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Retrieved {len(all_blogs)} total blogs\n")
+        
+        # Filter blogs to only include real blog posts
+        filtered_blogs = []
+        skipped_count = 0
+        
+        for blog in all_blogs:
+            # Check if this is a genuine blog post (has the blogpost flag set to true)
+            if hasattr(blog, "blogpost") and blog.blogpost:
+                filtered_blogs.append(blog)
+                if log_file_handle:
+                    log_file_handle.write(f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n")
+            else:
+                skipped_count += 1
+                sphinx_diagnostics.debug(
+                    f"Skipping non-blog README file for statistics page: {getattr(blog, 'file_path', 'Unknown')}"
+                )
+                if log_file_handle:
+                    log_file_handle.write(f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n")
+        
+        sphinx_diagnostics.info(
+            f"Filtered out {skipped_count} non-blog README files for statistics page, kept {len(filtered_blogs)} genuine blog posts"
+        )
+        
+        if log_file_handle:
+            log_file_handle.write(f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n")
+        
+        # Replace all_blogs with filtered_blogs
+        all_blogs = filtered_blogs
+        
+        if not all_blogs:
+            warning_message = "No valid blogs found to generate statistics"
+            sphinx_diagnostics.warning(warning_message)
+            
+            if log_file_handle:
+                log_file_handle.write(f"WARNING: {warning_message}\n")
+            return
+        
+        # Generate author statistics
+        author_stats = []
+        
+        if log_file_handle:
+            log_file_handle.write("Generating author statistics\n")
+        
+        for author, blogs in rocm_blogs.blogs.blogs_authors.items():
+            # Include all authors, even those with no blogs
+            # Sort blogs by date
+            sorted_blogs = sorted(blogs, key=lambda b: b.date if b.date else datetime.min, reverse=True)
+            
+            # Get latest and first blog
+            latest_blog = sorted_blogs[0] if sorted_blogs else None
+            first_blog = sorted_blogs[-1] if sorted_blogs else None
+
+            author_link = "https://rocm.blogs.amd.com/authors/{author}.html"
+            
+            # Create author statistics
+            author_stat = {
+                "name": {
+                    "name": author,
+                    "href": author_link.format(author=author.replace(" ", "-").lower()),
+                },
+                "blog_count": len(blogs),
+                "latest_blog": {
+                    "title": latest_blog.blog_title if latest_blog else "N/A",
+                    "date": latest_blog.date.strftime("%B %d, %Y") if latest_blog and latest_blog.date else "N/A",
+                    "href": latest_blog.grab_og_href() if latest_blog else "#"
+                },
+                "first_blog": {
+                    "title": first_blog.blog_title if first_blog else "N/A",
+                    "date": first_blog.date.strftime("%B %d, %Y") if first_blog and first_blog.date else "N/A",
+                    "href": first_blog.grab_og_href() if first_blog else "#"
+                }
+            }
+            
+            author_stats.append(author_stat)
+        
+        # Sort authors by blog count (descending)
+        author_stats.sort(key=lambda x: x["blog_count"], reverse=True)
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated statistics for {len(author_stats)} authors\n")
+        
+        # Generate author table rows
+        author_rows = []
+        
+        for author_stat in author_stats:
+            author_name = author_stat["name"]
+            blog_count = author_stat["blog_count"]
+            latest_blog = author_stat["latest_blog"]
+            first_blog = author_stat["first_blog"]
+            
+            # Create author name cell
+            author_cell = f'<td class="author"><a href="{author_name["href"]}">{author_name["name"]}</a></td>'
+            
+            # Create blog count cell
+            blog_count_cell = f'<td class="blog-count">{blog_count}</td>'
+            
+            # Create latest blog cell with link (with blog-title class for webkit-clamp)
+            latest_blog_cell = f'<td class="date"><a href="{latest_blog["href"]}" class="blog-title">{latest_blog["title"]}</a><br><span class="date-text">{latest_blog["date"]}</span></td>'
+            
+            # Create first blog cell with link (with blog-title class for webkit-clamp)
+            first_blog_cell = f'<td class="date"><a href="{first_blog["href"]}" class="blog-title">{first_blog["title"]}</a><br><span class="date-text">{first_blog["date"]}</span></td>'
+            
+            # Combine cells into a row
+            row = f"<tr>{author_cell}{blog_count_cell}{latest_blog_cell}{first_blog_cell}</tr>"
+            author_rows.append(row)
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated {len(author_rows)} author table rows\n")
+        
+        # We'll use the monthly data for growth chart as well, so we don't need separate growth data generation
+        # The growth chart will calculate cumulative sums from the monthly data in JavaScript
+        
+        # Generate monthly blog data
+        if log_file_handle:
+            log_file_handle.write("Generating monthly blog data\n")
+        
+        # Count blogs by month
+        monthly_counts = {}
+        
+        for blog in all_blogs:
+            if hasattr(blog, "date") and blog.date:
+                month_key = blog.date.strftime("%Y-%m")
+                monthly_counts[month_key] = monthly_counts.get(month_key, 0) + 1
+        
+        # Get all months of data
+        sorted_months = sorted(monthly_counts.keys())
+        
+        # Format month labels
+        monthly_labels = [datetime.strptime(month, "%Y-%m").strftime("%b %Y") for month in sorted_months]
+        monthly_data = [monthly_counts[month] for month in sorted_months]
+        
+        monthly_blog_data = {"labels": monthly_labels, "data": monthly_data}
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n")
+        
+        # Generate category distribution data
+        if log_file_handle:
+            log_file_handle.write("Generating category distribution data\n")
+        
+        # Count blogs by category
+        category_counts = {}
+        
+        for blog in all_blogs:
+            if hasattr(blog, "category") and blog.category:
+                category = blog.category
+                category_counts[category] = category_counts.get(category, 0) + 1
+            else:
+                category_counts["Uncategorized"] = category_counts.get("Uncategorized", 0) + 1
+        
+        # Sort categories by count (descending)
+        sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # Combine small categories into "Other" if there are too many
+        if len(sorted_categories) > 6:
+            main_categories = sorted_categories[:5]
+            other_count = sum(count for _, count in sorted_categories[5:])
+            
+            category_labels = [category for category, _ in main_categories]
+            category_data = [count for _, count in main_categories]
+            
+            if other_count > 0:
+                category_labels.append("Other")
+                category_data.append(other_count)
+        else:
+            category_labels = [category for category, _ in sorted_categories]
+            category_data = [count for _, count in sorted_categories]
+        
+        category_distribution = {"labels": category_labels, "data": category_data}
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated category distribution data with {len(category_distribution['labels'])} categories\n")
+        
+        # Generate monthly blog data
+        if log_file_handle:
+            log_file_handle.write("Generating monthly blog data\n")
+        
+        # Count blogs by month
+        monthly_counts = {}
+        
+        for blog in all_blogs:
+            if hasattr(blog, "date") and blog.date:
+                month_key = blog.date.strftime("%Y-%m")
+                monthly_counts[month_key] = monthly_counts.get(month_key, 0) + 1
+        
+        # Get all months of data
+        sorted_months = sorted(monthly_counts.keys())
+        
+        # Format month labels
+        monthly_labels = [datetime.strptime(month, "%Y-%m").strftime("%b %Y") for month in sorted_months]
+        monthly_data = [monthly_counts[month] for month in sorted_months]
+        
+        monthly_blog_data = {"labels": monthly_labels, "data": monthly_data}
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n")
+        
+        # Generate tag distribution data
+        if log_file_handle:
+            log_file_handle.write("Generating tag distribution data\n")
+        
+        # Count blogs by tag
+        tag_counts = {}
+        
+        for blog in all_blogs:
+            if hasattr(blog, "tags") and blog.tags:
+                # Handle tags as a list or as a comma-separated string
+                if isinstance(blog.tags, list):
+                    tags = blog.tags
+                else:
+                    tags = [tag.strip() for tag in blog.tags.split(',')]
+                
+                for tag in tags:
+                    if tag:  # Skip empty tags
+                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        
+        # Sort tags by count (descending)
+        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # Combine small tags into "Other" if there are too many
+        if len(sorted_tags) > 15:
+            main_tags = sorted_tags[:15]
+            other_count = sum(count for _, count in sorted_tags[15:])
+            
+            tag_labels = [tag for tag, _ in main_tags]
+            tag_data = [count for _, count in main_tags]
+            
+            if other_count > 0:
+                tag_labels.append("Other")
+                tag_data.append(other_count)
+        else:
+            tag_labels = [tag for tag, _ in sorted_tags]
+            tag_data = [count for _, count in sorted_tags]
+        
+        tag_distribution = {"labels": tag_labels, "data": tag_data}
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated tag distribution data with {len(tag_distribution['labels'])} tags\n")
+        
+        # Combine all statistics data
+        statistics_data = {
+            "authors": author_stats,
+            "categories": category_distribution,
+            "monthly": monthly_blog_data,
+            "tags": tag_distribution
+        }
+        
+        # Replace placeholders in the template
+        if log_file_handle:
+            log_file_handle.write("Replacing placeholders in the template\n")
+        
+        updated_html = blog_statistics_template.replace("{author_rows}", "\n".join(author_rows))
+        updated_html = updated_html.replace("{statistics_data}", json.dumps(statistics_data))
+        
+        # Create the statistics page content
+        statistics_template = """---
+title: ROCm Blogs Statistics
+myst:
+  html_meta:
+    "description lang=en": "Statistics and analytics for AMD ROCm™ software blogs"
+    "keywords": "AMD GPU, MI300, MI250, ROCm, blog, statistics, analytics"
+    "property=og:locale": "en_US"
+---
+
+<style>
+{CSS}
+</style>
+{HTML}
+"""
+        
+        final_content = statistics_template.format(
+            CSS=blog_statistics_css,
+            HTML=updated_html
+        )
+        
+        # Write the statistics page
+        output_path = Path(rocm_blogs.blogs_directory) / "blog_statistics.md"
+        
+        if log_file_handle:
+            log_file_handle.write(f"Writing statistics page to {output_path}\n")
+        
+        with output_path.open("w", encoding="utf-8") as output_file:
+            output_file.write(final_content)
+        
+        # Record timing information
+        phase_duration = time.time() - phase_start_time
+        _BUILD_PHASES["blog_statistics"] = phase_duration
+        sphinx_diagnostics.info(
+            f"Successfully generated blog statistics page at {output_path} in \033[96m{phase_duration:.2f} seconds\033[0m"
+        )
+        
+        if log_file_handle:
+            log_file_handle.write(f"Successfully generated blog statistics page in {phase_duration:.2f} seconds\n")
+        
+    except Exception as stats_error:
+        error_message = f"Failed to generate blog statistics page: {stats_error}"
+        sphinx_diagnostics.error(error_message)
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        if log_file_handle:
+            log_file_handle.write(f"ERROR: {error_message}\n")
+            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            
+        _BUILD_PHASES["blog_statistics"] = time.time() - phase_start_time
+        _CRITICAL_ERROR_OCCURRED = True
+        raise ROCmBlogsError(error_message) from stats_error
+    finally:
+        # Write summary to log file
+        if log_file_handle:
+            end_time = time.time()
+            total_duration = end_time - phase_start_time
+            
+            log_file_handle.write("\n" + "=" * 80 + "\n")
+            log_file_handle.write("BLOG STATISTICS GENERATION SUMMARY\n")
+            log_file_handle.write("-" * 80 + "\n")
+            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            
+            log_file_handle.close()
+
 def update_index_file(sphinx_app: Sphinx) -> None:
     """Update the index file with new blog posts."""
     global _CRITICAL_ERROR_OCCURRED
@@ -350,13 +698,14 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         # Load templates and styles
         template_html = import_file("rocm_blogs.templates", "index.html")
         css_content = import_file("rocm_blogs.static.css", "index.css")
+        banner_css_content = import_file("rocm_blogs.static.css", "banner-slider.css")
 
         if log_file_handle:
             log_file_handle.write("Successfully loaded templates and styles\n")
 
         # Format the index template
         index_template = INDEX_TEMPLATE.format(
-            CSS=css_content, HTML=template_html
+            CSS=css_content, BANNER_CSS=banner_css_content, HTML=template_html
         )
         
         # Initialize ROCmBlogs and load blog data
@@ -392,6 +741,8 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         rocm_blogs.find_author_files()
 
         update_author_files(sphinx_app, rocm_blogs)
+
+        blog_statistics(sphinx_app, rocm_blogs)
         
         if log_file_handle:
             log_file_handle.write(f"Created blog objects\n")
@@ -486,6 +837,25 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         
         # Track blogs that have been used to avoid duplication
         used_blogs = []
+
+        if featured_blogs:
+            max_banner_blogs = min(len(featured_blogs), BANNER_BLOGS_COUNT)
+            banner_blogs = featured_blogs[:max_banner_blogs]
+        else:
+            banner_blogs = all_blogs[:BANNER_BLOGS_COUNT]
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generating banner slider with {len(banner_blogs)} blogs (using featured blogs: {bool(featured_blogs)})\n")
+            if featured_blogs:
+                log_file_handle.write(f"Using {len(banner_blogs)} featured blogs for banner slider (limited to BANNER_BLOGS_COUNT={BANNER_BLOGS_COUNT})\n")
+            else:
+                log_file_handle.write(f"No featured blogs found, using first {BANNER_BLOGS_COUNT} blogs for banner slider\n")
+            
+        # Generate banner slider content
+        banner_content = _generate_banner_slider(rocm_blogs, banner_blogs, used_blogs)
+        
+        if log_file_handle:
+            log_file_handle.write("Banner slider generation completed\n")
         
         # Generate grid items for different sections
         sphinx_diagnostics.info(
@@ -497,6 +867,11 @@ def update_index_file(sphinx_app: Sphinx) -> None:
 
         # Create a list of featured blog IDs to exclude them from the main grid
         featured_blog_ids = [id(blog) for blog in featured_blogs]
+        
+        # Main grid items - will exclude banner blogs and featured blogs
+        if log_file_handle:
+            log_file_handle.write(f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n")
+            log_file_handle.write(f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n")
             
         # Filter out featured blogs from the main grid
         non_featured_blogs = [blog for blog in all_blogs if id(blog) not in featured_blog_ids]
@@ -574,6 +949,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             .replace("{application_grid_items}", "\n".join(application_grid_items))
             .replace("{software_grid_items}", "\n".join(software_grid_items))
             .replace("{featured_grid_items}", "\n".join(featured_grid_items))
+            .replace("{banner_slider}", banner_content)
         )
         
         # Write the updated HTML to blogs/index.md
@@ -842,6 +1218,91 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             
             log_file_handle.close()
     
+def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
+    """ Generate banner slider content for the index page. """
+    try:
+        banner_start_time = time.time()
+        sphinx_diagnostics.info("Generating banner slider content")
+        
+        # Generate banner slides and navigation items directly without parameter checking
+        # The functions are already defined with the correct parameters
+        
+        banner_slides = []
+        banner_navigation = []
+        error_count = 0
+        
+        # Generate banner slides and navigation items
+        for i, blog in enumerate(banner_blogs):
+            try:
+                slide_html = generate_banner_slide(blog, rocmblogs, i, i == 0)
+                nav_html = generate_banner_navigation_item(blog, i, i == 0)
+                
+                if not slide_html or not slide_html.strip():
+                    sphinx_diagnostics.warning(f"Empty banner slide HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+                    error_count += 1
+                    continue
+                
+                if not nav_html or not nav_html.strip():
+                    sphinx_diagnostics.warning(f"Empty banner navigation HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+                    error_count += 1
+                    continue
+                
+                banner_slides.append(slide_html)
+                banner_navigation.append(nav_html)
+                # Add banner blogs to the used list to avoid duplication
+                used_blogs.append(blog)
+                sphinx_diagnostics.debug(f"Successfully generated banner slide for blog: {getattr(blog, 'blog_title', 'Unknown')}")
+            except Exception as blog_error:
+                error_count += 1
+                sphinx_diagnostics.error(f"Error generating banner slide for blog {getattr(blog, 'blog_title', 'Unknown')}: {blog_error}")
+                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        # Check if any slides were generated
+        if not banner_slides:
+            sphinx_diagnostics.critical("No banner slides were generated. Check for errors in the banner slide generation functions.")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            raise ROCmBlogsError("No banner slides were generated")
+        
+        # Load banner slider template
+        try:
+            banner_slider_template = import_file("rocm_blogs.templates", "banner-slider.html")
+            sphinx_diagnostics.debug("Successfully loaded banner slider template")
+        except Exception as template_error:
+            sphinx_diagnostics.critical(f"Failed to load banner slider template: {template_error}")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            return ""
+        
+        # Fill in the banner slider template
+        banner_html = (
+            banner_slider_template
+            .replace("{banner_slides}", "\n".join(banner_slides))
+            .replace("{banner_navigation}", "\n".join(banner_navigation))
+        )
+
+        banner_slider_content = f"""
+```{{raw}} html
+{banner_html}
+```
+"""
+        
+        banner_elapsed_time = time.time() - banner_start_time
+        
+        if error_count > 0:
+            sphinx_diagnostics.warning(f"Generated {len(banner_slides)} banner slides with {error_count} errors")
+            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        else:
+            sphinx_diagnostics.info(f"Successfully generated {len(banner_slides)} banner slides")
+            
+        sphinx_diagnostics.info(f"Banner slider generation completed in \033[96m{banner_elapsed_time:.4f} seconds\033[0m")
+        
+        return banner_slider_content
+    except ROCmBlogsError:
+        raise
+    except Exception as error:
+        sphinx_diagnostics.error(f"Error generating banner slider: {error}")
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        return ""
+
 def run_metadata_generator(sphinx_app: Sphinx) -> None:
     """Run the metadata generator during the build process."""
     global _CRITICAL_ERROR_OCCURRED

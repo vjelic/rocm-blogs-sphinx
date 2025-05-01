@@ -5,72 +5,72 @@
 <link rel="preload" href="/_static/css/bootstrap.min.css" as="style">
 
 <script>
-  if (window.performance && window.performance.mark) {
-    window.performance.mark('posts-start');
-  }
+    if (window.performance && window.performance.mark) {
+        window.performance.mark('posts-start');
+    }
 </script>
 
 <style>
-  #buttonWrapper {
-    will-change: transform;
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    transition: none !important;
-  }
+    #buttonWrapper {
+        will-change: transform;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        transition: none !important;
+    }
   
-  #buttonWrapper:hover {
-    transform: none !important;
-  }
+    #buttonWrapper:hover {
+        transform: none !important;
+    }
   
-  /* Add styles to prevent image flash */
-  .image-container {
-    background-color: #f0f0f0; /* Light gray placeholder */
-    overflow: hidden;
-    position: relative;
-    min-height: 200px; /* Minimum height for image containers */
-  }
-  
-  .small-sd-card-img-top {
-    transition: opacity 0.3s ease-in;
-    opacity: 0;
-  }
-  
-  .small-sd-card-img-top.loaded {
-    opacity: 1;
-  }
-  
-  /* LQIP (Low Quality Image Placeholder) styles */
-  .lqip-placeholder {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    filter: blur(10px);
-    transform: scale(1.05); /* Slightly larger to cover blur edges */
-    opacity: 1;
-    transition: opacity 0.3s ease-out;
-  }
-  
-  .lqip-hidden {
-    opacity: 0;
-  }
+    /* Add styles to prevent image flash */
+    .image-container {
+        background-color: #f0f0f0; /* Light gray placeholder */
+        overflow: hidden;
+        position: relative;
+        min-height: 200px; /* Minimum height for image containers */
+    }
+    
+    .small-sd-card-img-top {
+        transition: opacity 0.3s ease-in;
+        opacity: 0;
+    }
+    
+    .small-sd-card-img-top.loaded {
+        opacity: 1;
+    }
+    
+    /* LQIP (Low Quality Image Placeholder) styles */
+    .lqip-placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        filter: blur(10px);
+        transform: scale(1.05); /* Slightly larger to cover blur edges */
+        opacity: 1;
+        transition: opacity 0.3s ease-out;
+    }
+    
+    .lqip-hidden {
+        opacity: 0;
+    }
 
-  /* Add a pulse animation for the placeholder */
-  @keyframes pulse {
-    0% { background-color: #f0f0f0; }
-    50% { background-color: #e0e0e0; }
-    100% { background-color: #f0f0f0; }
-  }
-  
-  .image-placeholder {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    animation: pulse 2s infinite ease-in-out;
-  }
+    /* Add a pulse animation for the placeholder */
+    @keyframes pulse {
+        0% { background-color: #f0f0f0; }
+        50% { background-color: #e0e0e0; }
+        100% { background-color: #f0f0f0; }
+    }
+    
+    .image-placeholder {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        animation: pulse 2s infinite ease-in-out;
+    }
 </style>
 
 <p>Explore the latest blogs about applications and models in the ROCm ecosystem, including machine learning frameworks, AI models, and application case studies.</p>
@@ -81,217 +81,217 @@
 ::::
 
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    if (window.performance && window.performance.mark) {
-      window.performance.mark('dom-content-loaded');
-      window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
-    }
-    
-    const scheduleIdleTask = (callback) => {
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(callback, { timeout: 2000 });
-      } else {
-        setTimeout(callback, 1);
-      }
-    };
-    
-    const scheduleAnimation = (callback) => {
-      return window.requestAnimationFrame(callback);
-    };
-    
-    function wrapImagesWithContainer() {
-      document.querySelectorAll('img[data-src]').forEach(img => {
-        
-        if (img.parentNode.classList.contains('image-container')) return;
-
-        const container = document.createElement('div');
-        container.className = 'image-container';
-
-        const placeholder = document.createElement('div');
-        placeholder.className = 'image-placeholder';
-
-        img.parentNode.insertBefore(container, img);
-        container.appendChild(placeholder);
-        container.appendChild(img);
-
-        const hash = img.dataset.src.split('').reduce((a, b) => {
-          a = ((a << 5) - a) + b.charCodeAt(0);
-          return a & a;
-        }, 0);
-
-        const hue = Math.abs(hash % 360);
-        const saturation = 15 + Math.abs((hash >> 8) % 20);
-        const lightness = 85 + Math.abs((hash >> 16) % 10);
-        
-        placeholder.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-      });
-    }
-    
-    if ('IntersectionObserver' in window) {
-      const uniqueDomains = new Set();
-      document.querySelectorAll('img[data-src]').forEach(img => {
-        try {
-          const url = new URL(img.dataset.src);
-          uniqueDomains.add(url.origin);
-        } catch (error) {
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.performance && window.performance.mark) {
+        window.performance.mark('dom-content-loaded');
+        window.performance.measure('dom-processing', 'posts-start', 'dom-content-loaded');
         }
-      });
-      
-      uniqueDomains.forEach(domain => {
-        const link = document.createElement('link');
-        link.rel = 'preconnect';
-        link.href = domain;
-        document.head.appendChild(link);
-      });
-
-      wrapImagesWithContainer();
-
-      const lazyImages = document.querySelectorAll('img[data-src]');
-      
-      // Preload images before they enter viewport
-      const preloadObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-
-            const imgUrl = img.dataset.src;
-            
-            if (window.performance && window.performance.mark) {
-              window.performance.mark(`image-preload-start-${imgUrl}`);
-            }
-
-            const preloader = new Image();
-            preloader.onload = function() {
-
-              img.dataset.preloaded = 'true';
-              
-              if (window.performance && window.performance.mark) {
-                window.performance.mark(`image-preload-end-${imgUrl}`);
-                window.performance.measure(
-                  `image-preload-time-${imgUrl}`,
-                  `image-preload-start-${imgUrl}`,
-                  `image-preload-end-${imgUrl}`
-                );
-              }
-            };
-            preloader.src = imgUrl;
-
-            observer.unobserve(img);
-          }
-        });
-      }, {
-        rootMargin: '1500px 0px',
-        threshold: 0.01,
-      });
-
-      const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-            
-            if (window.performance && window.performance.mark) {
-              window.performance.mark(`image-display-start-${img.dataset.src}`);
-            }
-            
-            img.src = img.dataset.src;
-
-            setTimeout(() => {
-              img.classList.add('loaded');
-
-              const placeholder = img.previousElementSibling;
-              if (placeholder && placeholder.classList.contains('image-placeholder')) {
-                placeholder.classList.add('lqip-hidden');
-              }
-              
-              // Log performance
-              if (window.performance && window.performance.mark) {
-                window.performance.mark(`image-display-end-${img.dataset.src}`);
-                window.performance.measure(
-                  `image-display-time-${img.dataset.src}`,
-                  `image-display-start-${img.dataset.src}`,
-                  `image-display-end-${img.dataset.src}`
-                );
-              }
-              
-              // Cleanup
-              img.removeAttribute('data-src');
-              img.removeAttribute('data-preloaded');
-            }, 50);
-            
-            observer.unobserve(img);
-          }
-        });
-      }, {
-        rootMargin: '300px 0px', // Smaller margin for displaying
-        threshold: 0.01,
-      });
-
-      // Start observing with both observers
-      lazyImages.forEach(img => {
-        preloadObserver.observe(img);
-        imageObserver.observe(img);
-      });
-    } else {
-      // Fallback for browsers without IntersectionObserver
-      scheduleIdleTask(() => {
-        // First, wrap images with containers
-        wrapImagesWithContainer();
         
-        // Then load all images
-        const lazyImages = document.querySelectorAll('img[data-src]');
-        lazyImages.forEach(img => {
-          const placeholder = img.previousElementSibling;
-          
-          const tempImage = new Image();
-          tempImage.onload = function() {
-            img.src = img.dataset.src;
-            img.classList.add('loaded');
-            if (placeholder && placeholder.classList.contains('image-placeholder')) {
-              placeholder.classList.add('lqip-hidden');
-            }
-            img.removeAttribute('data-src');
-          };
-          tempImage.src = img.dataset.src;
-        });
-      });
-    }
+        const scheduleIdleTask = (callback) => {
+        if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(callback, { timeout: 2000 });
+        } else {
+            setTimeout(callback, 1);
+        }
+        };
+        
+        const scheduleAnimation = (callback) => {
+        return window.requestAnimationFrame(callback);
+        };
+        
+        function wrapImagesWithContainer() {
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            
+            if (img.parentNode.classList.contains('image-container')) return;
 
-    scheduleAnimation(() => {
-      const gridItems = document.querySelectorAll('.sd-col');
-      gridItems.forEach((item, index) => {
-        item.style.animationDelay = `${index * 0.05}s`;
-      });
+            const container = document.createElement('div');
+            container.className = 'image-container';
+
+            const placeholder = document.createElement('div');
+            placeholder.className = 'image-placeholder';
+
+            img.parentNode.insertBefore(container, img);
+            container.appendChild(placeholder);
+            container.appendChild(img);
+
+            const hash = img.dataset.src.split('').reduce((a, b) => {
+            a = ((a << 5) - a) + b.charCodeAt(0);
+            return a & a;
+            }, 0);
+
+            const hue = Math.abs(hash % 360);
+            const saturation = 15 + Math.abs((hash >> 8) % 20);
+            const lightness = 85 + Math.abs((hash >> 16) % 10);
+            
+            placeholder.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        });
+        }
+        
+        if ('IntersectionObserver' in window) {
+        const uniqueDomains = new Set();
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            try {
+            const url = new URL(img.dataset.src);
+            uniqueDomains.add(url.origin);
+            } catch (error) {
+            }
+        });
+        
+        uniqueDomains.forEach(domain => {
+            const link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = domain;
+            document.head.appendChild(link);
+        });
+
+        wrapImagesWithContainer();
+
+        const lazyImages = document.querySelectorAll('img[data-src]');
+        
+        // Preload images before they enter viewport
+        const preloadObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+
+                const imgUrl = img.dataset.src;
+                
+                if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-preload-start-${imgUrl}`);
+                }
+
+                const preloader = new Image();
+                preloader.onload = function() {
+
+                img.dataset.preloaded = 'true';
+                
+                if (window.performance && window.performance.mark) {
+                    window.performance.mark(`image-preload-end-${imgUrl}`);
+                    window.performance.measure(
+                    `image-preload-time-${imgUrl}`,
+                    `image-preload-start-${imgUrl}`,
+                    `image-preload-end-${imgUrl}`
+                    );
+                }
+                };
+                preloader.src = imgUrl;
+
+                observer.unobserve(img);
+            }
+            });
+        }, {
+            rootMargin: '1500px 0px',
+            threshold: 0.01,
+        });
+
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                
+                if (window.performance && window.performance.mark) {
+                window.performance.mark(`image-display-start-${img.dataset.src}`);
+                }
+                
+                img.src = img.dataset.src;
+
+                setTimeout(() => {
+                img.classList.add('loaded');
+
+                const placeholder = img.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('image-placeholder')) {
+                    placeholder.classList.add('lqip-hidden');
+                }
+                
+                // Log performance
+                if (window.performance && window.performance.mark) {
+                    window.performance.mark(`image-display-end-${img.dataset.src}`);
+                    window.performance.measure(
+                    `image-display-time-${img.dataset.src}`,
+                    `image-display-start-${img.dataset.src}`,
+                    `image-display-end-${img.dataset.src}`
+                    );
+                }
+                
+                // Cleanup
+                img.removeAttribute('data-src');
+                img.removeAttribute('data-preloaded');
+                }, 50);
+                
+                observer.unobserve(img);
+            }
+            });
+        }, {
+            rootMargin: '300px 0px', // Smaller margin for displaying
+            threshold: 0.01,
+        });
+
+        // Start observing with both observers
+        lazyImages.forEach(img => {
+            preloadObserver.observe(img);
+            imageObserver.observe(img);
+        });
+        } else {
+        // Fallback for browsers without IntersectionObserver
+        scheduleIdleTask(() => {
+            // First, wrap images with containers
+            wrapImagesWithContainer();
+            
+            // Then load all images
+            const lazyImages = document.querySelectorAll('img[data-src]');
+            lazyImages.forEach(img => {
+            const placeholder = img.previousElementSibling;
+            
+            const tempImage = new Image();
+            tempImage.onload = function() {
+                img.src = img.dataset.src;
+                img.classList.add('loaded');
+                if (placeholder && placeholder.classList.contains('image-placeholder')) {
+                placeholder.classList.add('lqip-hidden');
+                }
+                img.removeAttribute('data-src');
+            };
+            tempImage.src = img.dataset.src;
+            });
+        });
+        }
+
+        scheduleAnimation(() => {
+        const gridItems = document.querySelectorAll('.sd-col');
+        gridItems.forEach((item, index) => {
+            item.style.animationDelay = `${index * 0.05}s`;
+        });
+        });
+
+        if (window.performance && window.performance.getEntriesByType) {
+        scheduleIdleTask(() => {
+            const perfEntries = performance.getEntriesByType('measure');
+
+            console.log('Performance metrics:', perfEntries);
+
+            if (window.navigator.sendBeacon) {
+            try {
+                const metrics = JSON.stringify(perfEntries);
+                navigator.sendBeacon('/analytics', metrics);
+            } catch (error) {
+                console.error('Failed to send performance metrics', error);
+            }
+            }
+        });
+        }
     });
 
-    if (window.performance && window.performance.getEntriesByType) {
-      scheduleIdleTask(() => {
-        const perfEntries = performance.getEntriesByType('measure');
+    window.addEventListener('scroll', function() {
+        // Using passive:true improves scroll performance
+    }, { passive: true });
 
-        console.log('Performance metrics:', perfEntries);
+    window.addEventListener('load', function() {
+        if (window.performance && window.performance.mark) {
+        window.performance.mark('posts-fully-loaded');
+        window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
 
-        if (window.navigator.sendBeacon) {
-          try {
-            const metrics = JSON.stringify(perfEntries);
-            navigator.sendBeacon('/analytics', metrics);
-          } catch (error) {
-            console.error('Failed to send performance metrics', error);
-          }
+        const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
+        console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
         }
-      });
-    }
-  });
-
-  window.addEventListener('scroll', function() {
-    // Using passive:true improves scroll performance
-  }, { passive: true });
-
-  window.addEventListener('load', function() {
-    if (window.performance && window.performance.mark) {
-      window.performance.mark('posts-fully-loaded');
-      window.performance.measure('full-page-load', 'posts-start', 'posts-fully-loaded');
-
-      const loadTime = performance.getEntriesByName('full-page-load')[0].duration;
-      console.log(`Page fully loaded in ${loadTime.toFixed(2)}ms`);
-    }
-  });
+    });
 </script>

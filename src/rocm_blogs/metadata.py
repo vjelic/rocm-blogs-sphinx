@@ -362,6 +362,7 @@ myst:
 
                     # any input with commas will cause errors
                     weird_inputs_amd_blog_applications = ['Design, Simulation & Modeling']
+                    weird_inputs_technical_blog_type = ['Tools, Features, and Optimizations']
 
                     if any(weird_input in amd_applications for weird_input in weird_inputs_amd_blog_applications):
                         # Replace commas with /%2c/ in the input string
@@ -376,8 +377,15 @@ myst:
                         amd_applications = ";".join(amd_applications.split(","))
                         metadata_log_file_handle.write(f"AMD Blog Applications: {amd_applications}\n")
 
-                    amd_technical_blog_type = ";".join(amd_technical_blog_type.split(","))
-                    metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
+                    if any(weird_input in amd_technical_blog_type for weird_input in weird_inputs_technical_blog_type):
+                        # Replace commas with /%2c/ in the input string
+                        for weird_input in weird_inputs_technical_blog_type:
+                            if weird_input in amd_technical_blog_type:
+                                amd_technical_blog_type = amd_technical_blog_type.replace(weird_input, weird_input.replace(",", "/%2c/"))
+                                amd_technical_blog_type = ";".join(amd_technical_blog_type.split(","))
+                                amd_technical_blog_type = amd_technical_blog_type.replace("/%2c/", ",")
+                                metadata_log_file_handle.write(f"AMD Technical Blog Type: {amd_technical_blog_type}\n")
+                                break
 
                     amd_blog_hardware_platforms = ";".join(amd_blog_hardware_platforms.split(","))
                     metadata_log_file_handle.write(f"AMD Blog Hardware Platforms: {amd_blog_hardware_platforms}\n")
