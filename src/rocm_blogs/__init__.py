@@ -406,10 +406,11 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             latest_blog = sorted_blogs[0] if sorted_blogs else None
             first_blog = sorted_blogs[-1] if sorted_blogs else None
 
-            author_link = "https://rocm.blogs.amd.com/authors/{author}.html"
-
             if author == "No author":
                 author = "ROCm Blogs Team"
+
+            if pathlib.Path(rocm_blogs.blogs_directory) / f"authors/{author.replace(' ', '-')}.md":
+                author_link = f"https://rocm.blogs.amd.com/authors/{author.replace(' ', '-')}.html"
             
             # Create author statistics
             author_stat = {
@@ -620,6 +621,8 @@ myst:
     "keywords": "AMD GPU, MI300, MI250, ROCm, blog, statistics, analytics"
     "property=og:locale": "en_US"
 ---
+
+# ROCm Blogs Statistics Page
 
 <style>
 {CSS}
