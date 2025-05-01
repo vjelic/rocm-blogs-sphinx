@@ -638,7 +638,7 @@ myst:
     "property=og:locale": "en_US"
 ---
 
-# ROCm Blogs Statistics Page
+# ROCm Blogs Statistics
 
 <style>
 {CSS}
