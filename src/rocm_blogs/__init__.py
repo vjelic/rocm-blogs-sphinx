@@ -10,10 +10,11 @@ import time
 import re
 import functools
 import traceback
+import patlib
 import logging
+
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
 from sphinx.application import Sphinx
 from sphinx.util import logging as sphinx_logging
 from sphinx.errors import SphinxError
