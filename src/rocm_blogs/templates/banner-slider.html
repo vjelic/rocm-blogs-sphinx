@@ -7,7 +7,6 @@
 
 <link rel="preload" as="image" href="/_static/images/banner-placeholder.jpg">
   
-  <!-- Desktop version (displays above 600px) -->
 <div class="banner-slider__desktop">
     <div class="banner-slider__inner" id="bannerSliderInner">
         {banner_slides}
@@ -17,7 +16,6 @@
     </ul>
 </div>
   
-  <!-- Mobile version (displays below 600px) -->
 <div class="banner-slider__mobile" id="bannerSliderMobile">
     </div>
   
@@ -137,8 +135,8 @@
             dotsContainer.addEventListener('click', (e) => {
                 const dot = e.target.closest('.banner-slider__mobile-dot');
                 if (dot) {
-                const index = parseInt(dot.dataset.index);
-                goToMobileSlide(index);
+                    const index = parseInt(dot.dataset.index);
+                    goToMobileSlide(index);
                 }
             }, { passive: true });
             

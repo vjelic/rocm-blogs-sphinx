@@ -137,7 +137,7 @@
                 const metrics = JSON.stringify(perfEntries);
                 navigator.sendBeacon('/analytics', metrics);
             } catch (error) {
-                console.error('Failed to send performance metrics', e);
+                console.error('Failed to send performance metrics', error);
             }
             }
         });

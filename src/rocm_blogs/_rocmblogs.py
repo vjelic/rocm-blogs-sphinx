@@ -1,13 +1,12 @@
 import os
 import re
 import threading
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-
 import yaml
 from sphinx.util import logging as sphinx_logging
-
 from .blog import Blog
 from .holder import BlogHolder
 
@@ -28,6 +27,7 @@ class ROCmBlogs:
         self.tags = []
         self.yaml_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+    # performance improvement
     def find_readme_files_cache(self) -> None:
         """Cache the README files in the 'blogs' directory."""
         cache_file = Path("readme_files_cache.txt")
@@ -36,11 +36,9 @@ class ROCmBlogs:
             f"Current working directory: {os.getcwd()}"
         )
 
-        # Try to load the cached file paths if the cache file exists.
         if cache_file.exists():
             with cache_file.open("r", encoding="utf-8") as f:
                 cached_paths = [line.strip() for line in f if line.strip()]
-            # Verify that each cached file still exists.
             valid_paths = [path for path in cached_paths if Path(path).exists()]
             if valid_paths and len(valid_paths) == len(cached_paths):
                 sphinx_diagnostics.info(
@@ -63,7 +61,7 @@ class ROCmBlogs:
             f"Found {len(candidates)} candidate README.md files"
         )
 
-        # (Optional) Save out all candidates to a file for debugging purposes.
+        # (Optional)
         with open("candidates.txt", "w", encoding="utf-8") as f:
             for candidate in candidates:
                 f.write(str(candidate) + "\n")
@@ -71,7 +69,6 @@ class ROCmBlogs:
             f"Saved {len(candidates)} candidate paths to candidates.txt"
         )
 
-        # Use a list comprehension to process candidates.
         readme_files = [str(path.resolve()) for path in candidates if path.is_file()]
 
         if not readme_files:

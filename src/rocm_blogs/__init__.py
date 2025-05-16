@@ -8,13 +8,13 @@ import importlib.resources as pkg_resources
 import os
 import pathlib
 import time
-import re
 import functools
 import traceback
 import logging
+
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
+from jinja2 import Template
 from sphinx.application import Sphinx
 from sphinx.util import logging as sphinx_logging
 from sphinx.errors import SphinxError
@@ -1434,6 +1434,27 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
             
             log_file_handle.close()
 
+def process_templates_for_vertical(vertical, main_grid_items, ecosystem_grid_items, 
+                                  application_grid_items, software_grid_items,
+                                  template_string):
+    """Process template for a specific vertical category using Jinja2."""
+
+    context = {
+        'vertical': vertical,
+        'PAGE_TITLE': f"{vertical} Blogs",
+        'PAGE_DESCRIPTION': f"Blogs related to {vertical} market vertical",
+        'grid_items': "\n".join(main_grid_items) if main_grid_items else "",
+        'eco_grid_items': "\n".join(ecosystem_grid_items) if ecosystem_grid_items else "",
+        'application_grid_items': "\n".join(application_grid_items) if application_grid_items else "",
+        'software_grid_items': "\n".join(software_grid_items) if software_grid_items else ""
+    }
+    
+    # Create a Jinja2 template from the template string
+    jinja_template = Template(template_string)
+    
+    # Render the template with the context
+    return jinja_template.render(**context)
+
 def update_posts_file(sphinx_app: Sphinx) -> None:
     """Generate paginated posts.md files with lazy-loaded grid items for performance."""
     phase_start_time = time.time()
@@ -1672,6 +1693,499 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
             
             log_file_handle.close()
 
+def clean_html(html_content):
+    """Clean HTML content by removing orphaned grid attributes and empty sections"""
+    
+    # Remove any standalone ":margin 2" lines that might be orphaned
+    html_content = re.sub(r'\n:margin 2\n', '\n', html_content)
+    
+    # Remove any malformed or empty grid sections completely
+    # This pattern matches grid sections with no content between the tags
+    html_content = re.sub(r'::::{grid}[^\n]*\n:margin 2\n\n::::', '', html_content)
+    
+    # Fix stacked colons in grid tags (like ::::::::{grid})
+    html_content = re.sub(r':+{grid}', '::::{grid}', html_content)
+    
+    return html_content
+
+def update_vertical_pages(sphinx_app: Sphinx) -> None:
+    """Generate paginated vertical pages with improved conditional string replacement"""
+    phase_name = "Update Vertical Pages"
+    phase_start_time = time.time()
+
+    log_filepath, log_file_handle = create_step_log_file(phase_name)
+
+    # Import the raw HTML template
+    template_html = import_file("rocm_blogs.templates", "vertical.html")
+    css_content = import_file("rocm_blogs.static.css", "index.css")
+    pagination_template = import_file("rocm_blogs.templates", "pagination.html")
+    pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
+
+    # Create the full template with CSS
+    index_template = VERTICAL_TEMPLATE.format(
+        CSS=css_content, HTML=template_html
+    )
+
+    # Fix any malformed grid tags in the template
+    index_template = index_template.replace(
+        "{grid} 1 2 3 4\n:margin 2\n{application_grid_items}\n::::",
+        "::::{grid} 1 2 3 4\n:margin 2\n{application_grid_items}\n::::"
+    )
+
+    rocm_blogs = ROCmBlogs()
+    blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
+    rocm_blogs.blogs_directory = str(blogs_directory)
+        
+    if log_file_handle:
+        log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+        
+    readme_count = rocm_blogs.find_readme_files()
+    
+    if log_file_handle:
+        log_file_handle.write(f"Found {readme_count} README files\n")
+        
+    rocm_blogs.create_blog_objects()
+    
+    if log_file_handle:
+        log_file_handle.write("Created blog objects\n")
+        
+    rocm_blogs.blogs.sort_blogs_by_date()
+    
+    if log_file_handle:
+        log_file_handle.write("Sorted blogs by date\n")
+        
+    rocm_blogs.blogs.sort_blogs_by_vertical()
+    
+    if log_file_handle:
+        log_file_handle.write("Sorted blogs by market vertical\n")
+
+    if log_file_handle:
+        log_file_handle.write(f"Vertical Blogs: {rocm_blogs.blogs.blogs_verticals}\n")
+        log_file_handle.write("Generating vertical pages\n")
+
+    try:
+        posts_template_html = import_file("rocm_blogs.templates", "posts.html")
+        
+        # Get all blogs and filter to only include real blog posts
+        all_blogs = rocm_blogs.blogs.get_blogs()
+        filtered_blogs = [blog for blog in all_blogs if hasattr(blog, "blogpost") and blog.blogpost]
+        
+        # Sort blogs by date (newest first)
+        sorted_blogs = sorted(filtered_blogs, 
+                             key=lambda blog: getattr(blog, 'date', datetime.now()), 
+                             reverse=True)
+
+        verticals = rocm_blogs.blogs.blogs_verticals
+        for vertical in verticals:
+            vertical_blogs = []
+            for blog in sorted_blogs:
+                if hasattr(blog, "vertical") and blog.vertical:
+                    if isinstance(blog.vertical, str):
+                        blog_verticals = [v.strip() for v in blog.vertical.split(",") if v.strip()]
+                    else:
+                        blog_verticals = blog.vertical
+
+                    if vertical in blog_verticals:
+                        vertical_blogs.append(blog)
+                elif hasattr(blog, "metadata") and blog.metadata:
+                    try:
+                        myst_data = blog.metadata.get("myst", {})
+                        html_meta = myst_data.get("html_meta", {})
+                        vertical_str = html_meta.get("vertical", "")
+                        
+                        blog_verticals = [v.strip() for v in vertical_str.split(",") if v.strip()]
+                        if blog_verticals and vertical in blog_verticals:
+                            vertical_blogs.append(blog)
+                    except (AttributeError, KeyError) as e:
+                        pass
+
+            if not vertical_blogs:
+                if log_file_handle:
+                    log_file_handle.write(f"No blogs found for vertical: {vertical}\n")
+                continue
+
+            BLOGS_PER_PAGE = POST_BLOGS_PER_PAGE
+            total_blogs = len(vertical_blogs)
+            total_pages = max(1, (total_blogs + BLOGS_PER_PAGE - 1) // BLOGS_PER_PAGE)
+
+            all_grid_items = _generate_lazy_loaded_grid_items(rocm_blogs, vertical_blogs)
+
+            current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            
+            # Format vertical name for filename
+            formatted_vertical = vertical.replace(" ", "-").replace("&", "and").lower()
+            formatted_vertical = re.sub(r'[^a-z0-9-]', '', formatted_vertical)
+            formatted_vertical = re.sub(r'-+', '-', formatted_vertical)
+
+            for page_num in range(1, total_pages + 1):
+                start_index = (page_num - 1) * BLOGS_PER_PAGE
+                end_index = min(start_index + BLOGS_PER_PAGE, len(all_grid_items))
+                page_grid_items = all_grid_items[start_index:end_index]
+                grid_content = "\n".join(page_grid_items)
+                
+                # Create pagination controls
+                pagination_controls = _create_pagination_controls(
+                    pagination_template, page_num, total_pages, f"verticals-{formatted_vertical}"
+                )
+                
+                # Add page suffix for pages after the first
+                page_title_suffix = f" - Page {page_num}" if page_num > 1 else ""
+                page_description_suffix = f" (Page {page_num} of {total_pages})" if page_num > 1 else ""
+                
+                # Create the final page content
+                page_content = POSTS_TEMPLATE.format(
+                    CSS=css_content,
+                    PAGINATION_CSS=pagination_css,
+                    HTML=posts_template_html.replace("{grid_items}", grid_content).replace("{datetime}", current_datetime),
+                    pagination_controls=pagination_controls,
+                    page_title_suffix=page_title_suffix,
+                    page_description_suffix=page_description_suffix,
+                    current_page=page_num,
+                )
+                
+                # Replace the title to include the vertical name
+                page_content = page_content.replace("# Recent Posts", f"# {vertical} Blogs")
+                
+                # Determine output filename and write the file
+                output_filename = f"verticals-{formatted_vertical}.md" if page_num == 1 else f"verticals-{formatted_vertical}-page{page_num}.md"
+                output_path = Path(blogs_directory) / output_filename
+                
+                with output_path.open("w", encoding="utf-8") as output_file:
+                    output_file.write(page_content)
+                
+                if log_file_handle:
+                    log_file_handle.write(f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})\n")
+    except Exception as verticals_page_error:
+        error_message = f"Failed to create verticals pages: {verticals_page_error}"
+        sphinx_diagnostics.error(error_message)
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        if log_file_handle:
+            log_file_handle.write(f"ERROR: {error_message}\n")
+            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+
+    # Generate individual vertical pages
+    verticals = rocm_blogs.blogs.blogs_verticals
+    for vertical in verticals:
+        used_blogs = []
+
+        vertical_blogs = rocm_blogs.blogs.get_blogs_by_vertical(vertical)
+        vertical_blogs.sort(key=lambda blog: getattr(blog, 'date', datetime.now()), reverse=True)
+
+        ecosystem_blogs = [blog for blog in vertical_blogs if hasattr(blog, "category") and blog.category == "Ecosystems and Partners"]
+        application_blogs = [blog for blog in vertical_blogs if hasattr(blog, "category") and blog.category == "Applications & models"]
+        software_blogs = [blog for blog in vertical_blogs if hasattr(blog, "category") and blog.category == "Software tools & optimizations"]
+
+        main_grid_items = _generate_grid_items(rocm_blogs, vertical_blogs, MAIN_GRID_BLOGS_COUNT, used_blogs, True, False)
+        ecosystem_grid_items = _generate_grid_items(rocm_blogs, ecosystem_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
+        application_grid_items = _generate_grid_items(rocm_blogs, application_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
+        software_grid_items = _generate_grid_items(rocm_blogs, software_blogs, CATEGORY_GRID_BLOGS_COUNT, used_blogs, True, False)
+
+        if not main_grid_items and not ecosystem_grid_items and not application_grid_items and not software_grid_items:
+            if log_file_handle:
+                log_file_handle.write(f"No grid items found for vertical: {vertical}\n")
+            continue
+
+        # Format the vertical name for links
+        formatted_vertical = vertical.replace(" ", "-").replace("&", "and").lower()
+        formatted_vertical = re.sub(r'[^a-z0-9-]', '', formatted_vertical)
+        formatted_vertical = re.sub(r'-+', '-', formatted_vertical)
+        
+        # Start with the basic template
+        updated_html = index_template
+        
+        # Replace the basic placeholders
+        updated_html = updated_html.replace("{page_title}", f"{vertical} Blogs")
+        updated_html = updated_html.replace("{page_description}", f"Blogs related to {vertical} market vertical")
+        updated_html = updated_html.replace("{grid_items}", "\n".join(main_grid_items) if main_grid_items else "")
+        updated_html = updated_html.replace("{vertical}", formatted_vertical)
+        
+        if ecosystem_grid_items:
+            updated_html = updated_html.replace("{eco_grid_items}", "\n".join(ecosystem_grid_items))
+        else:
+            eco_section_start = updated_html.find('<div class="container">\n    <h2>Ecosystems and partners</h2>')
+            if eco_section_start != -1:
+                grid_start = updated_html.find('::::{grid}', eco_section_start)
+                if grid_start != -1:
+                    grid_end = updated_html.find('::::', grid_start + 10)
+                    if grid_end != -1:
+                        next_line_end = updated_html.find('\n', grid_end) + 1
+                        updated_html = updated_html[:eco_section_start] + updated_html[next_line_end:]
+                    else:
+                        updated_html = updated_html.replace("{eco_grid_items}", "")
+                else:
+                    updated_html = updated_html.replace("{eco_grid_items}", "")
+            else:
+                updated_html = updated_html.replace("{eco_grid_items}", "")
+
+        if application_grid_items:
+            updated_html = updated_html.replace("{application_grid_items}", "\n".join(application_grid_items))
+        else:
+            app_section_start = updated_html.find('<div class="container">\n    <h2>Applications & models</h2>')
+            
+            if app_section_start != -1:
+                grid_start1 = updated_html.find('::::{grid}', app_section_start)
+                grid_start2 = updated_html.find('{grid}', app_section_start)
+
+                grid_start = grid_start1 if grid_start1 != -1 else grid_start2
+                
+                if grid_start != -1:
+                    grid_end = updated_html.find('::::', grid_start + 5)
+                    if grid_end != -1:
+                        next_line_end = updated_html.find('\n', grid_end) + 1
+                        updated_html = updated_html[:app_section_start] + updated_html[next_line_end:]
+                    else:
+                        updated_html = updated_html.replace("{application_grid_items}", "")
+                else:
+                    updated_html = updated_html.replace("{application_grid_items}", "")
+            else:
+                malformed_start = updated_html.find('{grid} 1 2 3 4\n:margin 2\n{application_grid_items}\n')
+                if malformed_start != -1:
+                    container_start = updated_html.rfind('<div class="container">', 0, malformed_start)
+                    if container_start != -1 and (malformed_start - container_start) < 300:
+                        grid_end = updated_html.find('::::', malformed_start)
+                        if grid_end != -1:
+                            next_line_end = updated_html.find('\n', grid_end) + 1
+                            updated_html = updated_html[:container_start] + updated_html[next_line_end:]
+                        else:
+                            updated_html = updated_html.replace("{application_grid_items}", "")
+                    else:
+                        grid_end = updated_html.find('::::', malformed_start)
+                        if grid_end != -1:
+                            next_line_end = updated_html.find('\n', grid_end) + 1
+                            updated_html = updated_html[:malformed_start] + updated_html[next_line_end:]
+                        else:
+                            updated_html = updated_html.replace("{application_grid_items}", "")
+                else:
+                    updated_html = updated_html.replace("{application_grid_items}", "")
+
+        if software_grid_items:
+            updated_html = updated_html.replace("{software_grid_items}", "\n".join(software_grid_items))
+        else:
+            software_section_start = updated_html.find('<div class="container">\n    <h2>Software tools & optimizations</h2>')
+            if software_section_start != -1:
+                grid_start = updated_html.find('::::{grid}', software_section_start)
+                if grid_start != -1:
+                    grid_end = updated_html.find('::::', grid_start + 10)
+                    if grid_end != -1:
+                        next_line_end = updated_html.find('\n', grid_end) + 1
+                        updated_html = updated_html[:software_section_start] + updated_html[next_line_end:]
+                    else:
+                        updated_html = updated_html.replace("{software_grid_items}", "")
+                else:
+                    updated_html = updated_html.replace("{software_grid_items}", "")
+            else:
+                updated_html = updated_html.replace("{software_grid_items}", "")
+
+        updated_html = clean_html(updated_html)
+
+        output_filename = vertical.replace(" ", "-").lower()
+        output_filename = re.sub(r'[^a-z0-9-]', '', output_filename)
+        output_filename = f"{output_filename}.md"
+        output_path = Path(blogs_directory) / output_filename
+
+        with output_path.open("w", encoding="utf-8") as output_file:
+            output_file.write(updated_html)
+        
+        if log_file_handle:
+            log_file_handle.write(f"Generated vertical page for {vertical}\n")
+
+    # Record timing information
+    phase_duration = time.time() - phase_start_time
+    _BUILD_PHASES["update_vertical_pages"] = phase_duration
+    sphinx_diagnostics.info(
+        f"Vertical pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+    )
+
+    if log_file_handle:
+        log_file_handle.write(f"Vertical pages generation completed in {phase_duration:.2f} seconds\n")
+        log_file_handle.close()
+
+def update_category_verticals(sphinx_app: Sphinx) -> None:
+    """Generate pages filtered by multiple criteria (category, tags, and market vertical)."""
+    phase_start_time = time.time()
+    phase_name = "update_category_verticals"
+    
+    # Create a log file for this step
+    log_filepath, log_file_handle = create_step_log_file(phase_name)
+    
+    # Track statistics for summary
+    total_pages_processed = 0
+    total_pages_successful = 0
+    total_pages_error = 0
+    all_error_details = []
+    
+    try:
+        if log_file_handle:
+            log_file_handle.write("Starting multi-filter pages generation process\n")
+            log_file_handle.write("-" * 80 + "\n\n")
+            
+        # Load templates and styles
+        pagination_template = import_file("rocm_blogs.templates", "pagination.html")
+        css_content = import_file("rocm_blogs.static.css", "index.css")
+        pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
+        
+        if log_file_handle:
+            log_file_handle.write("Successfully loaded templates and styles\n")
+        
+        # Initialize ROCmBlogs and load blog data
+        rocm_blogs = ROCmBlogs()
+        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
+        
+        if not blogs_directory:
+            error_message = "Could not find blogs directory"
+            sphinx_diagnostics.error(error_message)
+            
+            if log_file_handle:
+                log_file_handle.write(f"ERROR: {error_message}\n")
+                
+            _CRITICAL_ERROR_OCCURRED = True
+            raise ROCmBlogsError(error_message)
+            
+        rocm_blogs.blogs_directory = str(blogs_directory)
+        
+        if log_file_handle:
+            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            
+        readme_count = rocm_blogs.find_readme_files()
+        
+        if log_file_handle:
+            log_file_handle.write(f"Found {readme_count} README files\n")
+            
+        rocm_blogs.create_blog_objects()
+        
+        if log_file_handle:
+            log_file_handle.write("Created blog objects\n")
+            
+        rocm_blogs.blogs.sort_blogs_by_date()
+        
+        if log_file_handle:
+            log_file_handle.write("Sorted blogs by date\n")
+
+        # Get category keys from BLOG_CATEGORIES
+        category_keys = [category_info.get("category_key", category_info["name"]) for category_info in BLOG_CATEGORIES]
+            
+        rocm_blogs.blogs.sort_blogs_by_category(category_keys)
+        rocm_blogs.blogs.sort_categories_by_vertical(log_file_handle)
+        rocm_blogs.blogs.sort_blogs_by_vertical()
+
+        log_file_handle.write("Sorted blogs by category and vertical\n")
+
+        # Get all vertical-category combinations
+        keys = rocm_blogs.blogs.get_vertical_category_blog_keys()
+
+        log_file_handle.write(f"Found {len(keys)} vertical-category combinations\n")
+        
+        # Process each vertical-category combination
+        for key in keys:
+            total_pages_processed += 1
+            category, vertical = key
+            
+            log_file_handle.write(f"\nProcessing vertical-category: {vertical} - {category}\n")
+            
+            # Get blogs for this vertical-category combination
+            category_vertical_blogs = rocm_blogs.blogs.get_vertical_category_blogs(category, vertical)
+            
+            if not category_vertical_blogs:
+                log_file_handle.write(f"No blogs found for category {category} and vertical {vertical}\n")
+                continue
+                
+            log_file_handle.write(f"Found {len(category_vertical_blogs)} blogs for category {category} and vertical {vertical}\n")
+            
+            page_name = f"{vertical}-{category}".lower()
+            page_name = page_name.replace("&", "and")
+            page_name = page_name.replace(" ", "-")
+            page_name = re.sub(r'[^a-z0-9-]', '', page_name)
+            page_name = re.sub(r'-+', '-', page_name)
+
+            filter_info = {
+                "name": f"{category} - {vertical}",
+                "template": "applications-models.html",
+                "output_base": page_name,
+                "category_key": category,
+                "title": f"{category} - {vertical} Blogs",
+                "description": f"AMD ROCm™ blogs related to {category} in the {vertical} market vertical",
+                "keywords": f"{category}, {vertical}, AMD, ROCm",
+                "filter_criteria": {
+                    "category": [category],
+                    "vertical": [vertical]
+                }
+            }
+            
+            log_file_handle.write(f"Created filter info: {filter_info}\n")
+            
+            try:
+                _process_category(
+                    filter_info,
+                    rocm_blogs,
+                    blogs_directory,
+                    pagination_template,
+                    css_content,
+                    pagination_css,
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                    CATEGORY_TEMPLATE
+                )
+                
+                total_pages_successful += 1
+                log_file_handle.write(f"Successfully processed vertical-category: {vertical} - {category}\n")
+                
+            except Exception as processing_error:
+                error_message = f"Error processing vertical-category {vertical} - {category}: {processing_error}"
+                sphinx_diagnostics.error(error_message)
+                
+                if log_file_handle:
+                    log_file_handle.write(f"ERROR: {error_message}\n")
+                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    
+                total_pages_error += 1
+                all_error_details.append({"page": f"{vertical} - {category}", "error": str(processing_error)})
+
+        log_file_handle.write("\nNo additional custom filter pages will be generated\n")
+
+        phase_duration = time.time() - phase_start_time
+        _BUILD_PHASES[phase_name] = phase_duration
+        sphinx_diagnostics.info(
+            f"Multi-filter pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+        )
+        
+        if log_file_handle:
+            log_file_handle.write(f"Multi-filter pages generation completed in {phase_duration:.2f} seconds\n")
+        
+    except Exception as generation_error:
+        error_message = f"Failed to generate multi-filter pages: {generation_error}"
+        sphinx_diagnostics.critical(error_message)
+        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        
+        if log_file_handle:
+            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
+            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            
+        _BUILD_PHASES[phase_name] = time.time() - phase_start_time
+        _CRITICAL_ERROR_OCCURRED = True
+        raise ROCmBlogsError(error_message) from generation_error
+    finally:
+        # Write summary to log file
+        if log_file_handle:
+            end_time = time.time()
+            total_duration = end_time - phase_start_time
+            
+            log_file_handle.write("\n" + "=" * 80 + "\n")
+            log_file_handle.write("MULTI-FILTER PAGES GENERATION SUMMARY\n")
+            log_file_handle.write("-" * 80 + "\n")
+            log_file_handle.write(f"Total pages processed: {total_pages_processed}\n")
+            log_file_handle.write(f"Total pages successful: {total_pages_successful}\n")
+            log_file_handle.write(f"Total pages with errors: {total_pages_error}\n")
+            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            
+            if all_error_details:
+                log_file_handle.write("\nERROR DETAILS:\n")
+                log_file_handle.write("-" * 80 + "\n")
+                for index, error_detail in enumerate(all_error_details):
+                    log_file_handle.write(f"{index+1}. Page: {error_detail['page']}\n")
+                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+            
+            log_file_handle.close()
+
 def update_category_pages(sphinx_app: Sphinx) -> None:
     """Generate paginated category pages with lazy-loaded grid items for performance."""
     phase_start_time = time.time()
@@ -1754,6 +2268,9 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
                 log_file_handle.write(f"\nProcessing category: {category_name}\n")
                 log_file_handle.write(f"  Output base: {category_info['output_base']}\n")
                 log_file_handle.write(f"  Category key: {category_info['category_key']}\n")
+
+            category_key = category_info["category_key"]
+            category_blogs = rocm_blogs.blogs.blogs_categories.get(category_key, [])
             
             try:
                 _process_category(
@@ -1764,7 +2281,8 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
                     css_content, 
                     pagination_css, 
                     current_datetime,
-                    CATEGORY_TEMPLATE
+                    CATEGORY_TEMPLATE,
+                    category_blogs
                 )
                 
                 total_categories_successful += 1
@@ -1929,7 +2447,9 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
         sphinx_app.connect("builder-inited", update_index_file)
         sphinx_app.connect("builder-inited", blog_generation)
         sphinx_app.connect("builder-inited", update_posts_file)
+        sphinx_app.connect("builder-inited", update_vertical_pages)
         sphinx_app.connect("builder-inited", update_category_pages)
+        sphinx_app.connect("builder-inited", update_category_verticals)
         sphinx_app.connect("build-finished", log_total_build_time)
         
         sphinx_diagnostics.info(

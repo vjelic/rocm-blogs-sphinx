@@ -4,6 +4,10 @@ import os
 import time
 import traceback
 import inspect
+import re
+import json
+import shutil
+from concurrent.futures import ThreadPoolExecutor
 
 from pathlib import Path
 
@@ -100,9 +104,9 @@ def _create_pagination_controls(pagination_template, current_page, total_pages, 
         .replace("{total_pages}", str(total_pages))
         .replace("{next_button}", next_button)
     )
-    
-def _process_category(category_info, rocm_blogs, blogs_directory, pagination_template, css_content, pagination_css, current_datetime, category_template):
-    """Process a single category and generate its paginated pages."""
+
+def _process_category(category_info, rocm_blogs, blogs_directory, pagination_template, css_content, pagination_css, current_datetime, category_template, category_blogs=None):
+    """Process a page with a specific filter criteria."""
     category_name = category_info["name"]
     template_name = category_info["template"]
     output_base = category_info["output_base"]
@@ -110,16 +114,138 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
     page_title = category_info["title"]
     page_description = category_info["description"]
     page_keywords = category_info["keywords"]
+
+    filter_criteria = category_info.get("filter_criteria", {})
     
     sphinx_diagnostics.info(
         f"Generating paginated pages for category: {category_name}"
     )
     
-    # Load the category template
     template_html = import_file("rocm_blogs.templates", template_name)
     
-    # Get blogs for this category
-    category_blogs = rocm_blogs.blogs.blogs_categories.get(category_key, [])
+    # If category_blogs is not provided, filter blogs based on filter_criteria
+    if category_blogs is None:
+        category_blogs = []
+        all_blogs = rocm_blogs.blogs.get_blogs()
+        
+        # If no filter criteria, use category_key to filter blogs
+        if not filter_criteria:
+            category_blogs = rocm_blogs.blogs.get_blogs_by_category(category_key)
+            sphinx_diagnostics.info(
+                f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs."
+            )
+        else:
+            sphinx_diagnostics.info(
+                f"Using filter_criteria to filter blogs: {filter_criteria}"
+            )
+
+            for blog in all_blogs:
+                matches_all_criteria = True
+                
+                for field, values in filter_criteria.items():
+                    # Convert single value to list for consistent handling
+                    if not isinstance(values, list):
+                        values = [values]
+                    
+                    # Get blog field value
+                    if field == "category":
+                        blog_value = getattr(blog, "category", "")
+                        if blog_value not in values:
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' does not match any of {values}"
+                            )
+                            break
+                        else:
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' matches one of {values}"
+                            )
+                    elif field == "vertical":
+                        if not hasattr(blog, "metadata") or not blog.metadata:
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no metadata"
+                            )
+                            break
+
+                        try:
+                            myst_data = blog.metadata.get("myst", {})
+                            html_meta = myst_data.get("html_meta", {})
+                            vertical_str = html_meta.get("vertical", "")
+
+                            if not vertical_str and hasattr(blog, "vertical"):
+                                vertical_str = getattr(blog, "vertical", "")
+                            
+                            # Split vertical string into list and strip whitespace
+                            blog_verticals = [v.strip() for v in vertical_str.split(",") if v.strip()]
+                            
+                            # Debug log
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals: {blog_verticals}"
+                            )
+                            
+                            # Check if any of the blog's verticals match any of the specified verticals
+                            if not blog_verticals or not any(bv in values for bv in blog_verticals):
+                                matches_all_criteria = False
+                                sphinx_diagnostics.debug(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} do not match any of {values}"
+                                )
+                                break
+                            else:
+                                sphinx_diagnostics.debug(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} match one of {values}"
+                                )
+                        except (AttributeError, KeyError) as e:
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Error getting vertical for blog '{getattr(blog, 'blog_title', 'Unknown')}': {e}"
+                            )
+                            break
+                    elif field == "tags":
+                        if not hasattr(blog, "tags") or not blog.tags:
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no tags"
+                            )
+                            break
+
+                        blog_tags = blog.tags
+                        if isinstance(blog_tags, str):
+                            blog_tags = [tag.strip() for tag in blog_tags.split(",") if tag.strip()]
+
+                        if not blog_tags or not any(tag in blog_tags for tag in values):
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} do not match any of {values}"
+                            )
+                            break
+                        else:
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} match one of {values}"
+                            )
+                    else:
+                        blog_value = getattr(blog, field, None)
+                        if blog_value is None or blog_value not in values:
+                            matches_all_criteria = False
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' does not match any of {values}"
+                            )
+                            break
+                        else:
+                            sphinx_diagnostics.debug(
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' matches one of {values}"
+                            )
+                
+                # If blog matches all criteria, add it to category_blogs
+                if matches_all_criteria:
+                    category_blogs.append(blog)
+                    sphinx_diagnostics.debug(
+                        f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs"
+                    )
+            
+            sphinx_diagnostics.info(
+                f"Found {len(category_blogs)} blogs matching filter criteria"
+            )
     
     if not category_blogs:
         sphinx_diagnostics.warning(
@@ -133,8 +259,7 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
     sphinx_diagnostics.info(
         f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages"
     )
-    
-    # Generate all grid items in parallel with lazy loading
+
     all_grid_items = _generate_lazy_loaded_grid_items(rocm_blogs, category_blogs)
     
     # Check if any grid items were generated
@@ -150,9 +275,17 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
         start_index = (page_num - 1) * CATEGORY_BLOGS_PER_PAGE
         end_index = min(start_index + CATEGORY_BLOGS_PER_PAGE, len(all_grid_items))
         page_grid_items = all_grid_items[start_index:end_index]
-        grid_content = "\n".join(page_grid_items)
         
-        # Create pagination controls
+        fixed_grid_items = []
+        for grid_item in page_grid_items:
+            grid_item = grid_item.replace(':img-top: ./', ':img-top: /')
+            # Also fix paths for ecosystem pages
+            grid_item = grid_item.replace(':img-top: ./ecosystems', ':img-top: /ecosystems')
+            grid_item = grid_item.replace(':img-top: ./applications', ':img-top: /applications')
+            fixed_grid_items.append(grid_item)
+        
+        grid_content = "\n".join(fixed_grid_items)
+
         pagination_controls = _create_pagination_controls(
             pagination_template, page_num, total_pages, output_base
         )
@@ -163,8 +296,7 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
         
         # Replace placeholders in the template
         updated_html = template_html.replace("{grid_items}", grid_content).replace("{datetime}", current_datetime)
-        
-        # Create the final markdown content
+
         final_content = category_template.format(
             title=page_title,
             description=page_description,
@@ -177,8 +309,7 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
             page_description_suffix=page_description_suffix,
             current_page=page_num,
         )
-        
-        # Determine output filename and write the file
+
         output_filename = f"{output_base}.md" if page_num == 1 else f"{output_base}-page{page_num}.md"
         output_path = Path(blogs_directory) / output_filename
         
@@ -189,7 +320,7 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
             f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})"
         )
 
-def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used=True, use_og=False):
+def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used=False, use_og=False):
     """Generate grid items in parallel using thread pool."""
 
     try:
@@ -215,11 +346,23 @@ def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used
 
             for blog_entry in blog_list:
                 # Check if we should skip this blog because it's already used
-                if (skip_used and blog_entry in used_blogs) or item_count >= max_items:
+                # Only skip if skip_used is True and the blog is in used_blogs
+                if skip_used and blog_entry in used_blogs:
+                    sphinx_diagnostics.debug(
+                        f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used"
+                    )
+                    continue
+                
+                # Check if we've reached the maximum number of items
+                if item_count >= max_items:
+                    sphinx_diagnostics.debug(
+                        f"Reached maximum number of items ({max_items}), skipping remaining blogs"
+                    )
                     continue
                     
                 # Add blog to used_blogs list to avoid using it again in other sections
-                if blog_entry not in used_blogs:
+                # Only mark as used if skip_used is True (for main page sections)
+                if skip_used and blog_entry not in used_blogs:
                     used_blogs.append(blog_entry)
                     
                 grid_futures[executor.submit(generate_grid, rocm_blogs, blog_entry, False, use_og)] = blog_entry
@@ -310,6 +453,14 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
             sphinx_diagnostics.debug(
                 f"Available parameters: {list(grid_params.keys())}"
             )
+            
+            # If lazy_load is not supported, fall back to regular grid generation
+            sphinx_diagnostics.info(
+                "Falling back to regular grid generation without lazy loading"
+            )
+            # Create a temporary empty list for used_blogs since we don't want to mark blogs as used
+            temp_used_blogs = []
+            return _generate_grid_items(rocm_blogs, blog_list, len(blog_list), temp_used_blogs, skip_used=False)
         
         for blog_entry in blog_list:
             try:
@@ -386,82 +537,61 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
         raise ROCmBlogsError(f"Error generating lazy-loaded grid-items: {lazy_load_error}") from lazy_load_error
 
 def process_single_blog(blog_entry, rocm_blogs):
-    """
-    Process a single blog file without creating backups.
-    
-    Args:
-        blog_entry: The blog object to process
-        rocm_blogs: The ROCmBlogs instance with blog data
-    """
+    """Process a single blog file."""
     try:
         processing_start_time = time.time()
         readme_file_path = blog_entry.file_path
         blog_directory = os.path.dirname(readme_file_path)
 
-        # Skip processing if the blog doesn't have required attributes
         if not hasattr(blog_entry, "author") or not blog_entry.author:
             sphinx_diagnostics.warning(
                 f"Skipping blog {readme_file_path} without author"
             )
             return
 
-        # Read file content
         with open(readme_file_path, "r", encoding="utf-8", errors="replace") as source_file:
             file_content = source_file.read()
-            # Convert content to lines immediately
-            content_lines = file_content.splitlines(True)  # Keep line endings
 
-        # Dictionary to store WebP versions of images
+            content_lines = file_content.splitlines(True)
+
         webp_versions = {}
-        
-        # Use grab_image to find the thumbnail image if specified in metadata
+
         if hasattr(blog_entry, "thumbnail") and blog_entry.thumbnail:
             try:
                 blog_entry.grab_image(rocm_blogs)
                 sphinx_diagnostics.info(
                     f"Found thumbnail image: {blog_entry.image_paths[0] if blog_entry.image_paths else 'None'}"
                 )
-                
-                # Get the list of thumbnail filenames for optimization
+
                 thumbnail_images = [os.path.basename(path) for path in blog_entry.image_paths] if blog_entry.image_paths else []
-                
-                # 1. First, convert and optimize all images explicitly listed in blog_entry.image_paths
+
                 if thumbnail_images:
-                    # Find the full paths to the images
                     for image_filename in thumbnail_images:
-                        # Check in common image locations
                         possible_image_paths = []
-                        
-                        # Check in blog directory
+
                         blog_dir_image = os.path.join(blog_directory, image_filename)
                         blog_dir_images_image = os.path.join(blog_directory, "images", image_filename)
-                        
-                        # Check in global images directory
+
                         blogs_directory = rocm_blogs.blogs_directory
                         global_image = os.path.join(blogs_directory, "images", image_filename)
                         
                         possible_image_paths.extend([blog_dir_image, blog_dir_images_image, global_image])
-                        
-                        # Try to find, convert to WebP, and optimize the image
+
                         for image_path in possible_image_paths:
                             if os.path.exists(image_path) and os.path.isfile(image_path):
                                 try:
-                                    # First convert to WebP
                                     sphinx_diagnostics.info(
                                         f"Converting image to WebP: {image_path}"
                                     )
                                     webp_success, webp_path = convert_to_webp(image_path)
-                                    
-                                    # Use the WebP version for optimization if available
+
                                     path_to_optimize = webp_path if webp_success and webp_path else image_path
-                                    
-                                    # Then optimize
+
                                     sphinx_diagnostics.info(
                                         f"Optimizing image: {path_to_optimize}"
                                     )
                                     optimization_success, optimized_webp_path = optimize_image(path_to_optimize, thumbnail_images)
-                                    
-                                    # Store WebP version if created
+
                                     if webp_success and webp_path:
                                         webp_versions[os.path.basename(image_path)] = os.path.basename(webp_path)
                                     elif optimization_success and optimized_webp_path:
@@ -473,10 +603,8 @@ def process_single_blog(blog_entry, rocm_blogs):
                                     sphinx_diagnostics.debug(
                                         f"Traceback: {traceback.format_exc()}"
                                     )
-                                
                                 break
-                
-                # 2. Convert and optimize all images in the blog/images directory
+
                 blog_images_directory = os.path.join(blog_directory, "images")
                 if os.path.exists(blog_images_directory) and os.path.isdir(blog_images_directory):
                     sphinx_diagnostics.info(
@@ -485,26 +613,21 @@ def process_single_blog(blog_entry, rocm_blogs):
                     for filename in os.listdir(blog_images_directory):
                         image_path = os.path.join(blog_images_directory, filename)
                         if os.path.isfile(image_path):
-                            # Check if it's an image file by extension
                             _, file_extension = os.path.splitext(filename)
-                            if file_extension.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif']:
+                            if file_extension.lower() in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.tif']:
                                 try:
-                                    # First convert to WebP
                                     sphinx_diagnostics.info(
                                         f"Converting image to WebP: {image_path}"
                                     )
                                     webp_success, webp_path = convert_to_webp(image_path)
-                                    
-                                    # Use the WebP version for optimization if available
+
                                     path_to_optimize = webp_path if webp_success and webp_path else image_path
-                                    
-                                    # Then optimize
+
                                     sphinx_diagnostics.info(
                                         f"Optimizing image: {path_to_optimize}"
                                     )
                                     optimization_success, optimized_webp_path = optimize_image(path_to_optimize, thumbnail_images)
-                                    
-                                    # Store WebP version if created
+
                                     if webp_success and webp_path:
                                         webp_versions[os.path.basename(image_path)] = os.path.basename(webp_path)
                                     elif optimization_success and optimized_webp_path:
@@ -516,30 +639,25 @@ def process_single_blog(blog_entry, rocm_blogs):
                                     sphinx_diagnostics.debug(
                                         f"Traceback: {traceback.format_exc()}"
                                     )
-                
-                # Update blog_entry.image_paths and blog_entry.thumbnail to use WebP versions when available
+
                 if blog_entry.image_paths and webp_versions:
                     for i, img_path in enumerate(blog_entry.image_paths):
                         image_name = os.path.basename(img_path)
                         if image_name in webp_versions:
-                            # Replace the original image with WebP version
                             webp_name = webp_versions[image_name]
                             blog_entry.image_paths[i] = img_path.replace(image_name, webp_name)
                             sphinx_diagnostics.info(
                                 f"Using WebP version for blog image: {webp_name}"
                             )
-                            
-                            # Also update the thumbnail in the blog metadata if it matches
+
                             if hasattr(blog_entry, "thumbnail") and blog_entry.thumbnail:
                                 thumbnail_name = os.path.basename(blog_entry.thumbnail)
                                 if thumbnail_name == image_name:
-                                    # Update the thumbnail to use WebP extension
                                     blog_entry.thumbnail = blog_entry.thumbnail.replace(thumbnail_name, webp_name)
                                     sphinx_diagnostics.info(
                                         f"Updated blog thumbnail to use WebP: {webp_name}"
                                     )
-                                    
-                                    # Also update any references to this image in the blog content
+
                                     for j, line in enumerate(content_lines):
                                         if image_name in line:
                                             content_lines[j] = line.replace(image_name, webp_name)
@@ -554,7 +672,6 @@ def process_single_blog(blog_entry, rocm_blogs):
                     f"Traceback: {traceback.format_exc()}"
                 )
 
-        # Count words using the content we already have
         try:
             word_count = count_words_in_markdown(file_content)
             blog_entry.set_word_count(word_count)
@@ -569,7 +686,6 @@ def process_single_blog(blog_entry, rocm_blogs):
                 f"Traceback: {traceback.format_exc()}"
             )
 
-        # Process blog metadata
         try:
             authors_list = blog_entry.author.split(",")
             formatted_date = blog_entry.date.strftime("%B %d, %Y") if blog_entry.date else "No Date"
@@ -577,7 +693,6 @@ def process_single_blog(blog_entry, rocm_blogs):
             blog_category = getattr(blog_entry, "category", "blog")
             blog_tags = getattr(blog_entry, "tags", "")
 
-            # Process tags
             tag_html_list = []
             if blog_tags:
                 tags_list = [tag.strip() for tag in blog_tags.split(",")]
@@ -588,28 +703,23 @@ def process_single_blog(blog_entry, rocm_blogs):
 
             tags_html = ", ".join(tag_html_list)
 
-            # Process category
             category_link = truncate_string(blog_category)
             category_html = f'<a href="https://rocm.blogs.amd.com/blog/category/{category_link}.html">{blog_category.strip()}</a>'
 
-            # Calculate read time
             blog_read_time = (
                 str(calculate_read_time(getattr(blog_entry, "word_count", 0)))
                 if hasattr(blog_entry, "word_count")
                 else "No Read Time"
             )
 
-            # Get author HTML
             authors_html = blog_entry.grab_authors(authors_list)
             if authors_html:
                 authors_html = authors_html.replace("././", "../../").replace(
                     ".md", ".html"
                 )
 
-            # Check if author is "No author" or empty
             has_valid_author = authors_html and "No author" not in authors_html
 
-            # Find the title and its position
             title_line, title_line_number = None, None
             for i, line in enumerate(content_lines):
                 if line.startswith("#") and line.count("#") == 1:
@@ -623,7 +733,6 @@ def process_single_blog(blog_entry, rocm_blogs):
                 )
                 return
 
-            # Load templates and CSS
             try:
                 quickshare_button = quickshare(blog_entry)
                 image_css = import_file("rocm_blogs.static.css", "image_blog.css")
@@ -642,9 +751,7 @@ def process_single_blog(blog_entry, rocm_blogs):
                 )
                 raise
 
-            # Modify the author attribution template based on whether there's a valid author
             if has_valid_author:
-                # Use the original template with author
                 modified_author_template = author_attribution_template
             else:
                 # Create a modified template without "by {authors_string}"
@@ -652,7 +759,6 @@ def process_single_blog(blog_entry, rocm_blogs):
                     "<span> {date} by {authors_string}.</span>", "<span> {date}</span>"
                 )
 
-            # Fill in the author attribution template
             authors_html_filled = (
                 modified_author_template.replace("{authors_string}", authors_html)
                 .replace("{date}", formatted_date)
@@ -663,9 +769,7 @@ def process_single_blog(blog_entry, rocm_blogs):
                 .replace("{word_count}", str(getattr(blog_entry, "word_count", "No Word Count")))
             )
 
-            # Get the image path for the blog template
             try:
-                # Calculate the depth of the blog relative to the blogs directory
                 blog_path = Path(blog_entry.file_path)
                 blogs_directory_path = Path(rocm_blogs.blogs_directory)
                 
@@ -716,7 +820,6 @@ def process_single_blog(blog_entry, rocm_blogs):
                 )
                 raise
 
-            # Prepare the templates to insert
             blog_template = f"""
 <style>
 {blog_css}
@@ -729,7 +832,6 @@ def process_single_blog(blog_entry, rocm_blogs):
 {image_template_filled}
 """
 
-            # Insert the templates at the appropriate positions
             try:
                 updated_lines = content_lines.copy()
                 updated_lines.insert(title_line_number + 1, f"\n{blog_template}\n")
@@ -737,10 +839,8 @@ def process_single_blog(blog_entry, rocm_blogs):
                 updated_lines.insert(title_line_number + 3, f"\n{authors_html_filled}\n")
                 updated_lines.insert(title_line_number + 4, f"\n{quickshare_button}\n")
 
-                # Add giscus comments at the end of the file
                 updated_lines.append(f"\n\n{giscus_html}\n")
 
-                # Write the modified file
                 with open(readme_file_path, "w", encoding="utf-8", errors="replace") as output_file:
                     output_file.writelines(updated_lines)
             except Exception as write_error:

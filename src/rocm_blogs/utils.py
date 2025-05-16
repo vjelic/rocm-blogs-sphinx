@@ -46,7 +46,6 @@ def truncate_string(input_string: str) -> str:
     except Exception as error:
         sphinx_diagnostics.error(f"Error truncating string '{input_string}': {error}")
         sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
-        # Return a safe default value - the original string or empty string
         return input_string if input_string else ""
     
 def calculate_read_time(words: int) -> int:

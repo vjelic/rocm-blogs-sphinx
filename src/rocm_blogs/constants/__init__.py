@@ -14,6 +14,8 @@ AVERAGE_READING_SPEED_WPM = 245
 SPECIAL_CHARS_PATTERN = re.compile(r"[!@#$%^&*?/|]")
 WHITESPACE_PATTERN_FOR_SLUGS = re.compile(r"\s+")
 
+EXCLUDED_EXTENSIONS = ['.gif', '.GIF']
+
 # Markdown patterns for word counting
 MARKDOWN_PATTERNS = {
     'yaml_front_matter': re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL),
@@ -37,8 +39,6 @@ AUTHOR_TEMPLATE = """
 {author_css}
 </style>
 
-
-
 <div class="container">
   <h2>Posts by {author}</h2>
 </div>
@@ -59,11 +59,23 @@ html_meta:
 "property=og:locale": "en_US"
 ---
 
-# ROCm Blogs
-
 <style>
 {CSS}
 {BANNER_CSS}
+</style>
+{HTML}
+"""
+
+VERTICAL_TEMPLATE = """---
+myst:
+html_meta:
+"description lang=en": "AMD ROCm™ software blogs"
+"keywords": "AMD GPU, MI300, MI250, ROCm, blog"
+"property=og:locale": "en_US"
+---
+
+<style>
+{CSS}
 </style>
 {HTML}
 """
@@ -118,8 +130,8 @@ POST_BLOGS_PER_PAGE = 12
 # Image constants
 SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
 PROBLEMATIC_IMAGES = {"2024-10-03-image_classification.jpg", "2024-10-10-seismic.jpeg"}
-CONTENT_MAX_DIMENSIONS = (1280, 720)
-BANNER_DIMENSIONS = (1280, 420)
+CONTENT_MAX_DIMENSIONS = (1200, 675)
+BANNER_DIMENSIONS = (1200, 675)
 MIN_SIZE_REDUCTION_PCT = 5.0
 
 # Image format-specific optimization settings
@@ -172,4 +184,30 @@ BLOG_CATEGORIES = [
         "description": "AMD ROCm™ software blogs about ecosystem and partners",
         "keywords": "ecosystem, partners, integrations, collaboration",
     },
+    {
+        "name": "AI Applications",
+        "template": "applications-models.html",
+        "output_base": "ai-applications",
+        "category_key": "ai-applications",
+        "title": "AI Applications",
+        "description": "AMD ROCm™ software blogs about AI applications",
+        "keywords": "AI, applications, machine learning, deep learning",
+        "filter_criteria": {
+            "category": "Applications & models",
+            "vertical": "AI"
+        }
+    },
+    {
+        "name": "HPC Software Tools",
+        "template": "software-tools.html",
+        "output_base": "hpc-software-tools",
+        "category_key": "hpc-software-tools",
+        "title": "HPC Software Tools",
+        "description": "AMD ROCm™ software blogs about HPC software tools",
+        "keywords": "HPC, software, tools, high performance computing",
+        "filter_criteria": {
+            "category": "Software tools & optimizations",
+            "vertical": "HPC"
+        }
+    }
 ]

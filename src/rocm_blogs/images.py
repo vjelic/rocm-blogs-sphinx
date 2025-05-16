@@ -43,6 +43,12 @@ def convert_to_webp(source_image_path):
         )
         return False, None
 
+    if file_extension.lower() in EXCLUDED_EXTENSIONS:
+        sphinx_diagnostics.info(
+            f"Skipping WebP conversion for excluded image format: {file_extension} for {source_image_path}"
+        )
+        return True, source_image_path
+
     if file_extension.lower() == ".webp":
         sphinx_diagnostics.debug(
             f"Image is already in WebP format: {source_image_path}"
@@ -282,6 +288,15 @@ def _handle_problematic_image(pil_image, source_image_path, backup_image_path, s
 
 def _create_webp_version(optimized_image, webp_image_path, original_image_path, original_file_size):
     """Create a WebP version of the image."""
+
+    # check if file extension is in excluded list
+    _, file_extension = os.path.splitext(original_image_path)
+    file_extension = file_extension.lower()
+    if file_extension in EXCLUDED_EXTENSIONS:
+        sphinx_diagnostics.info(
+            f"Skipping WebP conversion for excluded image format: {file_extension} for {original_image_path}"
+        )
+        return False
     try:
         webp_image = optimized_image if optimized_image.mode in ("RGB", "RGBA") else optimized_image.convert("RGB")
 
@@ -321,6 +336,15 @@ def _create_webp_version(optimized_image, webp_image_path, original_image_path, 
 
 def _process_image(pil_image, source_image_path, source_image_mode, source_image_width, source_image_height, backup_image_path, source_image_filename):
     """Process the image by stripping metadata and resizing if needed."""
+
+    # check if file extension is in excluded list
+    _, file_extension = os.path.splitext(source_image_path)
+    file_extension = file_extension.lower()
+    if file_extension in EXCLUDED_EXTENSIONS:
+        sphinx_diagnostics.info(
+            f"Skipping optimization for excluded image format: {file_extension} for {source_image_path}"
+        )
+        return None
     try:
         image_data = list(pil_image.getdata())
         target_mode = "RGBA" if pil_image.mode in ("RGB", "RGBA") else "RGB"
@@ -417,13 +441,13 @@ def _save_optimized_image(optimized_image, optimized_image_path, backup_image_pa
                 if optimized_image.mode != "RGB":
                     optimized_image = optimized_image.convert("RGB")
                 optimized_image.save(optimized_image_path, format="PNG", **FORMAT_SETTINGS["PNG"])
-        elif file_extension == ".gif":
-            if getattr(optimized_image, "is_animated", False):
-                optimized_image.save(optimized_image_path, format="GIF", save_all=True, **FORMAT_SETTINGS["GIF"])
-            else:
-                optimized_image.save(optimized_image_path, format="GIF", **FORMAT_SETTINGS["GIF"])
         elif file_extension == ".webp":
             optimized_image.save(optimized_image_path, format="WEBP", **FORMAT_SETTINGS["WEBP"])
+        elif file_extension in EXCLUDED_EXTENSIONS:
+            # skip GIF optimization
+            sphinx_diagnostics.info(
+                f"Skipping optimization for {source_image_filename}"
+            )
         else:
             optimized_image.save(optimized_image_path)
 

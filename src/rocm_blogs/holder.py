@@ -6,6 +6,7 @@ BlogHolder class to hold the blogs.
 
 import os
 import csv
+from pathlib import Path
 import traceback
 from datetime import datetime
 from sphinx.util import logging as sphinx_logging
@@ -23,6 +24,9 @@ class BlogHolder:
         self.blogs_categories: dict[str, list[Blog]] = {}
         self.blogs_authors: dict[str, list[Blog]] = {}
         self.blogs_featured: dict[str, list[Blog]] = {}
+        self.blogs_verticals: dict[str, list[Blog]] = {}
+        self.blogs_categories_verticals: dict[(str, str), list[Blog]] = {}
+        self.verticals = ['AI', 'HPC', 'Data Science', 'Systems', 'Developers']
 
     def _make_key(self, blog: Blog) -> str:
         """Make a key for the blog."""
@@ -217,7 +221,7 @@ class BlogHolder:
                     f"Raw CSV content: {raw_rows}"
                 )
                 
-                featured_titles = [row[0] for row in raw_rows if row]  # Get the first column (title)
+                featured_titles = [row[0] for row in raw_rows if row]
                 
             sphinx_diagnostics.info(
                 f"Found {len(featured_titles)} featured blog titles in {filename}"
@@ -301,6 +305,51 @@ class BlogHolder:
                 f"Traceback: {traceback.format_exc()}"
             )
             return []
+        
+    def get_featured_blogs(self) -> list[Blog]:
+        """Get the list of featured blogs."""
+
+        if "featured" in self.blogs_featured:
+            blog_count = len(self.blogs_featured["featured"])
+            sphinx_diagnostics.debug(
+                f"Found {blog_count} featured blogs"
+            )
+            return self.blogs_featured["featured"]
+
+        sphinx_diagnostics.debug(
+            "No featured blogs found"
+        )
+        return []
+    
+    def get_blogs_by_author(self, author: str) -> list[Blog]:
+        """Get blogs by author."""
+
+        if author in self.blogs_authors:
+            blog_count = len(self.blogs_authors[author])
+            sphinx_diagnostics.debug(
+                f"Found {blog_count} blogs by author: {author}"
+            )
+            return self.blogs_authors[author]
+
+        sphinx_diagnostics.debug(
+            f"No blogs found by author: {author}"
+        )
+        return []
+    
+    def get_blogs_by_vertical(self, vertical: str) -> list[Blog]:
+        """Get blogs by vertical."""
+
+        if vertical in self.blogs_verticals:
+            blog_count = len(self.blogs_verticals[vertical])
+            sphinx_diagnostics.debug(
+                f"Found {blog_count} blogs in vertical: {vertical}"
+            )
+            return self.blogs_verticals[vertical]
+
+        sphinx_diagnostics.debug(
+            f"No blogs found in vertical: {vertical}"
+        )
+        return []
 
     def get_blog_by_key(self, key: tuple[str, datetime]) -> Blog:
         """Get a blog by its key."""
@@ -315,6 +364,24 @@ class BlogHolder:
             f"No blog found with key: {key}"
         )
         return None
+    
+    def get_vertical_category_blogs(self, category: str, vertical: str) -> list[Blog]:
+        """Get blogs by vertical and category."""
+
+        if (category, vertical) in self.blogs_categories_verticals:
+            blog_count = len(self.blogs_categories_verticals[(category, vertical)])
+            sphinx_diagnostics.debug(
+                f"Found {blog_count} blogs in vertical-category: {category}, {vertical}"
+            )
+            return self.blogs_categories_verticals[(category, vertical)]
+
+    def get_vertical_category_blog_keys(self) -> list[tuple[str, str]]:
+        """Return all keys in the vertical-category blogs."""
+        keys = list(self.blogs_categories_verticals.keys())
+        sphinx_diagnostics.debug(
+            f"Returning {len(keys)} vertical-category keys"
+        )
+        return keys
 
     def get_blogs(self) -> list[Blog]:
         """Return the list of blogs."""
@@ -357,6 +424,94 @@ class BlogHolder:
         
         sphinx_diagnostics.debug("Blogs sorted by date")
         return list(self.blogs.values())
+    
+    def sort_categories_by_vertical(self, log_file_handle) -> list[Blog]:
+        """Sort the categories by vertical."""
+
+        for category in self.blogs_categories:
+            for blog in self.blogs_categories[category]:
+                if not hasattr(blog, "metadata") or not blog.metadata:
+                    log_file_handle.write("Blog has no metadata\n")
+                    continue
+                else:
+                    blog_vertical_str = blog.metadata.get("myst").get("html_meta").get("vertical")
+                    blog_vertical = [v.strip() for v in blog_vertical_str.split(",") if v.strip()]
+                    for vertical in blog_vertical:
+                        if (category, vertical) not in self.blogs_categories_verticals:
+                            self.blogs_categories_verticals[(category, vertical)] = []
+                            sphinx_diagnostics.debug(
+                                f"Initialized vertical-category: {category}, {vertical}"
+                            )
+
+                        self.blogs_categories_verticals[(category, vertical)].append(blog)
+                        sphinx_diagnostics.debug(
+                            f"Blog '{blog.blog_title}' added to vertical-category '{category}', '{vertical}'"
+                        )
+        
+        return list(self.blogs_categories_verticals.values())
+    
+    def sort_blogs_by_vertical(self) -> list[Blog]:
+        """Sort the blogs by market vertical"""
+
+        self.blogs_verticals = {}
+
+        for vertical in self.verticals:
+            self.blogs_verticals[vertical] = []
+
+            sphinx_diagnostics.debug(
+                f"Initialized vertical: {vertical}"
+            )
+        
+        logs_directory = Path("logs")
+        logs_directory.mkdir(exist_ok=True)
+
+        log_filepath = logs_directory / "blogs_vertical.log"
+
+        with open(log_filepath, "w", encoding="utf-8") as log_file_handle:
+            log_file_handle.write("Blogs sorted by vertical:\n")
+            vertical_counts = {}
+            for blog in self.blogs.values():
+                log_file_handle.write(f"Blog: {blog}\n")
+                log_file_handle.write(f"Metadata: {blog.grab_metadata()}\n")
+
+                if not hasattr(blog, "metadata") or not blog.metadata:
+                    log_file_handle.write("Blog has no metadata\n")
+                    continue
+                else:
+                    blog_vertical_str = blog.metadata.get("myst").get("html_meta").get("vertical")
+                    blog_vertical = [v.strip() for v in blog_vertical_str.split(",") if v.strip()]
+                    for vertical in blog_vertical:
+                        if vertical not in self.blogs_verticals:
+                            log_file_handle.write(f"Vertical '{vertical}' not recognized\n")
+                            continue
+                        if vertical not in vertical_counts:
+                            vertical_counts[vertical] = 0
+                        vertical_counts[vertical] += 1
+                        self.blogs_verticals[vertical].append(blog)
+                        log_file_handle.write(f"Blog '{blog.blog_title}' added to vertical '{vertical}'\n")
+
+            log_file_handle.write("\nVertical counts:\n")
+            for vertical, count in vertical_counts.items():
+                log_file_handle.write(f"{vertical}: {count} blogs\n")
+                sphinx_diagnostics.info(
+                    f"Vertical '{vertical}' has {count} blogs"
+                )
+
+            log_file_handle.write("\nBlogs in each vertical:\n")
+            for vertical, blogs in self.blogs_verticals.items():
+                log_file_handle.write(f"{vertical}:\n")
+                for blog in blogs:
+                    log_file_handle.write(f"  - {blog.blog_title}\n")
+                    sphinx_diagnostics.info(
+                        f"Blog '{blog.blog_title}' belongs to vertical '{vertical}'"
+                    )
+                if not blogs:
+                    log_file_handle.write(f"  - No blogs in this vertical\n")
+                    sphinx_diagnostics.warning(
+                        f"Vertical '{vertical}' has no blogs"
+                    )
+
+            log_file_handle.close()
     
     def sort_blogs_by_category(self, categories) -> list[Blog]:
         """Sort the blogs by category."""
@@ -427,14 +582,13 @@ class BlogHolder:
                     f"Found case-insensitive match for blog title: '{title}' -> '{blog.blog_title}'"
                 )
                 return blog
-        
-        # Try normalized match (remove extra whitespace, special chars)
+
         def normalize_title(t):
             if not t:
                 return ""
-            # Replace multiple spaces with single space
+
             t = ' '.join(t.split())
-            # Remove common punctuation
+
             for char in [',', '.', ':', ';', '!', '?', '"', "'", '(', ')', '[', ']', '{', '}']:
                 t = t.replace(char, '')
             return t.lower().strip()

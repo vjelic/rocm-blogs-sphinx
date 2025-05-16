@@ -1,0 +1,2 @@
+rocm_blogs
+test_blogs

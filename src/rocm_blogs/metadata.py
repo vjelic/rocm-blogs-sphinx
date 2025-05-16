@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import os
 import re
@@ -12,6 +13,288 @@ from rocm_blogs import ROCmBlogs
 from rocm_blogs.constants import SUPPORTED_FORMATS
 
 sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
+    """Classify blog tags into market verticals with primary and secondary tag distinction."""
+    
+    # Define primary tags (belong to only ONE vertical)
+    primary_tags = {
+        "AI": [
+            "LLM",
+            "GenAI",
+            "Diffusion Model",
+            "Reinforcement Learning"
+        ],
+        "HPC": [
+            "HPC",
+            "System-Tuning",
+            "OpenMP",
+        ],
+        "Data Science": [
+            "Time Series",
+            "Linear Algebra", 
+            "Computer Vision",
+            "Speech",
+            "Scientific Computing"
+        ],
+        "Systems": [
+            "Kubernetes",
+            "Memory",
+            "Serving",
+            "Partner Applications"
+        ],
+        "Developers": [
+            "C++",
+            "Compiler",
+            "JAX",
+            "Developers",
+        ]
+    }
+
+    # Define secondary tags (can belong to MULTIPLE verticals)
+    secondary_tags = {
+        "AI": [
+            "PyTorch",
+            "TensorFlow",
+            "AI/ML",
+            "Multimodal",
+            "Recommendation Systems",
+            "Fine-Tuning",
+        ],
+        "HPC": [
+            "Performance",
+            "Profiling",
+            "Hardware",
+        ],
+        "Data Science": [
+            "Optimization"
+        ],
+        "Systems": [
+            "Installation" 
+        ],
+        "Developers": []
+    }
+
+    # Tag weights based on importance and specificity - only including approved tags
+    tag_weights = {
+        # Primary AI tags
+        "LLM": 1.0,
+        "GenAI": 1.0,
+        "Diffusion Model": 1.0,
+        "Reinforcement Learning": 1.0,
+        
+        # Primary HPC tags
+        "HPC": 1.0,
+        "System-Tuning": 1.0,
+        "OpenMP": 1.0,
+        
+        # Primary Data Science tags
+        "Time Series": 1.0,
+        "Linear Algebra": 1.0,
+        "Computer Vision": 1.0,
+        "Speech": 1.0,
+        "Scientific Computing": 1.0,
+        
+        # Primary Systems tags
+        "Kubernetes": 1.0,
+        "Memory": 1.0,
+        "Serving": 1.0,
+        "Partner Applications": 1.0,
+        
+        # Primary Developer Tools tags
+        "C++": 1.0,
+        "Compiler": 1.0,
+        "JAX": 1.0,
+        
+        # Secondary tags - also equalized to 1.0
+        "PyTorch": 1.0,
+        "TensorFlow": 1.0,
+        "Multimodal": 1.0,
+        "Recommendation Systems": 1.0,
+        "Performance": 1.0,
+        "Profiling": 1.0,
+        "Hardware": 1.0,
+        "Optimization": 1.0,
+        "AI/ML": 1.0,
+        "Installation": 1.0,
+        "Fine-Tuning": 1.0,
+
+        # General tags
+        "AI/ML": 2.0,
+        "HPC": 2.0,
+        "Data Science": 2.0,
+        "Systems": 2.0,
+        "Developers": 2.0,
+    }
+
+    vertical_importance = {
+        "AI": 1.0,
+        "HPC": 1.0,
+        "Data Science": 1.0,
+        "Systems": 1.0,
+        "Developers": 1.0,
+    }
+
+    if isinstance(blog_tags, str):
+        tags = [tag.strip() for tag in blog_tags.split(",") if tag.strip()]
+    elif isinstance(blog_tags, list):
+        tags = blog_tags
+    else:
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write(f"ERROR: Invalid blog_tags format: {type(blog_tags)}\n")
+        return {}
+
+    vertical_scores = defaultdict(float)
+    vertical_counts = {
+        "AI": 0,
+        "HPC": 0,
+        "Data Science": 0,
+        "Systems": 0,
+        "Developers": 0
+    }
+    primary_matches = defaultdict(list)
+    secondary_matches = defaultdict(list)
+
+    metadata_log_file_handle.write(
+        f"Blog Tags: {tags}\n"
+    )
+
+    metadata_log_file_handle.write(
+        f"Checking Blog Tags: {', '.join(tags)} for market verticals.\n"
+    )
+
+    for tag in tags:
+        normalized_tag = tag.strip()
+        tag_matched = False
+
+        metadata_log_file_handle.write(
+            f"Checking tag: {normalized_tag}\n"
+        )
+
+        if normalized_tag not in tag_weights:
+            metadata_log_file_handle.write(
+                f"WARNING: Tag '{normalized_tag}' not found in tag weights.\n"
+            )
+            continue
+
+        for vertical, primary_tag_list in primary_tags.items():
+            if normalized_tag in primary_tag_list:
+                weight = tag_weights.get(normalized_tag, 1.0)
+                vertical_weight = vertical_importance[vertical]
+                score = weight * vertical_weight
+                
+                vertical_scores[vertical] += score
+                primary_matches[vertical].append(normalized_tag)
+                tag_matched = True
+                
+                metadata_log_file_handle.write(
+                    f"Tag: {tag} is a PRIMARY tag for vertical: {vertical} with score: {score:.2f}\n"
+                )
+
+                break
+
+        if not tag_matched:
+            for vertical, secondary_tag_list in secondary_tags.items():
+                if normalized_tag in secondary_tag_list:
+
+                    # secondary tags may have a constant weight difference than primary tags
+                    weight = tag_weights.get(normalized_tag, 1.0)
+                    vertical_weight = vertical_importance[vertical]
+                    score = weight * vertical_weight * 1.0 
+                    
+                    vertical_scores[vertical] += score
+                    secondary_matches[vertical].append(normalized_tag)
+                    tag_matched = True
+
+                    metadata_log_file_handle.write(
+                        f"Tag: {tag} is a SECONDARY tag for vertical: {vertical} with score: {score:.2f}\n"
+                    )
+
+    for vertical in vertical_scores.keys():
+        primary_count = len(primary_matches[vertical])
+        secondary_count = len(secondary_matches[vertical])
+        
+        # Significant bonus for multiple primary tags
+        if primary_count > 1:
+            primary_bonus = 0.3 * (primary_count - 1) 
+            vertical_scores[vertical] *= (1 + primary_bonus)
+            
+            if metadata_log_file_handle:
+                metadata_log_file_handle.write(
+                    f"Applied primary tag bonus of {primary_bonus:.2f} to {vertical}\n"
+                )
+        
+        if secondary_count > 0:
+            secondary_bonus = 0.1 * secondary_count
+            vertical_scores[vertical] *= (1 + secondary_bonus)
+            
+            if metadata_log_file_handle:
+                metadata_log_file_handle.write(
+                    f"Applied secondary tag bonus of {secondary_bonus:.2f} to {vertical}\n"
+                )
+
+    top_verticals = sorted(
+        [(vertical, score) for vertical, score in vertical_scores.items() if score > 0],
+        key=lambda x: x[1], 
+        reverse=True
+    )
+    
+    # Minimum threshold
+    min_score_threshold = 1.0
+    selected_verticals = [(vertical, score) for vertical, score in top_verticals if score >= min_score_threshold]
+
+    max_verticals = 3
+    if len(selected_verticals) > max_verticals:
+        selected_verticals = selected_verticals[:max_verticals]
+    
+    # Find the highest scoring vertical
+    if selected_verticals:
+        top_vertical, top_score = selected_verticals[0]
+        
+        # vertical_count > (max_verticals) * min_score_threshold
+        relative_threshold = 0.35
+        
+        # Initialize all counts to 0
+        for v in vertical_counts:
+            vertical_counts[v] = 0
+
+        for vertical, score in selected_verticals:
+            if score >= top_score * relative_threshold:
+                vertical_counts[vertical] = score
+
+        # do not remove
+        vertical_counts[top_vertical] = top_score
+
+        market_vertical = top_vertical
+        
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write(f"Primary market vertical: {market_vertical} (score: {top_score:.2f})\n")
+            
+            # List additional verticals within threshold
+            additional = [(vertical, score) for vertical, score in vertical_counts.items() if score > 0 and vertical != market_vertical]
+            if additional:
+                additional_str = ", ".join([f"{vertical} (score: {score:.2f})" for vertical, score in additional])
+                metadata_log_file_handle.write(f"Additional verticals within threshold: {additional_str}\n")
+    else:
+        market_vertical = None
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write("No verticals matched this blog.\n")
+            
+    # Log final vertical counts
+    if metadata_log_file_handle:
+        metadata_log_file_handle.write(f"Final vertical counts: {vertical_counts}\n")
+    
+    # Prepare detailed results
+    classification_details = {
+        "vertical_counts": vertical_counts,
+        "scores": {vertical: score for vertical, score in vertical_scores.items() if score > 0},
+        "primary_matches": dict(primary_matches),
+        "secondary_matches": dict(secondary_matches),
+        "selected_verticals": selected_verticals,
+        "market_vertical": market_vertical,
+    }
+    
+    return classification_details
 
 def metadata_generator(rocm_blogs_instance: ROCmBlogs) -> None:
     """Generate metadata for the ROCm blogs with Open Graph support."""
@@ -39,6 +322,7 @@ myst:
         "author": "{author}"
         "description lang=en": "{description}"
         "keywords": "{keywords}"
+        "vertical": {market_vertical}
         "amd_category": "Developer Resources"
         "amd_asset_type": "Blog"
         "amd_technical_blog_type": "{amd_technical_blog_type}"
@@ -199,12 +483,6 @@ myst:
                         metadata_log_file_handle.write(f"WARNING: No description found\n")
                         total_blogs_warning += 1
                         blog_description = "ROCm Blog post"
-
-                    if len(blog_description) > 50:
-                        sphinx_diagnostics.debug(
-                            f"Description: {blog_description[:50]}..."
-                        )
-                        metadata_log_file_handle.write(f"Description: {blog_description[:50]}...\n")
                     else:
                         sphinx_diagnostics.debug(
                             f"Description: {blog_description}"
@@ -329,9 +607,49 @@ myst:
                         metadata_log_file_handle.write(f"INFO: No tags specified\n")
                     else:
                         sphinx_diagnostics.debug(
-                            f"Tags: {extracted_metadata['tags']}"
+                            f"Blog Tags Specified: {extracted_metadata['tags']}"
                         )
+
+                        blog_tags = extracted_metadata["tags"]
+
+                        sphinx_diagnostics.debug(
+                            f"Beginning tag and market vertical processing for blog: {blog_filepath}"
+                        )
+                        
+                        vertical_counts = classify_blog_tags(blog_tags, metadata_log_file_handle)
+
+                        metadata_log_file_handle.write(f"Vertical Count: {vertical_counts.get('vertical_counts')} for blog: {blog_filepath}\n")
+
+                        # Get the primary market vertical directly from the function return value
+                        vertical_dict = vertical_counts.get("market_vertical")
+
+                        # If market_vertical is None, try to find the highest scored vertical
+                        if vertical_dict is not None:
+                            vertical_scores = vertical_counts.get("vertical_counts", {})
+
+                            non_zero_verticals = {k: v for k, v in vertical_scores.items() if v > 0}
+                            
+                            if non_zero_verticals:
+
+                                market_vertical = ", ".join(non_zero_verticals.keys())
+                            else:
+
+                                market_vertical = "Unknown"
+
+                        market_vertical = f'"{market_vertical}"'
+
+                        metadata_log_file_handle.write(f"Market Vertical: {market_vertical}\n")
+                        metadata_log_file_handle.write(f"Market Vertical: {market_vertical}\n")
                         metadata_log_file_handle.write(f"Tags: {extracted_metadata['tags']}\n")
+                    
+                    metadata_log_file_handle.write(f"Blog Tags: {blog_tags}")
+                    if not blog_tags and not market_vertical:
+                        sphinx_diagnostics.debug(
+                            f"No tags found for blog: {blog_filepath}"
+                        )
+                        metadata_log_file_handle.write(f"INFO: No tags found\n")
+                        blog_tags = ""
+                        market_vertical = "Unknown"
 
                     if "category" not in extracted_metadata:
                         extracted_metadata["category"] = "ROCm Blog"
@@ -636,6 +954,7 @@ myst:
                         amd_blog_category_topic=amd_blog_category_topic,
                         amd_blog_releasedate=amd_blog_releasedate,
                         release_author=release_author,
+                        market_vertical=market_vertical,
                     )
                     sphinx_diagnostics.debug(
                         f"Generated metadata content for {blog_filepath}"
