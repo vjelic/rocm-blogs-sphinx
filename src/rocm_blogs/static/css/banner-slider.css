@@ -1,4 +1,3 @@
-/* Banner Slider Styles - Performance Optimized */
 .banner-slider {
     position: relative;
     width: 100%;
@@ -234,7 +233,7 @@ html[data-theme="dark"] .banner-slider__navigation {
 .banner-slider__nav-item {
     flex: 1 1 0;
     min-width: 0;
-    max-width: 20%; /* 20% for 5 bars */
+    max-width: 20%;
     position: relative;
     padding: 15px 10px;
     cursor: pointer;

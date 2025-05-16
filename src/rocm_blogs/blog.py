@@ -6,9 +6,9 @@ import io
 import json
 import os
 import pathlib
+
 from datetime import datetime
 from typing import Optional, List, Union, Dict, Any
-
 from PIL import Image
 from sphinx.util import logging as sphinx_logging
 
@@ -55,8 +55,7 @@ class Blog:
         # Dynamically set attributes based on metadata
         for key, value in metadata.items():
             setattr(self, key, value)
-            
-        # Parse date if available
+
         self.date = self.parse_date(metadata.get("date")) if "date" in metadata else None
 
     def set_word_count(self, word_count: int) -> None:
@@ -69,11 +68,14 @@ class Blog:
 
     def normalize_date_string(self, date_str: str) -> str:
         """Normalize the date string for consistent parsing."""
-        # Apply all normalizations from the mapping
         for original, replacement in self.MONTH_NORMALIZATION.items():
             date_str = date_str.replace(original, replacement)
             
         return date_str
+    
+    def grab_metadata(self) -> Dict[str, Any]:
+        """Return the metadata dictionary."""
+        return self.metadata
     
     def grab_og_image(self) -> str:
         return self.metadata.get("myst").get("html_meta").get("property=og:image", "https://rocm.blogs.amd.com/_images/generic.jpg")
@@ -102,7 +104,6 @@ class Blog:
 
     def to_json(self) -> str:
         """Convert the blog metadata to JSON format."""
-        # Convert metadata dictionary to JSON string
         try:
             return json.dumps(self.metadata, indent=4)
         except Exception as error:
@@ -120,7 +121,6 @@ class Blog:
             return
             
         try:
-            # Use binary mode without encoding parameter (encoding is for text files)
             with open(output_path, "wb") as file:
                 file.write(self.image)
                 sphinx_diagnostics.info(
@@ -295,7 +295,6 @@ class Blog:
 
     def grab_image(self, rocmblogs) -> pathlib.Path:
         """Find the image for the blog and return its path."""
-        # Get the thumbnail from metadata
         image = getattr(self, "thumbnail", None)
         
         if not image:
@@ -386,10 +385,8 @@ class Blog:
         parent2 = blog_dir.parent.parent
         if parent2 != blogs_dir:
             search_paths.extend([
-                # WebP versions first
                 parent2 / webp_image,
                 parent2 / "images" / webp_image,
-                # Then original images
                 parent2 / image,
                 parent2 / "images" / image,
             ])
@@ -398,21 +395,17 @@ class Blog:
             parent3 = parent2.parent
             if parent3 != blogs_dir:
                 search_paths.extend([
-                    # WebP versions first
                     parent3 / webp_image,
                     parent3 / "images" / webp_image,
-                    # Then original images
                     parent3 / image,
                     parent3 / "images" / image,
                 ])
         
         # Add global image directories
         search_paths.extend([
-            # WebP versions first
             blog_dir.parent / "images" / webp_image,
             blogs_dir / "images" / webp_image,
             blogs_dir / "images" / webp_image.lower(),
-            # Then original images
             blog_dir.parent / "images" / image,
             blogs_dir / "images" / image,
             blogs_dir / "images" / image.lower(),
@@ -421,7 +414,6 @@ class Blog:
         # Check each path
         for path in search_paths:
             if path.exists() and path.is_file():
-                # If we found a WebP version, log it
                 if str(path).lower().endswith('.webp'):
                     sphinx_diagnostics.info(
                         f"Using WebP version for image: {path}"

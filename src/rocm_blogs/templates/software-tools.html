@@ -12,18 +12,16 @@ if (window.performance && window.performance.mark) {
 </script>
 
 <style>
-  
-#buttonWrapper {
-    will-change: transform;
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    transition: none !important;
-}
+    #buttonWrapper {
+        will-change: transform;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        transition: none !important;
+    }
 
-#buttonWrapper:hover {
-    transform: none !important;
-}
-  
+    #buttonWrapper:hover {
+        transform: none !important;
+    }
 </style>
 
 <p>Discover the latest blogs about ROCm software tools, libraries, and performance optimizations to help you get the most out of your AMD hardware.</p>
@@ -140,7 +138,7 @@ if (window.performance && window.performance.mark) {
                 const metrics = JSON.stringify(perfEntries);
                 navigator.sendBeacon('/analytics', metrics);
             } catch (error) {
-                console.error('Failed to send performance metrics', e);
+                console.error('Failed to send performance metrics', error);
             }
         }
       });

@@ -10,9 +10,9 @@ import os
 import sys
 import time
 import traceback
+
 from pathlib import Path
 from sphinx.util import logging as sphinx_logging
-
 from rocm_blogs import ROCmBlogs, metadata_generator
 from rocm_blogs._version import __version__
 

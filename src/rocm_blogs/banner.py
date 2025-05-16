@@ -3,6 +3,7 @@ Banner slider generation for ROCm Blogs.
 """
 
 import os
+
 from sphinx.util import logging as sphinx_logging
 from PIL import Image
 
@@ -56,8 +57,7 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 	sphinx_diagnostics.debug(
 		f"Banner slide title: {title}"
 	)
-	
-	# Get category
+
 	category = getattr(blog, "category", "ROCm Blog")
 	category_link = category.lower().replace(" ", "-")
 	category_url = f"./blog/category/{category_link}.html"
@@ -65,14 +65,10 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 		f"Banner slide category: {category}, URL: {category_url}"
 	)
 
-	# Check if WebP version exists before calling grab_image
-	# This ensures we use the WebP version if available
 	if hasattr(blog, "thumbnail") and blog.thumbnail:
-			# Check if there's a WebP version of the thumbnail
 			thumbnail_path = blog.thumbnail
 			webp_thumbnail_path = os.path.splitext(thumbnail_path)[0] + '.webp'
-			
-			# If the WebP version exists, update the thumbnail to use it
+
 			if os.path.exists(os.path.join(rocmblogs.blogs_directory, webp_thumbnail_path)):
 				sphinx_diagnostics.info(
 						f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}"
@@ -88,88 +84,68 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 						f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}"
 				)
 				blog.thumbnail = webp_thumbnail_path
-	
-	# Get image
+
 	sphinx_diagnostics.debug(
 		f"Getting image for banner slide: {title}"
 	)
 	blog.grab_image(rocmblogs)
-	
-	# Convert to proper image URL for the banner
+
 	if blog.image_paths:
-			# Use the image filename from blog.image_paths
 			image_filename = os.path.basename(blog.image_paths[0])
-			
-			# Check if we can use a WebP version of the image - handle both lowercase and uppercase extensions
-			if any(image_filename.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.gif', '.JPG', '.JPEG', '.PNG', '.GIF')):
+
+			if any(image_filename.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG')):
 					webp_filename = os.path.splitext(image_filename)[0] + '.webp'
-					
-					# Check if the WebP version exists in common locations
+
 					webp_exists = False
-					
-					# Check in the blog's directory
+
 					if os.path.exists(os.path.join(os.path.dirname(blog.file_path), webp_filename)):
 						image_filename = webp_filename
 						webp_exists = True
 						sphinx_diagnostics.info(
 							f"Using WebP version for banner slide image: {webp_filename}"
 						)
-					
-					# Check in the blog's images directory
+
 					elif os.path.exists(os.path.join(os.path.dirname(blog.file_path), "images", webp_filename)):
 						image_filename = webp_filename
 						webp_exists = True
 						sphinx_diagnostics.info(
 							f"Using WebP version for banner slide image: {webp_filename}"
 						)
-					
-					# Check in the global images directory
+
 					elif os.path.exists(os.path.join(rocmblogs.blogs_directory, "images", webp_filename)):
 						image_filename = webp_filename
 						webp_exists = True
 						sphinx_diagnostics.info(
 							f"Using WebP version for banner slide image: {webp_filename}"
 						)
-					
-					# If WebP doesn't exist, try to convert it
+
 					if not webp_exists:
 						sphinx_diagnostics.info(
 							f"WebP version not found for {image_filename}, attempting to convert"
 						)
-						
-						# Find the original image file
+
 						original_image_path = None
-						
-						# Check in the blog's directory
+
 						if os.path.exists(os.path.join(os.path.dirname(blog.file_path), image_filename)):
 							original_image_path = os.path.join(os.path.dirname(blog.file_path), image_filename)
-						
-						# Check in the blog's images directory
+
 						elif os.path.exists(os.path.join(os.path.dirname(blog.file_path), "images", image_filename)):
 							original_image_path = os.path.join(os.path.dirname(blog.file_path), "images", image_filename)
-						
-						# Check in the global images directory
+
 						elif os.path.exists(os.path.join(rocmblogs.blogs_directory, "images", image_filename)):
 							original_image_path = os.path.join(rocmblogs.blogs_directory, "images", image_filename)
-						
-						# If we found the original image, try to convert it to WebP
+
 						if original_image_path:
 							try:
-								
-								# Open the image
 								with Image.open(original_image_path) as img:
-										# Get image properties
 										original_width, original_height = img.size
-										
-										# Convert to RGB or RGBA if needed for WebP
+
 										webp_img = img
 										if img.mode not in ('RGB', 'RGBA'):
 											webp_img = img.convert('RGB')
-										
-										# Resize image if needed - maintain aspect ratio for content images
-										if original_width > 1280 or original_height > 720:
-												# Calculate scaling factor to maintain aspect ratio
-												scaling_factor = min(1280 / original_width, 720 / original_height)
+
+										if original_width > 1200 or original_height > 675:
+												scaling_factor = min(1200 / original_width, 675 / original_height)
 												
 												new_width = int(original_width * scaling_factor)
 												new_height = int(original_height * scaling_factor)
@@ -178,28 +154,23 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 												sphinx_diagnostics.info(
 													f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}"
 												)
-										
-										# Save as WebP
+
 										webp_path = os.path.splitext(original_image_path)[0] + '.webp'
 										webp_img.save(webp_path, format="WEBP", quality=85, method=6)
-										
-										# Update the image filename to use the WebP version
+
 										image_filename = webp_filename
 										sphinx_diagnostics.info(
 											f"Successfully converted {image_filename} to WebP: {webp_path}"
 										)
-							except Exception as e:
+							except Exception as error:
 								sphinx_diagnostics.warning(
-									f"Failed to convert {image_filename} to WebP: {e}"
+									f"Failed to convert {image_filename} to WebP: {error}"
 								)
-			
-			# Use the ./_images/ path format as required
 			image = f"./_images/{image_filename}"
 			sphinx_diagnostics.debug(
 				f"Using image for banner slide: {image}"
 			)
 	else:
-			# Check if generic.webp exists
 			generic_webp_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "generic.webp")
 			if os.path.exists(generic_webp_path):
 				image = "./_images/generic.webp"
@@ -211,8 +182,7 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 				sphinx_diagnostics.debug(
 					f"No image found for banner slide, using generic: {image}"
 				)
-	
-	# Get href
+
 	raw_href = blog.grab_href()
 	if hasattr(raw_href, "split"):
 		href = "." + raw_href.split("/blogs")[-1].replace("\\", "/")
@@ -221,8 +191,7 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 		sphinx_diagnostics.debug(
 			f"Banner slide href: {href}"
 		)
-	
-	# Get description from myst metadata, matching grid.py approach
+
 	description = "Explore the latest insights and developments in ROCm technology."
 	if hasattr(blog, "myst") and blog.myst:
 		html_meta = blog.myst.get("html_meta", {})
@@ -245,24 +214,20 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 		sphinx_diagnostics.debug(
 			f"Using default description for banner slide"
 		)
-	
-	# Get author and format it like in grid.py
+
 	authors_list = getattr(blog, "author", "").split(",")
 	sphinx_diagnostics.debug(
 		f"Authors list for banner slide: {authors_list}"
 	)
-	
-	# Initialize authors_html
+
 	authors_html = ""
-	
-	# Get author HTML if there are authors
+
 	if authors_list and authors_list[0]:
 		authors_html = blog.grab_authors(authors_list)
 		sphinx_diagnostics.debug(
 			f"Generated authors HTML: {authors_html}"
 		)
-	
-	# Only add "by" prefix if there are valid authors
+
 	if authors_html:
 		author = f"by {authors_html}"
 	else:
