@@ -2098,14 +2098,32 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             page_name = re.sub(r'[^a-z0-9-]', '', page_name)
             page_name = re.sub(r'-+', '-', page_name)
 
+            log_file_handle.write(f"Creating title from vertical and category: {vertical} - {category}\n")
+
+            if vertical.lower() == "ai":
+                vertical = "AI"
+                title_vertical = vertical
+            else:
+                title_vertical = vertical.capitalize()
+            title_vertical = title_vertical.replace("and", "&").replace('And', '&')
+
+            log_file_handle.write(f"Formatted vertical name: {title_vertical}\n")
+
+            words_category = category.split(' ')
+            title_category = " ".join(word.upper() if word.lower() == "ai" else word.capitalize() for word in words_category).replace('and', '&').replace('And', '&')
+
+            if category.lower() == "ai":
+                category = category.upper()
+            category = category.replace('and', '&')
+
             filter_info = {
-                "name": f"{category} - {vertical}",
+                "name": f"{vertical} - {category}",
                 "template": "applications-models.html",
                 "output_base": page_name,
                 "category_key": category,
-                "title": f"{category} - {vertical} Blogs",
+                "title": f"{title_vertical} - {title_category} Blogs",
                 "description": f"AMD ROCm™ blogs related to {category} in the {vertical} market vertical",
-                "keywords": f"{category}, {vertical}, AMD, ROCm",
+                "keywords": f"{vertical}, {category}, AMD, ROCm".replace('and', '&'),
                 "filter_criteria": {
                     "category": [category],
                     "vertical": [vertical]
@@ -2271,6 +2289,8 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
 
             category_key = category_info["category_key"]
             category_blogs = rocm_blogs.blogs.blogs_categories.get(category_key, [])
+
+            category_info["title"] = category_info.get("title", category_name).capitalize().replace('and', '&').replace('And', '&')
             
             try:
                 _process_category(
