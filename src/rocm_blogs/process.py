@@ -105,7 +105,7 @@ def _create_pagination_controls(pagination_template, current_page, total_pages, 
         .replace("{next_button}", next_button)
     )
 
-def _process_category(category_info, rocm_blogs, blogs_directory, pagination_template, css_content, pagination_css, current_datetime, category_template, category_blogs=None):
+def _process_category(category_info, rocm_blogs, blogs_directory, pagination_template, css_content, pagination_css, current_datetime, category_template, category_blogs=None, log_file_handle=None):
     """Process a page with a specific filter criteria."""
     category_name = category_info["name"]
     template_name = category_info["template"]
@@ -121,6 +121,9 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
         f"Generating paginated pages for category: {category_name}"
     )
     
+    if log_file_handle:
+        log_file_handle.write(f"Generating paginated pages for category: {category_name}\n")
+
     template_html = import_file("rocm_blogs.templates", template_name)
     
     # If category_blogs is not provided, filter blogs based on filter_criteria
@@ -134,11 +137,18 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
             sphinx_diagnostics.info(
                 f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs."
             )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs.\n"
+                )
         else:
             sphinx_diagnostics.info(
                 f"Using filter_criteria to filter blogs: {filter_criteria}"
             )
-
+            if log_file_handle:
+                log_file_handle.write(
+                    f"Using filter_criteria to filter blogs: {filter_criteria}\n"
+                )
             for blog in all_blogs:
                 matches_all_criteria = True
                 
@@ -155,17 +165,29 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' does not match any of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' does not match any of {values}\n"
+                                )
                             break
                         else:
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' matches one of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' matches one of {values}\n"
+                                )
                     elif field == "vertical":
                         if not hasattr(blog, "metadata") or not blog.metadata:
                             matches_all_criteria = False
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no metadata"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no metadata\n"
+                                )
                             break
 
                         try:
@@ -183,6 +205,10 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals: {blog_verticals}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals: {blog_verticals}\n"
+                                )
                             
                             # Check if any of the blog's verticals match any of the specified verticals
                             if not blog_verticals or not any(bv in values for bv in blog_verticals):
@@ -190,16 +216,28 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                                 sphinx_diagnostics.debug(
                                     f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} do not match any of {values}"
                                 )
+                                if log_file_handle:
+                                    log_file_handle.write(
+                                        f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} do not match any of {values}\n"
+                                    )
                                 break
                             else:
                                 sphinx_diagnostics.debug(
                                     f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} match one of {values}"
                                 )
+                                if log_file_handle:
+                                    log_file_handle.write(
+                                        f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} match one of {values}\n"
+                                    )
                         except (AttributeError, KeyError) as e:
                             matches_all_criteria = False
                             sphinx_diagnostics.debug(
                                 f"Error getting vertical for blog '{getattr(blog, 'blog_title', 'Unknown')}': {e}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Error getting vertical for blog '{getattr(blog, 'blog_title', 'Unknown')}': {e}\n"
+                                )
                             break
                     elif field == "tags":
                         if not hasattr(blog, "tags") or not blog.tags:
@@ -207,6 +245,10 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no tags"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no tags\n"
+                                )
                             break
 
                         blog_tags = blog.tags
@@ -218,11 +260,19 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} do not match any of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} do not match any of {values}\n"
+                                )
                             break
                         else:
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} match one of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} match one of {values}\n"
+                                )
                     else:
                         blog_value = getattr(blog, field, None)
                         if blog_value is None or blog_value not in values:
@@ -230,11 +280,19 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' does not match any of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' does not match any of {values}\n"
+                                )
                             break
                         else:
                             sphinx_diagnostics.debug(
                                 f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' matches one of {values}"
                             )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' matches one of {values}\n"
+                                )
                 
                 # If blog matches all criteria, add it to category_blogs
                 if matches_all_criteria:
@@ -242,15 +300,35 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
                     sphinx_diagnostics.debug(
                         f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs"
                     )
+                    if log_file_handle:
+                        log_file_handle.write(
+                            f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs\n"
+                        )
             
             sphinx_diagnostics.info(
                 f"Found {len(category_blogs)} blogs matching filter criteria"
             )
-    
-    if not category_blogs:
+            if log_file_handle:
+                log_file_handle.write(
+                    f"Found {len(category_blogs)} blogs matching filter criteria\n"
+                )
+
+    # If no blogs were found for the category, log a warning and return
+    if not category_blogs and not filter_criteria:
+        sphinx_diagnostics.warning(
+            f"No blogs found for category: {category_name} and no filter criteria provided"
+        )
+        if log_file_handle:
+            log_file_handle.write(
+                f"No blogs found for category: {category_name} and no filter criteria provided\n"
+            )
+        return
+    elif not category_blogs:
         sphinx_diagnostics.warning(
             f"No blogs found for category: {category_name}"
         )
+        if log_file_handle:
+            log_file_handle.write(f"No blogs found for category: {category_name}\n")
         return
     
     # Calculate total number of pages
@@ -259,6 +337,10 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
     sphinx_diagnostics.info(
         f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages"
     )
+    if log_file_handle:
+        log_file_handle.write(
+            f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages\n"
+        )
 
     all_grid_items = _generate_lazy_loaded_grid_items(rocm_blogs, category_blogs)
     
@@ -271,7 +353,6 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
     
     # Generate each page
     for page_num in range(1, total_pages + 1):
-        # Get grid items for this page
         start_index = (page_num - 1) * CATEGORY_BLOGS_PER_PAGE
         end_index = min(start_index + CATEGORY_BLOGS_PER_PAGE, len(all_grid_items))
         page_grid_items = all_grid_items[start_index:end_index]
@@ -279,7 +360,6 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
         fixed_grid_items = []
         for grid_item in page_grid_items:
             grid_item = grid_item.replace(':img-top: ./', ':img-top: /')
-            # Also fix paths for ecosystem pages
             grid_item = grid_item.replace(':img-top: ./ecosystems', ':img-top: /ecosystems')
             grid_item = grid_item.replace(':img-top: ./applications', ':img-top: /applications')
             fixed_grid_items.append(grid_item)
@@ -312,10 +392,48 @@ def _process_category(category_info, rocm_blogs, blogs_directory, pagination_tem
 
         output_filename = f"{output_base}.md" if page_num == 1 else f"{output_base}-page{page_num}.md"
         output_path = Path(blogs_directory) / output_filename
+
+        if log_file_handle:
+            log_file_handle.write(f"Generated {output_filename} with {len(page_grid_items)} grid items\n")
+            log_file_handle.write(f"Page being written: {output_path} with file name: {output_filename}\n")
         
-        with output_path.open("w", encoding="utf-8") as output_file:
-            output_file.write(final_content)
-        
+        try:
+            with output_path.open("w", encoding="utf-8") as output_file:
+                output_file.write(final_content)
+
+            if log_file_handle:
+                log_file_handle.write(f"Successfully wrote to file {output_path}\n")
+
+        except FileNotFoundError as fnf_error:
+            sphinx_diagnostics.error(
+                f"File not found error while writing to {output_path}: {fnf_error}"
+            )
+            if log_file_handle:
+                log_file_handle.write(f"File not found error while writing to {output_path}: {fnf_error}\n")
+            raise SphinxError(f"File not found error while writing to {output_path}: {fnf_error}") from fnf_error
+        except Exception as write_error:
+            sphinx_diagnostics.error(
+                f"Error writing to file {output_path}: {write_error}"
+            )
+            sphinx_diagnostics.debug(
+                f"Traceback: {traceback.format_exc()}"
+            )
+
+            if log_file_handle:
+                log_file_handle.write(f"Error writing to file {output_path}: {write_error}\n")
+                log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+
+            raise SphinxError(f"Error writing to file {output_path}: {write_error}") from write_error
+
+        # verify the file was created successfully
+        if not output_path.exists():
+            sphinx_diagnostics.error(
+                f"File {output_path} was not created successfully"
+            )
+            if log_file_handle:
+                log_file_handle.write(f"File {output_path} was not created successfully\n")
+            raise SphinxError(f"File {output_path} was not created successfully")
+
         sphinx_diagnostics.info(
             f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})"
         )
@@ -345,8 +463,7 @@ def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used
             grid_futures = {}
 
             for blog_entry in blog_list:
-                # Check if we should skip this blog because it's already used
-                # Only skip if skip_used is True and the blog is in used_blogs
+
                 if skip_used and blog_entry in used_blogs:
                     sphinx_diagnostics.debug(
                         f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used"
@@ -360,8 +477,6 @@ def _generate_grid_items(rocm_blogs, blog_list, max_items, used_blogs, skip_used
                     )
                     continue
                     
-                # Add blog to used_blogs list to avoid using it again in other sections
-                # Only mark as used if skip_used is True (for main page sections)
                 if skip_used and blog_entry not in used_blogs:
                     used_blogs.append(blog_entry)
                     
@@ -692,6 +807,14 @@ def process_single_blog(blog_entry, rocm_blogs):
             blog_language = getattr(blog_entry, "language", "en")
             blog_category = getattr(blog_entry, "category", "blog")
             blog_tags = getattr(blog_entry, "tags", "")
+            market_vertical = blog_entry.metadata.get("myst").get("html_meta", {}).get("vertical", "")
+
+            if market_vertical:
+                market_vertical_list = []
+                for vertical in market_vertical.split(","):
+                    vertical_html = f'<a href="https://rocm.blogs.amd.com/{vertical.lower()}.html">{vertical}</a>'
+                    market_vertical_list.append(vertical_html)
+            market_vertical = ", ".join(market_vertical_list) if market_vertical_list else ""
 
             tag_html_list = []
             if blog_tags:
@@ -767,6 +890,7 @@ def process_single_blog(blog_entry, rocm_blogs):
                 .replace("{tags}", tags_html)
                 .replace("{read_time}", blog_read_time)
                 .replace("{word_count}", str(getattr(blog_entry, "word_count", "No Word Count")))
+                .replace("{market_vertical}", market_vertical)
             )
 
             try:
