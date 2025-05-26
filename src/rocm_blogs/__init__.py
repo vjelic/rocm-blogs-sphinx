@@ -2103,6 +2103,9 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             if vertical.lower() == "ai":
                 vertical = "AI"
                 title_vertical = vertical
+            elif vertical.lower() == "hpc":
+                vertical = "HPC"
+                title_vertical = vertical
             else:
                 title_vertical = vertical.capitalize()
             title_vertical = title_vertical.replace("and", "&").replace('And', '&')
@@ -2112,16 +2115,16 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             words_category = category.split(' ')
             title_category = " ".join(word.upper() if word.lower() == "ai" else word.capitalize() for word in words_category).replace('and', '&').replace('And', '&')
 
-            if category.lower() == "ai":
-                category = category.upper()
-            category = category.replace('and', '&')
+            if category.lower() == "ai" or category.lower() == "hpc":
+                title_category = title_category.upper()
+            title_category = category.replace('and', '&')
 
             filter_info = {
                 "name": f"{vertical} - {category}",
                 "template": "applications-models.html",
                 "output_base": page_name,
                 "category_key": category,
-                "title": f"{title_vertical} - {title_category} Blogs",
+                "title": f"{title_vertical} - {title_category}",
                 "description": f"AMD ROCm™ blogs related to {category} in the {vertical} market vertical",
                 "keywords": f"{vertical}, {category}, AMD, ROCm".replace('and', '&'),
                 "filter_criteria": {
@@ -2141,7 +2144,9 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                     css_content,
                     pagination_css,
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-                    CATEGORY_TEMPLATE
+                    CATEGORY_TEMPLATE,
+                    None,
+                    log_file_handle,
                 )
                 
                 total_pages_successful += 1
@@ -2417,7 +2422,6 @@ def setup(sphinx_app: Sphinx) -> dict:
         _CRITICAL_ERROR_OCCURRED = True
         raise ROCmBlogsError(f"Failed to set up ROCm Blogs extension: {setup_error}") from setup_error
 
-
 def _setup_static_files(sphinx_app: Sphinx) -> None:
     """Set up static files for the ROCm Blogs extension."""
     try:
@@ -2457,7 +2461,6 @@ def _setup_static_files(sphinx_app: Sphinx) -> None:
             f"Traceback: {traceback.format_exc()}"
         )
         raise
-
 
 def _register_event_handlers(sphinx_app: Sphinx) -> None:
     """Register event handlers for the ROCm Blogs extension."""
