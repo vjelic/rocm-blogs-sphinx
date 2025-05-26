@@ -599,22 +599,30 @@ myst:
                         )
                         metadata_log_file_handle.write(f"Date: {extracted_metadata['date']}\n")
 
+                    metadata_log_file_handle.write(f"-"*40 + "\n")
+                    metadata_log_file_handle.write(f"Beginning Check for tags\n")
+                    metadata_log_file_handle.write(f"-"*40 + "\n")
+
                     if "tags" not in extracted_metadata:
                         extracted_metadata["tags"] = ""
                         sphinx_diagnostics.debug(
                             f"No tags specified for blog: {blog_filepath}"
                         )
-                        metadata_log_file_handle.write(f"INFO: No tags specified\n")
+                        metadata_log_file_handle.write(f"ERROR: No tags specified\n")
                     else:
                         sphinx_diagnostics.debug(
                             f"Blog Tags Specified: {extracted_metadata['tags']}"
                         )
-
+                        metadata_log_file_handle.write(f"INFO: Blog Tags Specified: {extracted_metadata['tags']}\n")
                         blog_tags = extracted_metadata["tags"]
 
-                        sphinx_diagnostics.debug(
-                            f"Beginning tag and market vertical processing for blog: {blog_filepath}"
-                        )
+                    metadata_log_file_handle.write(f"-"*40 + "\n")
+                    metadata_log_file_handle.write(f"Beginning Check for market vertical\n")
+                    metadata_log_file_handle.write(f"-"*40 + "\n")
+
+                    if "tags" in extracted_metadata and "vertical" not in html_metadata:
+
+                        metadata_log_file_handle.write(f"INFO: No vertical specified, classifying blog tags\n")
                         
                         vertical_counts = classify_blog_tags(blog_tags, metadata_log_file_handle)
 
@@ -642,6 +650,15 @@ myst:
                         metadata_log_file_handle.write(f"Market Vertical: {market_vertical}\n")
                         metadata_log_file_handle.write(f"Tags: {extracted_metadata['tags']}\n")
                     
+                    else:
+                        metadata_log_file_handle.write(f"Market Vertical found in metadata: {html_metadata['vertical']}\n")
+                        market_vertical = html_metadata["vertical"]
+                        market_vertical = f'"{market_vertical}"'
+                        sphinx_diagnostics.debug(
+                            f"Market Vertical: {market_vertical}"
+                        )
+                        metadata_log_file_handle.write(f"Market Vertical: {market_vertical}\n")
+                    
                     metadata_log_file_handle.write(f"Blog Tags: {blog_tags}")
                     if not blog_tags and not market_vertical:
                         sphinx_diagnostics.debug(
@@ -666,7 +683,9 @@ myst:
                         metadata_log_file_handle.write(f"Category: {extracted_metadata['category']}\n")
 
                     metadata_log_file_handle.write(f"HTML Metadata: {json.dumps(html_metadata, indent=2)}\n")
-                        
+
+                    metadata_log_file_handle.write(f"Extracted Metadata: {json.dumps(extracted_metadata, indent=2)}\n")
+
                     # Extract AMD-specific metadata fields with default values if missing
                     amd_technical_blog_type = html_metadata.get("amd_technical_blog_type", "Applications and Models")
                     
