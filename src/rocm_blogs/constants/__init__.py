@@ -14,23 +14,23 @@ AVERAGE_READING_SPEED_WPM = 245
 SPECIAL_CHARS_PATTERN = re.compile(r"[!@#$%^&*?/|]")
 WHITESPACE_PATTERN_FOR_SLUGS = re.compile(r"\s+")
 
-EXCLUDED_EXTENSIONS = ['.gif', '.GIF']
+EXCLUDED_EXTENSIONS = [".gif", ".GIF"]
 
 # Markdown patterns for word counting
 MARKDOWN_PATTERNS = {
-    'yaml_front_matter': re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL),
-    'fenced_code_blocks': re.compile(r"```[\s\S]*?```"),
-    'indented_code_blocks': re.compile(r"(?m)^( {4}|\t).*$"),
-    'html_tags': re.compile(r"<[^>]*>"),
-    'urls': re.compile(r"https?://\S+"),
-    'image_references': re.compile(r"!\[[^\]]*\]\([^)]*\)"),
-    'link_references': re.compile(r"\[[^\]]*\]\([^)]*\)"),
-    'headers': re.compile(r"(?m)^#.*$"),
-    'horizontal_rules': re.compile(r"(?m)^(---|[*]{3}|[_]{3})$"),
-    'blockquotes': re.compile(r"(?m)^>.*$"),
-    'unordered_list_markers': re.compile(r"(?m)^[ \t]*[-*+][ \t]+"),
-    'ordered_list_markers': re.compile(r"(?m)^[ \t]*\d+\.[ \t]+"),
-    'whitespace': re.compile(r"\s+")
+    "yaml_front_matter": re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL),
+    "fenced_code_blocks": re.compile(r"```[\s\S]*?```"),
+    "indented_code_blocks": re.compile(r"(?m)^( {4}|\t).*$"),
+    "html_tags": re.compile(r"<[^>]*>"),
+    "urls": re.compile(r"https?://\S+"),
+    "image_references": re.compile(r"!\[[^\]]*\]\([^)]*\)"),
+    "link_references": re.compile(r"\[[^\]]*\]\([^)]*\)"),
+    "headers": re.compile(r"(?m)^#.*$"),
+    "horizontal_rules": re.compile(r"(?m)^(---|[*]{3}|[_]{3})$"),
+    "blockquotes": re.compile(r"(?m)^>.*$"),
+    "unordered_list_markers": re.compile(r"(?m)^[ \t]*[-*+][ \t]+"),
+    "ordered_list_markers": re.compile(r"(?m)^[ \t]*\d+\.[ \t]+"),
+    "whitespace": re.compile(r"\s+"),
 }
 
 AUTHOR_TEMPLATE = """
@@ -128,7 +128,7 @@ CATEGORY_BLOGS_PER_PAGE = 12
 POST_BLOGS_PER_PAGE = 12
 
 # Image constants
-SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
+SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 PROBLEMATIC_IMAGES = {"2024-10-03-image_classification.jpg", "2024-10-10-seismic.jpeg"}
 CONTENT_MAX_DIMENSIONS = (1200, 675)
 BANNER_DIMENSIONS = (1200, 675)
@@ -136,17 +136,17 @@ MIN_SIZE_REDUCTION_PCT = 5.0
 
 # Image format-specific optimization settings
 FORMAT_SETTINGS = {
-    'JPEG': {'quality': 85, 'optimize': True, 'progressive': True},
-    'PNG': {'optimize': True, 'compress_level': 9},
-    'GIF': {'optimize': True},
-    'WEBP': {'quality': 85, 'method': 6},
+    "JPEG": {"quality": 85, "optimize": True, "progressive": True},
+    "PNG": {"optimize": True, "compress_level": 9},
+    "GIF": {"optimize": True},
+    "WEBP": {"quality": 85, "method": 6},
 }
 
 # Conservative settings for problematic images
 CONSERVATIVE_SETTINGS = {
-    'JPEG': {'quality': 40, 'optimize': True, 'progressive': True},
-    'PNG': {'optimize': True, 'compress_level': 10},
-    'WEBP': {'quality': 40, 'method': 4},
+    "JPEG": {"quality": 40, "optimize": True, "progressive": True},
+    "PNG": {"optimize": True, "compress_level": 10},
+    "WEBP": {"quality": 40, "method": 4},
 }
 
 # WebP conversion settings
@@ -192,10 +192,7 @@ BLOG_CATEGORIES = [
         "title": "AI Applications",
         "description": "AMD ROCm™ software blogs about AI applications",
         "keywords": "AI, applications, machine learning, deep learning",
-        "filter_criteria": {
-            "category": "Applications & models",
-            "vertical": "AI"
-        }
+        "filter_criteria": {"category": "Applications & models", "vertical": "AI"},
     },
     {
         "name": "HPC Software Tools",
@@ -207,7 +204,7 @@ BLOG_CATEGORIES = [
         "keywords": "HPC, software, tools, high performance computing",
         "filter_criteria": {
             "category": "Software tools & optimizations",
-            "vertical": "HPC"
-        }
-    }
+            "vertical": "HPC",
+        },
+    },
 ]
