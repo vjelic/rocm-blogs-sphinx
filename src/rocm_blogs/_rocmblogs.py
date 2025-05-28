@@ -1,12 +1,13 @@
 import os
 import re
 import threading
-
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+
 import yaml
 from sphinx.util import logging as sphinx_logging
+
 from .blog import Blog
 from .holder import BlogHolder
 
@@ -32,9 +33,7 @@ class ROCmBlogs:
         """Cache the README files in the 'blogs' directory."""
         cache_file = Path("readme_files_cache.txt")
         root = Path(self.blogs_directory)
-        sphinx_diagnostics.debug(
-            f"Current working directory: {os.getcwd()}"
-        )
+        sphinx_diagnostics.debug(f"Current working directory: {os.getcwd()}")
 
         if cache_file.exists():
             with cache_file.open("r", encoding="utf-8") as f:
@@ -52,14 +51,10 @@ class ROCmBlogs:
                 )
 
         # If no valid cache is available, perform a fresh scan.
-        sphinx_diagnostics.info(
-            f"Scanning {root} for README.md files..."
-        )
+        sphinx_diagnostics.info(f"Scanning {root} for README.md files...")
 
         candidates = list(root.rglob("README.md"))
-        sphinx_diagnostics.debug(
-            f"Found {len(candidates)} candidate README.md files"
-        )
+        sphinx_diagnostics.debug(f"Found {len(candidates)} candidate README.md files")
 
         # (Optional)
         with open("candidates.txt", "w", encoding="utf-8") as f:
@@ -77,9 +72,7 @@ class ROCmBlogs:
             )
             raise FileNotFoundError("No 'README.md' files found.")
 
-        sphinx_diagnostics.info(
-            "Found {len(readme_files)} 'README.md' file(s)."
-        )
+        sphinx_diagnostics.info("Found {len(readme_files)} 'README.md' file(s).")
         self.blog_paths = readme_files
 
         # Update the cache file with the fresh scan.
@@ -95,17 +88,11 @@ class ROCmBlogs:
 
         root = Path(self.blogs_directory)
 
-        sphinx_diagnostics.debug(
-            f"Current working directory: {os.getcwd()}"
-        )
-        sphinx_diagnostics.info(
-            f"Scanning {root} for README.md files..."
-        )
+        sphinx_diagnostics.debug(f"Current working directory: {os.getcwd()}")
+        sphinx_diagnostics.info(f"Scanning {root} for README.md files...")
 
         candidates = list(root.rglob("README.md"))
-        sphinx_diagnostics.debug(
-            f"Found {len(candidates)} candidate README.md files"
-        )
+        sphinx_diagnostics.debug(f"Found {len(candidates)} candidate README.md files")
 
         def process_path(path: Path) -> str | None:
             """Check if the path is a file and return the path if it is."""
@@ -125,9 +112,7 @@ class ROCmBlogs:
             )
             raise FileNotFoundError("No 'readme.md' files found.")
 
-        sphinx_diagnostics.info(
-            f"Found {len(readme_files)} 'README.md' file(s)."
-        )
+        sphinx_diagnostics.info(f"Found {len(readme_files)} 'README.md' file(s).")
 
         self.blog_paths = readme_files
 
@@ -139,17 +124,12 @@ class ROCmBlogs:
         return None
 
     def find_author_files(self) -> None:
-
         """Find all author files in the blogs directory."""
 
         root = Path(self.blogs_directory)
 
-        sphinx_diagnostics.debug(
-            f"Current working directory: {os.getcwd()}"
-        )
-        sphinx_diagnostics.info(
-            f"Scanning {root} for author directory"
-        )
+        sphinx_diagnostics.debug(f"Current working directory: {os.getcwd()}")
+        sphinx_diagnostics.info(f"Scanning {root} for author directory")
 
         author_directory = root / "authors"
         if not author_directory.exists():
@@ -159,11 +139,9 @@ class ROCmBlogs:
             raise FileNotFoundError(
                 f"The directory '{author_directory}' does not exist."
             )
-        
+
         candidates = list(author_directory.rglob("*.md"))
-        sphinx_diagnostics.debug(
-            f"Found {len(candidates)} candidate author files"
-        )
+        sphinx_diagnostics.debug(f"Found {len(candidates)} candidate author files")
 
         with ThreadPoolExecutor() as executor:
             results = list(executor.map(self.process_path, candidates))
@@ -172,9 +150,7 @@ class ROCmBlogs:
 
         for author in author_files:
             if not author.endswith(".md"):
-                sphinx_diagnostics.info(
-                    f"Found markdown file: {author}"
-                )
+                sphinx_diagnostics.info(f"Found markdown file: {author}")
 
         if not author_files:
             sphinx_diagnostics.critical(
@@ -182,9 +158,7 @@ class ROCmBlogs:
             )
             raise FileNotFoundError("No 'author.md' files found.")
 
-        sphinx_diagnostics.info(
-            f"Found {len(author_files)} 'author.md' file(s)."
-        )
+        sphinx_diagnostics.info(f"Found {len(author_files)} 'author.md' file(s).")
 
         self.author_paths = author_files
 
@@ -206,14 +180,10 @@ class ROCmBlogs:
 
         while True:
             candidate = current_dir / "blogs"
-            sphinx_diagnostics.debug(
-                f"Checking if {candidate} is a directory"
-            )
-            
+            sphinx_diagnostics.debug(f"Checking if {candidate} is a directory")
+
             if candidate.is_dir():
-                sphinx_diagnostics.info(
-                    f"Found blogs directory at: {candidate}"
-                )
+                sphinx_diagnostics.info(f"Found blogs directory at: {candidate}")
                 self.blogs_directory = candidate
                 return candidate
 
@@ -236,9 +206,7 @@ class ROCmBlogs:
             return {}
 
         file_path = self.blog_paths[0]
-        sphinx_diagnostics.info(
-            f"Extracting metadata from {file_path}"
-        )
+        sphinx_diagnostics.info(f"Extracting metadata from {file_path}")
 
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
@@ -250,22 +218,20 @@ class ROCmBlogs:
 
             try:
                 metadata = yaml.safe_load(yaml_content)
-                
+
                 category = metadata.get("category", "")
                 tags = metadata.get("tags", "")
-                
+
                 self.categories.append(category)
                 self.tags.append(tags)
-                
+
                 sphinx_diagnostics.debug(
                     f"Extracted metadata - Category: {category}, Tags: {tags}"
                 )
 
                 return metadata
             except yaml.YAMLError as error:
-                sphinx_diagnostics.error(
-                    f"Error parsing YAML in {file_path}: {error}"
-                )
+                sphinx_diagnostics.error(f"Error parsing YAML in {file_path}: {error}")
                 raise ValueError(f"Error parsing YAML: {error}")
         else:
             sphinx_diagnostics.warning(
@@ -277,9 +243,7 @@ class ROCmBlogs:
     def extract_metadata_from_file(self, file_path: str) -> dict:
         """Extract metadata from a blog file."""
 
-        sphinx_diagnostics.debug(
-            f"Extracting metadata from {file_path}"
-        )
+        sphinx_diagnostics.debug(f"Extracting metadata from {file_path}")
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as file:
             content = file.read()
@@ -291,22 +255,20 @@ class ROCmBlogs:
 
             try:
                 metadata = yaml.safe_load(yaml_content)
-                
+
                 category = metadata.get("category", "")
                 tags = metadata.get("tags", "")
-                
+
                 self.categories.append(category)
                 self.tags.append(tags)
-                
+
                 sphinx_diagnostics.debug(
                     f"Extracted metadata from {os.path.basename(file_path)} - Category: {category}, Tags: {tags}"
                 )
 
                 return metadata
             except yaml.YAMLError as error:
-                sphinx_diagnostics.error(
-                    f"Error parsing YAML in {file_path}: {error}"
-                )
+                sphinx_diagnostics.error(f"Error parsing YAML in {file_path}: {error}")
                 raise ValueError(
                     f"Error parsing YAML: {error}. Look at the metadata section in the Markdown file."
                 )
@@ -330,20 +292,27 @@ class ROCmBlogs:
                 # Try to extract title from filename
                 filename = os.path.basename(file_path)
                 dirname = os.path.basename(os.path.dirname(file_path))
-                
+
                 # Use directory name as title if it's not a generic name
                 if dirname and dirname.lower() not in "blogs":
-                    blog.blog_title = dirname.replace("-", " ").replace("_", " ").title()
+                    blog.blog_title = (
+                        dirname.replace("-", " ").replace("_", " ").title()
+                    )
                     sphinx_diagnostics.info(
                         f"Using directory name as blog title for {filename}: {blog.blog_title}"
                     )
                 else:
                     # Use filename without extension as title
-                    blog.blog_title = os.path.splitext(filename)[0].replace("-", " ").replace("_", " ").title()
+                    blog.blog_title = (
+                        os.path.splitext(filename)[0]
+                        .replace("-", " ")
+                        .replace("_", " ")
+                        .title()
+                    )
                     sphinx_diagnostics.info(
                         f"Using filename as blog title: {blog.blog_title}"
                     )
-            
+
             # Check for date attribute
             if not hasattr(blog, "date") or blog.date is None:
                 # Try to extract date from file modification time
@@ -359,21 +328,27 @@ class ROCmBlogs:
                     sphinx_diagnostics.warning(
                         f"Failed to get modification time, using current date for {os.path.basename(file_path)}: {date_error}"
                     )
-            
+
             # Check for category attribute
             if not hasattr(blog, "category") or not blog.category:
                 # Try to use parent directory name as category
                 parent_dir = os.path.basename(os.path.dirname(file_path))
                 if parent_dir and parent_dir.lower() not in "blogs":
-                    blog.category = parent_dir.replace("-", " ").replace("_", " ").title()
+                    blog.category = (
+                        parent_dir.replace("-", " ").replace("_", " ").title()
+                    )
                     sphinx_diagnostics.info(
                         f"Using parent directory as blog category: {blog.category}"
                     )
                 else:
                     # Use grandparent directory if parent is generic
-                    grandparent_dir = os.path.basename(os.path.dirname(os.path.dirname(file_path)))
+                    grandparent_dir = os.path.basename(
+                        os.path.dirname(os.path.dirname(file_path))
+                    )
                     if grandparent_dir and grandparent_dir.lower() not in "blogs":
-                        blog.category = grandparent_dir.replace("-", " ").replace("_", " ").title()
+                        blog.category = (
+                            grandparent_dir.replace("-", " ").replace("_", " ").title()
+                        )
                         sphinx_diagnostics.info(
                             f"Using grandparent directory as blog category: {blog.category}"
                         )
@@ -383,15 +358,13 @@ class ROCmBlogs:
                         sphinx_diagnostics.info(
                             f"Using default category for blog: {blog.category}"
                         )
-            
+
             sphinx_diagnostics.debug(
                 f"Successfully created blog object for {os.path.basename(file_path)}"
             )
             return blog
         except Exception as error:
-            sphinx_diagnostics.error(
-                f"Error processing blog {file_path}: {error}"
-            )
+            sphinx_diagnostics.error(f"Error processing blog {file_path}: {error}")
             return None
 
     def create_blog_objects(self) -> None:
@@ -399,7 +372,7 @@ class ROCmBlogs:
 
         if not hasattr(self, "_blog_lock"):
             self._blog_lock = threading.Lock()
-            
+
         sphinx_diagnostics.info(
             f"Creating blog objects from {len(self.blog_paths)} README files"
         )
@@ -422,7 +395,7 @@ class ROCmBlogs:
                     sphinx_diagnostics.warning(
                         f"Error adding blog {getattr(blog, 'blog_title', 'Unknown')}: {error}"
                     )
-            
+
             sphinx_diagnostics.info(
                 f"Successfully added {added_count} blogs to the blog holder"
             )
@@ -430,9 +403,7 @@ class ROCmBlogs:
     def _setup(self) -> None:
         """Setup the blogs directory."""
 
-        sphinx_diagnostics.debug(
-            f"Setting up blogs directory: {self.blogs_directory}"
-        )
+        sphinx_diagnostics.debug(f"Setting up blogs directory: {self.blogs_directory}")
         if not os.path.exists(self.blogs_directory):
             sphinx_diagnostics.critical(
                 f"The directory '{self.blogs_directory}' does not exist."
@@ -440,9 +411,7 @@ class ROCmBlogs:
             raise FileNotFoundError(
                 f"The directory '{self.blogs_directory}' does not exist."
             )
-        sphinx_diagnostics.debug(
-            f"Blogs directory exists: {self.blogs_directory}"
-        )
+        sphinx_diagnostics.debug(f"Blogs directory exists: {self.blogs_directory}")
 
     def __iter__(self) -> iter:
         """Iterate over the list of blogs."""

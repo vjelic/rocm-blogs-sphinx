@@ -1,5 +1,11 @@
-def create_updated_html(index_template, vertical, main_grid_items, ecosystem_grid_items, 
-                       application_grid_items, software_grid_items):
+def create_updated_html(
+    index_template,
+    vertical,
+    main_grid_items,
+    ecosystem_grid_items,
+    application_grid_items,
+    software_grid_items,
+):
 
     main_grid_str = "\n".join(main_grid_items)
     eco_grid_str = "\n".join(ecosystem_grid_items)
@@ -22,8 +28,10 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
     :margin 2
     {eco_grid_items}
     ::::
-        """.format(eco_grid_items=eco_grid_str)
-    
+        """.format(
+            eco_grid_items=eco_grid_str
+        )
+
     app_section = ""
     if app_grid_str.strip():
         app_section = """
@@ -40,8 +48,10 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
     :margin 2
     {application_grid_items}
     ::::
-        """.format(application_grid_items=app_grid_str)
-    
+        """.format(
+            application_grid_items=app_grid_str
+        )
+
     software_section = ""
     if software_grid_str.strip():
         software_section = """
@@ -58,7 +68,9 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
     :margin 2
     {software_grid_items}
     ::::
-        """.format(software_grid_items=software_grid_str)
+        """.format(
+            software_grid_items=software_grid_str
+        )
 
     updated_template = index_template
 
@@ -79,8 +91,10 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
 ::::{grid} 1 2 3 4
 :margin 2
 {eco_grid_items}
-::::""", eco_section)
-    
+::::""",
+        eco_section,
+    )
+
     updated_template = updated_template.replace(
         """{% if not application_grid_items %}
 {% endif %}
@@ -98,8 +112,10 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
 ::::{grid} 1 2 3 4
 :margin 2
 {application_grid_items}
-::::""", app_section)
-    
+::::""",
+        app_section,
+    )
+
     updated_template = updated_template.replace(
         """{% if not software_grid_items %}
 {% endif %}
@@ -117,13 +133,13 @@ def create_updated_html(index_template, vertical, main_grid_items, ecosystem_gri
 ::::{grid} 1 2 3 4
 :margin 2
 {software_grid_items}
-::::""", software_section)
-    
-    # Replace the standard placeholders
-    updated_template = (
-        updated_template
-        .replace("{PAGE_TITLE}", f"{vertical} Blogs")
-        .replace("{grid_items}", main_grid_str)
+::::""",
+        software_section,
     )
-    
+
+    # Replace the standard placeholders
+    updated_template = updated_template.replace(
+        "{PAGE_TITLE}", f"{vertical} Blogs"
+    ).replace("{grid_items}", main_grid_str)
+
     return updated_template
