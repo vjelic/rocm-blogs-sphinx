@@ -2472,7 +2472,7 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
 
             filter_info = {
                 "name": f"{title_vertical} - {title_category}",
-                "template": "category-vertical.html",
+                "template": "category_vertical.html",
                 "output_base": page_name,
                 "category_key": category,
                 "title": f"{title_vertical} - {title_category}",
