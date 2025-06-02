@@ -37,6 +37,9 @@ label.sidebar-toggle.secondary-toggle.btn.btn-sm {
     display: none;
 }
 
+label.sidebar-toggle primary-toggle btn btn-sm {
+    display: none;
+}
 
 #buttonWrapper {
     border: none;
