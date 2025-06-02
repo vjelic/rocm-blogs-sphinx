@@ -2443,7 +2443,9 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                 vertical = "HPC"
                 title_vertical = vertical
             else:
-                title_vertical = vertical.capitalize()
+                # Apply title case to each word
+                words_vertical = vertical.split(' ')
+                title_vertical = " ".join(word.capitalize() for word in words_vertical)
             title_vertical = title_vertical.replace("and", "&").replace("And", "&")
 
             log_file_handle.write(f"Formatted vertical name: {title_vertical}\n")
