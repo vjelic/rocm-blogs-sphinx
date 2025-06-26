@@ -244,7 +244,7 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
     authors_html = ""
 
     if authors_list and authors_list[0]:
-        authors_html = blog.grab_authors(authors_list)
+        authors_html = blog.grab_authors(authors_list, rocmblogs.blogs_directory)
         sphinx_diagnostics.debug(f"Generated authors HTML: {authors_html}")
 
     if authors_html:
