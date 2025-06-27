@@ -184,7 +184,7 @@ class Blog:
 
         return authors
 
-    def grab_authors(self, authors_list: List[Union[str, List[str]]]) -> str:
+    def grab_authors(self, authors_list: List[Union[str, List[str]]], rocm_blogs) -> str:
         """Generate HTML links for authors, but only if their bio file exists."""
         # Filter out invalid authors
         valid_authors = []
@@ -203,79 +203,19 @@ class Blog:
         # Process each author
         author_elements = []
         for author in valid_authors:
-            author_file_path = self._find_author_file(author)
-
-            if author_file_path:
-                # Create HTML link if author file exists
-                file_basename = os.path.basename(author_file_path).replace(
-                    ".md", ".html"
-                )
-                author_elements.append(
-                    f'<a href="https://rocm.blogs.amd.com/authors/{file_basename}">{author}</a>'
-                )
+            # Check if author has a page using the more robust approach
+            if pathlib.Path.exists(
+                pathlib.Path(rocm_blogs.blogs_directory)
+                / f"authors/{author.replace(' ', '-').lower()}.md"
+            ):
+                author_link = f"https://rocm.blogs.amd.com/authors/{author.replace(' ', '-').lower()}.html"
+                author_elements.append(f'<a href="{author_link}">{author}</a>')
             else:
                 # Use plain text if no author file exists
                 author_elements.append(author)
 
         return ", ".join(author_elements)
 
-    def _find_author_file(self, author: str) -> Optional[str]:
-        """Find the author's bio file."""
-        if not hasattr(self, "file_path"):
-            sphinx_diagnostics.warning(
-                f"Blog has no file_path, cannot check for author file: {author}"
-            )
-            return None
-
-        # Get authors directory
-        blog_dir = os.path.dirname(self.file_path)
-        blogs_dir = os.path.dirname(os.path.dirname(blog_dir))
-        authors_dir = os.path.join(blogs_dir, "authors")
-
-        if not os.path.exists(authors_dir):
-            sphinx_diagnostics.warning(f"Authors directory not found: {authors_dir}")
-            return None
-
-        # Generate filename variations
-        name_variations = self._generate_author_filename_variations(author)
-
-        # Check for exact matches
-        for variation in name_variations:
-            author_file_path = os.path.join(authors_dir, variation)
-            if os.path.exists(author_file_path):
-                return author_file_path
-
-        # Try flexible matching with name parts
-        try:
-            name_parts = author.lower().split()
-            for file in os.listdir(authors_dir):
-                if not file.lower().endswith(".md"):
-                    continue
-
-                file_lower = file.lower()
-                if all(part in file_lower for part in name_parts):
-                    return os.path.join(authors_dir, file)
-        except Exception as error:
-            sphinx_diagnostics.error(f"Error during flexible author matching: {error}")
-
-        return None
-
-    def _generate_author_filename_variations(self, author: str) -> List[str]:
-        """Generate possible filename variations for an author."""
-        variations = [
-            "-".join(author.split(" ")).lower() + ".md",
-            author.replace(" ", "-").lower() + ".md",
-            author.lower().replace(" ", "-") + ".md",
-            author.replace(" ", "").lower() + ".md",
-            author.replace(" ", "_").lower() + ".md",
-            author.replace("-", " ").replace(" ", "-").lower() + ".md",
-            author.replace(" ", "-").title().replace(" ", "").lower() + ".md",
-            author.replace(" ", "-").lower() + ".md",
-            author.lower() + ".md",
-        ]
-
-        # Remove duplicates and return
-        return list(set(variations))
 
     def grab_image(self, rocmblogs) -> pathlib.Path:
         """Find the image for the blog and return its path."""
