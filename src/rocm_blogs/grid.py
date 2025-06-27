@@ -195,7 +195,7 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
     authors_html = ""
 
     if authors_list:
-        authors_html = blog.grab_authors(authors_list)
+        authors_html = blog.grab_authors(authors_list, ROCmBlogs)
         sphinx_diagnostics.debug(f"Generated authors HTML: {authors_html}")
 
     if authors_html:

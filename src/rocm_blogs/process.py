@@ -957,7 +957,7 @@ def process_single_blog(blog_entry, rocm_blogs):
                 else "No Read Time"
             )
 
-            authors_html = blog_entry.grab_authors(authors_list)
+            authors_html = blog_entry.grab_authors(authors_list, rocm_blogs)
             if authors_html:
                 authors_html = authors_html.replace("././", "../../").replace(
                     ".md", ".html"
