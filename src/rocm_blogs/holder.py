@@ -28,7 +28,7 @@ class BlogHolder:
         self.blogs_featured: dict[str, list[Blog]] = {}
         self.blogs_verticals: dict[str, list[Blog]] = {}
         self.blogs_categories_verticals: dict[(str, str), list[Blog]] = {}
-        self.verticals = ["AI", "HPC", "Data Science", "Systems", "Developers"]
+        self.verticals = ["AI", "HPC", "Data Science", "Systems", "Developers", "Robotics"]
 
     def _make_key(self, blog: Blog) -> str:
         """Make a key for the blog."""
