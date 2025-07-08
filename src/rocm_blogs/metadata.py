@@ -42,6 +42,9 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
             "JAX",
             "Developers",
         ],
+        "Robotics": [
+            "Robotics",
+        ],
     }
 
     # Define secondary tags (can belong to MULTIPLE verticals)
@@ -109,6 +112,7 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
         "Data Science": 2.0,
         "Systems": 2.0,
         "Developers": 2.0,
+        "Robotics": 2.0,
     }
 
     vertical_importance = {
@@ -117,6 +121,7 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
         "Data Science": 1.0,
         "Systems": 1.0,
         "Developers": 1.0,
+        "Robotics": 1.0,
     }
 
     if isinstance(blog_tags, str):

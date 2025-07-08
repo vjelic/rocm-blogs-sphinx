@@ -163,7 +163,7 @@ BLOG_CATEGORIES = [
         "output_base": "applications-models",
         "category_key": "Applications & models",
         "title": "Applications & Models",
-        "description": "AMD ROCm™ software blogs about applications and models",
+        "description": "AMD ROCm™ blogs about applications and models",
         "keywords": "applications, models, AI, machine learning",
     },
     {
@@ -172,7 +172,7 @@ BLOG_CATEGORIES = [
         "output_base": "software-tools",
         "category_key": "Software tools & optimizations",
         "title": "Software Tools and Optimizations",
-        "description": "AMD ROCm™ software blogs about tools and optimizations",
+        "description": "AMD ROCm™ blogs about tools and optimizations",
         "keywords": "software, tools, optimizations, performance",
     },
     {
@@ -181,7 +181,7 @@ BLOG_CATEGORIES = [
         "output_base": "ecosystem-partners",
         "category_key": "Ecosystems and Partners",
         "title": "Ecosystem and Partners",
-        "description": "AMD ROCm™ software blogs about ecosystem and partners",
+        "description": "AMD ROCm™ blogs about ecosystem and partners",
         "keywords": "ecosystem, partners, integrations, collaboration",
     },
     {
@@ -190,7 +190,7 @@ BLOG_CATEGORIES = [
         "output_base": "ai-applications",
         "category_key": "ai-applications",
         "title": "AI Applications",
-        "description": "AMD ROCm™ software blogs about AI applications",
+        "description": "AMD ROCm™ blogs about AI applications",
         "keywords": "AI, applications, machine learning, deep learning",
         "filter_criteria": {"category": "Applications & models", "vertical": "AI"},
     },
@@ -200,7 +200,7 @@ BLOG_CATEGORIES = [
         "output_base": "hpc-software-tools",
         "category_key": "hpc-software-tools",
         "title": "HPC Software Tools",
-        "description": "AMD ROCm™ software blogs about HPC software tools",
+        "description": "AMD ROCm™ blogs about HPC software tools",
         "keywords": "HPC, software, tools, high performance computing",
         "filter_criteria": {
             "category": "Software tools & optimizations",
