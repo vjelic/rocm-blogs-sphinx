@@ -117,6 +117,7 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
         "Data Science": 1.0,
         "Systems": 1.0,
         "Developers": 1.0,
+        "Robotics": 1.0,
     }
 
     if isinstance(blog_tags, str):
@@ -1067,6 +1068,8 @@ myst:
                             blog_filepath, rocm_blogs_instance.blogs_directory
                         )
                         blog_directory = os.path.dirname(relative_blog_path)
+                        # Convert Windows backslashes to forward slashes for URLs
+                        blog_directory = blog_directory.replace("\\", "/")
                         generated_blog_url = f"/{blog_directory}/README.html"
                         sphinx_diagnostics.debug(
                             f"Generated blog URL: {generated_blog_url}"
@@ -1152,13 +1155,10 @@ myst:
                     metadata_regex_pattern = re.compile(
                         r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL
                     )
-                    if metadata_regex_pattern.search(blog_file_content):
-                        blog_file_content = re.sub(
-                            r"^---\s*\n(.*?)\n---\s*\n",
-                            formatted_metadata_content,
-                            blog_file_content,
-                            flags=re.DOTALL,
-                        )
+                    match = metadata_regex_pattern.search(blog_file_content)
+                    if match:
+                        # Use string slicing instead of regex substitution to avoid escape sequence issues
+                        blog_file_content = blog_file_content[:match.start()] + formatted_metadata_content + blog_file_content[match.end():]
                         sphinx_diagnostics.debug(
                             f"Replaced existing metadata in {blog_filepath}"
                         )

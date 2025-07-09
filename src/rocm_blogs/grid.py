@@ -75,6 +75,14 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
     image = blog.grab_image(ROCmBlogs)
 
     image_str = str(image)
+    
+    # For grid items, ensure the image path starts with "_images/" for Sphinx
+    if not image_str.startswith("_images/"):
+        # Extract just the filename from the path, removing any directory structure
+        image_filename = os.path.basename(image_str)
+        image_str = f"_images/{image_filename}"
+        sphinx_diagnostics.debug(f"Adjusted image path for grid: {image_str}")
+        image = image_str  # Update the image variable to use the corrected path
 
     if "generic.jpg" in image_str.lower():
 

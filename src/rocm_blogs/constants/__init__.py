@@ -144,16 +144,16 @@ FORMAT_SETTINGS = {
 
 # Conservative settings for problematic images
 CONSERVATIVE_SETTINGS = {
-    "JPEG": {"quality": 40, "optimize": True, "progressive": True},
+    "JPEG": {"quality": 80, "optimize": True, "progressive": True},
     "PNG": {"optimize": True, "compress_level": 10},
-    "WEBP": {"quality": 40, "method": 4},
+    "WEBP": {"quality": 80, "method": 8},
 }
 
 # WebP conversion settings
-WEBP_QUALITY = 85
+WEBP_QUALITY = 95  # Increased for better quality over space savings
 WEBP_METHOD = 6  # Higher values = better quality but slower
-WEBP_CONSERVATIVE_QUALITY = 40
-WEBP_CONSERVATIVE_METHOD = 4
+WEBP_CONSERVATIVE_QUALITY = 90  # Increased for better quality
+WEBP_CONSERVATIVE_METHOD = 6  # Improved quality for conservative mode
 
 # Category definitions
 BLOG_CATEGORIES = [
