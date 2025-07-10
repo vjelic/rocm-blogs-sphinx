@@ -132,27 +132,27 @@ SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", 
 PROBLEMATIC_IMAGES = {"2024-10-03-image_classification.jpg", "2024-10-10-seismic.jpeg"}
 CONTENT_MAX_DIMENSIONS = (1200, 675)
 BANNER_DIMENSIONS = (1200, 675)
-MIN_SIZE_REDUCTION_PCT = 5.0
+MIN_SIZE_REDUCTION_PCT = 2.0  # Reduced from 5.0% to 2.0% for more WebP conversions
 
 # Image format-specific optimization settings
 FORMAT_SETTINGS = {
-    "JPEG": {"quality": 85, "optimize": True, "progressive": True},
+    "JPEG": {"quality": 95, "optimize": True, "progressive": True},
     "PNG": {"optimize": True, "compress_level": 9},
     "GIF": {"optimize": True},
-    "WEBP": {"quality": 85, "method": 6},
+    "WEBP": {"quality": 98, "method": 6},  # Increased quality from 95 to 98
 }
 
 # Conservative settings for problematic images
 CONSERVATIVE_SETTINGS = {
-    "JPEG": {"quality": 80, "optimize": True, "progressive": True},
-    "PNG": {"optimize": True, "compress_level": 10},
-    "WEBP": {"quality": 80, "method": 8},
+    "JPEG": {"quality": 90, "optimize": True, "progressive": True},  # Increased from 80 to 90
+    "PNG": {"optimize": True, "compress_level": 9},  # Reduced compression level for better quality
+    "WEBP": {"quality": 95, "method": 6},  # Increased quality from 80 to 95
 }
 
 # WebP conversion settings
-WEBP_QUALITY = 95  # Increased for better quality over space savings
+WEBP_QUALITY = 98  # Increased for better quality over space savings
 WEBP_METHOD = 6  # Higher values = better quality but slower
-WEBP_CONSERVATIVE_QUALITY = 90  # Increased for better quality
+WEBP_CONSERVATIVE_QUALITY = 95  # Increased for better quality
 WEBP_CONSERVATIVE_METHOD = 6  # Improved quality for conservative mode
 
 # Category definitions

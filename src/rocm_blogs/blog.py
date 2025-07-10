@@ -399,7 +399,7 @@ class Blog:
 
                                 webp_path = os.path.splitext(str(img_file))[0] + ".webp"
                                 webp_img.save(
-                                    webp_path, format="WEBP", quality=85, method=6
+                                    webp_path, format="WEBP", quality=98, method=6
                                 )
 
                                 # Return the WebP version

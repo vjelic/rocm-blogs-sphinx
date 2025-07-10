@@ -185,7 +185,7 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
                                 os.path.splitext(original_image_path)[0] + ".webp"
                             )
                             webp_img.save(
-                                webp_path, format="WEBP", quality=85, method=6
+                                webp_path, format="WEBP", quality=98, method=6
                             )
 
                             image_filename = webp_filename
