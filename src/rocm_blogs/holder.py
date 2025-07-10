@@ -421,6 +421,9 @@ class BlogHolder:
                     blog_vertical_str = (
                         blog.metadata.get("myst").get("html_meta").get("vertical")
                     )
+                    if blog_vertical_str is None:
+                        log_file_handle.write(f"Blog '{blog.blog_title}' has no vertical metadata\n")
+                        continue
                     blog_vertical = [
                         v.strip() for v in blog_vertical_str.split(",") if v.strip()
                     ]
@@ -469,6 +472,9 @@ class BlogHolder:
                     blog_vertical_str = (
                         blog.metadata.get("myst").get("html_meta").get("vertical")
                     )
+                    if blog_vertical_str is None:
+                        log_file_handle.write(f"Blog '{blog.blog_title}' has no vertical metadata\n")
+                        continue
                     blog_vertical = [
                         v.strip() for v in blog_vertical_str.split(",") if v.strip()
                     ]

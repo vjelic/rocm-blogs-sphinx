@@ -1614,23 +1614,24 @@ def process_templates_for_vertical(
     application_grid_items,
     software_grid_items,
     template_string,
+    formatted_vertical
 ):
     """Process template for a specific vertical category using Jinja2."""
 
     context = {
         "vertical": vertical,
-        "PAGE_TITLE": f"{vertical} Blogs",
-        "PAGE_DESCRIPTION": f"Blogs related to {vertical} market vertical",
+        "page_title": f"{vertical} Blogs",
+        "page_description": f"Blogs related to {vertical} market vertical",
+        "formatted_vertical": formatted_vertical,
         "grid_items": "\n".join(main_grid_items) if main_grid_items else "",
-        "eco_grid_items": (
-            "\n".join(ecosystem_grid_items) if ecosystem_grid_items else ""
-        ),
-        "application_grid_items": (
-            "\n".join(application_grid_items) if application_grid_items else ""
-        ),
-        "software_grid_items": (
-            "\n".join(software_grid_items) if software_grid_items else ""
-        ),
+        "eco_grid_items": "\n".join(ecosystem_grid_items) if ecosystem_grid_items else "",
+        "application_grid_items": "\n".join(application_grid_items) if application_grid_items else "",
+        "software_grid_items": "\n".join(software_grid_items) if software_grid_items else "",
+        # Boolean flags for conditional rendering
+        "has_recent_blogs": bool(main_grid_items),
+        "has_eco_blogs": bool(ecosystem_grid_items),
+        "has_application_blogs": bool(application_grid_items),
+        "has_software_blogs": bool(software_grid_items),
     }
 
     # Create a Jinja2 template from the template string
@@ -2097,7 +2098,7 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             log_file_handle.write(f"ERROR: {error_message}\n")
             log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
 
-    # Generate individual vertical pages
+    # Generate individual vertical pages using Jinja2 templating
     verticals = rocm_blogs.blogs.blogs_verticals
     for vertical in verticals:
         used_blogs = []
@@ -2152,6 +2153,7 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             False,
         )
 
+        # Check if we have any content at all for this vertical
         if (
             not main_grid_items
             and not ecosystem_grid_items
@@ -2167,137 +2169,16 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
         formatted_vertical = re.sub(r"[^a-z0-9-]", "", formatted_vertical)
         formatted_vertical = re.sub(r"-+", "-", formatted_vertical)
 
-        # Start with the basic template
-        updated_html = index_template
-
-        # Replace the basic placeholders
-        updated_html = updated_html.replace("{page_title}", f"{vertical} Blogs")
-        updated_html = updated_html.replace(
-            "{page_description}", f"Blogs related to {vertical} market vertical"
+        # Use Jinja2 template rendering instead of string manipulation
+        updated_html = process_templates_for_vertical(
+            vertical,
+            main_grid_items,
+            ecosystem_grid_items,
+            application_grid_items,
+            software_grid_items,
+            index_template,
+            formatted_vertical
         )
-        updated_html = updated_html.replace(
-            "{grid_items}", "\n".join(main_grid_items) if main_grid_items else ""
-        )
-        updated_html = updated_html.replace("{vertical}", formatted_vertical)
-
-        if ecosystem_grid_items:
-            updated_html = updated_html.replace(
-                "{eco_grid_items}", "\n".join(ecosystem_grid_items)
-            )
-        else:
-            eco_section_start = updated_html.find(
-                '<div class="container">\n    <h2>Ecosystems and partners</h2>'
-            )
-            if eco_section_start != -1:
-                grid_start = updated_html.find("::::{grid}", eco_section_start)
-                if grid_start != -1:
-                    grid_end = updated_html.find("::::", grid_start + 10)
-                    if grid_end != -1:
-                        next_line_end = updated_html.find("\n", grid_end) + 1
-                        updated_html = (
-                            updated_html[:eco_section_start]
-                            + updated_html[next_line_end:]
-                        )
-                    else:
-                        updated_html = updated_html.replace("{eco_grid_items}", "")
-                else:
-                    updated_html = updated_html.replace("{eco_grid_items}", "")
-            else:
-                updated_html = updated_html.replace("{eco_grid_items}", "")
-
-        if application_grid_items:
-            updated_html = updated_html.replace(
-                "{application_grid_items}", "\n".join(application_grid_items)
-            )
-        else:
-            app_section_start = updated_html.find(
-                '<div class="container">\n    <h2>Applications & models</h2>'
-            )
-
-            if app_section_start != -1:
-                grid_start1 = updated_html.find("::::{grid}", app_section_start)
-                grid_start2 = updated_html.find("{grid}", app_section_start)
-
-                grid_start = grid_start1 if grid_start1 != -1 else grid_start2
-
-                if grid_start != -1:
-                    grid_end = updated_html.find("::::", grid_start + 5)
-                    if grid_end != -1:
-                        next_line_end = updated_html.find("\n", grid_end) + 1
-                        updated_html = (
-                            updated_html[:app_section_start]
-                            + updated_html[next_line_end:]
-                        )
-                    else:
-                        updated_html = updated_html.replace(
-                            "{application_grid_items}", ""
-                        )
-                else:
-                    updated_html = updated_html.replace("{application_grid_items}", "")
-            else:
-                malformed_start = updated_html.find(
-                    "{grid} 1 2 3 4\n:margin 2\n{application_grid_items}\n"
-                )
-                if malformed_start != -1:
-                    container_start = updated_html.rfind(
-                        '<div class="container">', 0, malformed_start
-                    )
-                    if (
-                        container_start != -1
-                        and (malformed_start - container_start) < 300
-                    ):
-                        grid_end = updated_html.find("::::", malformed_start)
-                        if grid_end != -1:
-                            next_line_end = updated_html.find("\n", grid_end) + 1
-                            updated_html = (
-                                updated_html[:container_start]
-                                + updated_html[next_line_end:]
-                            )
-                        else:
-                            updated_html = updated_html.replace(
-                                "{application_grid_items}", ""
-                            )
-                    else:
-                        grid_end = updated_html.find("::::", malformed_start)
-                        if grid_end != -1:
-                            next_line_end = updated_html.find("\n", grid_end) + 1
-                            updated_html = (
-                                updated_html[:malformed_start]
-                                + updated_html[next_line_end:]
-                            )
-                        else:
-                            updated_html = updated_html.replace(
-                                "{application_grid_items}", ""
-                            )
-                else:
-                    updated_html = updated_html.replace("{application_grid_items}", "")
-
-        if software_grid_items:
-            updated_html = updated_html.replace(
-                "{software_grid_items}", "\n".join(software_grid_items)
-            )
-        else:
-            software_section_start = updated_html.find(
-                '<div class="container">\n    <h2>Software tools & optimizations</h2>'
-            )
-            if software_section_start != -1:
-                grid_start = updated_html.find("::::{grid}", software_section_start)
-                if grid_start != -1:
-                    grid_end = updated_html.find("::::", grid_start + 10)
-                    if grid_end != -1:
-                        next_line_end = updated_html.find("\n", grid_end) + 1
-                        updated_html = (
-                            updated_html[:software_section_start]
-                            + updated_html[next_line_end:]
-                        )
-                    else:
-                        updated_html = updated_html.replace("{software_grid_items}", "")
-                else:
-                    updated_html = updated_html.replace("{software_grid_items}", "")
-            else:
-                updated_html = updated_html.replace("{software_grid_items}", "")
-
-        updated_html = clean_html(updated_html)
 
         output_filename = vertical.replace(" ", "-").lower()
         output_filename = re.sub(r"[^a-z0-9-]", "", output_filename)
@@ -2308,7 +2189,7 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             output_file.write(updated_html)
 
         if log_file_handle:
-            log_file_handle.write(f"Generated vertical page for {vertical}\n")
+            log_file_handle.write(f"Generated vertical page for {vertical} using Jinja2 templating\n")
 
     # Record timing information
     phase_duration = time.time() - phase_start_time

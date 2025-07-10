@@ -223,11 +223,12 @@
     });
 </script>
 
-# {page_title}
+# {{ page_title }}
 
+{% if grid_items %}
 <div class="container">
     <h2>Recent Posts</h2>
-    <a href="verticals-{vertical}.html">
+    <a href="verticals-{{ formatted_vertical }}.html">
         <button id="buttonWrapper">
             See All
         </button>
@@ -236,12 +237,14 @@
 
 ::::{grid} 1 2 3 4
 :margin 2
-{grid_items}
+{{ grid_items }}
 ::::
+{% endif %}
 
+{% if eco_grid_items %}
 <div class="container">
     <h2>Ecosystems & Partners</h2>
-    <a href="{vertical}-ecosystems-and-partners.html">
+    <a href="{{ formatted_vertical }}-ecosystems-and-partners.html">
         <button id="buttonWrapper">
             See All
         </button>
@@ -250,12 +253,14 @@
 
 ::::{grid} 1 2 3 4
 :margin 2
-{eco_grid_items}
+{{ eco_grid_items }}
 ::::
+{% endif %}
 
+{% if application_grid_items %}
 <div class="container">
     <h2>Applications & Models</h2>
-    <a href="{vertical}-applications-and-models.html">
+    <a href="{{ formatted_vertical }}-applications-and-models.html">
         <button id="buttonWrapper">
             See All
         </button>
@@ -264,12 +269,14 @@
 
 ::::{grid} 1 2 3 4
 :margin 2
-{application_grid_items}
+{{ application_grid_items }}
 ::::
+{% endif %}
 
+{% if software_grid_items %}
 <div class="container">
     <h2>Software Tools & Optimizations</h2>
-    <a href="{vertical}-software-tools-and-optimizations.html">
+    <a href="{{ formatted_vertical }}-software-tools-and-optimizations.html">
         <button id="buttonWrapper">
             See All
         </button>
@@ -278,8 +285,9 @@
 
 ::::{grid} 1 2 3 4
 :margin 2
-{software_grid_items}
+{{ software_grid_items }}
 ::::
+{% endif %}
 
 <h2> Stay informed</h2>
 <ul>

@@ -42,6 +42,7 @@ def convert_to_webp(source_image_path):
         )
         return False, None
 
+    # Skip conversion for .gif files (and other excluded extensions)
     if file_extension.lower() in EXCLUDED_EXTENSIONS:
         sphinx_diagnostics.info(
             f"Skipping WebP conversion for excluded image format: {file_extension} for {source_image_path}"
@@ -255,9 +256,7 @@ def _restore_from_backup(backup_image_path, source_image_path, source_image_file
             sphinx_diagnostics.warning(f"Error restoring from backup: {restore_error}")
 
 
-def _verify_image_integrity(
-    pil_image, source_image_path, backup_image_path, source_image_filename
-):
+def _verify_image_integrity(pil_image, source_image_path, backup_image_path, source_image_filename):
     """Verify the image is not corrupted."""
     try:
         pil_image.verify()
@@ -272,9 +271,7 @@ def _verify_image_integrity(
         return False
 
 
-def _handle_problematic_image(
-    pil_image, source_image_path, backup_image_path, source_image_filename
-):
+def _handle_problematic_image(pil_image, source_image_path, backup_image_path, source_image_filename):
     """Apply extremely conservative optimization for known problematic images."""
     sphinx_diagnostics.info(
         f"Using conservative optimization for {source_image_filename}"
@@ -330,9 +327,7 @@ def _handle_problematic_image(
         return False, None
 
 
-def _create_webp_version(
-    optimized_image, webp_image_path, original_image_path, original_file_size
-):
+def _create_webp_version(optimized_image, webp_image_path, original_image_path, original_file_size):
     """Create a WebP version of the image."""
 
     # check if file extension is in excluded list
@@ -380,7 +375,7 @@ def _create_webp_version(
         )
 
         sphinx_diagnostics.info(
-            f"Created WebP version: {os.path.basename(webp_image_path)}, Original: {original_file_size/1024:.1f}KB → WebP: {os.path.getsize(webp_image_path)/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
+            f"Created WebP version: {os.path.basename(webp_image_path)}, Original: {original_file_size/1024:.1f}KB -> WebP: {os.path.getsize(webp_image_path)/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
         )
         return True
 
@@ -394,15 +389,7 @@ def _create_webp_version(
         return False
 
 
-def _process_image(
-    pil_image,
-    source_image_path,
-    source_image_mode,
-    source_image_width,
-    source_image_height,
-    backup_image_path,
-    source_image_filename,
-):
+def _process_image(pil_image, source_image_path, source_image_mode, source_image_width, source_image_height, backup_image_path, source_image_filename):
     """Process the image by stripping metadata and resizing if needed."""
 
     # check if file extension is in excluded list
@@ -451,13 +438,7 @@ def _process_image(
         return None
 
 
-def _resize_image(
-    pil_image,
-    target_width,
-    target_height,
-    force_exact=False,
-    source_image_filename=None,
-):
+def _resize_image(pil_image, target_width, target_height, force_exact=False, source_image_filename=None,):
     """Resize image to target dimensions."""
     try:
         if force_exact:
@@ -497,7 +478,7 @@ def _resize_content_image(
                 )
                 if source_image_filename:
                     sphinx_diagnostics.debug(
-                        f"Resized image: {source_image_width}x{source_image_height} → {new_width}x{new_height}"
+                        f"Resized image: {source_image_width}x{source_image_height} -> {new_width}x{new_height}"
                     )
                 return resized_image
             except Exception as resize_error:
@@ -508,9 +489,7 @@ def _resize_content_image(
     return pil_image
 
 
-def _save_optimized_image(
-    optimized_image, optimized_image_path, backup_image_path, source_image_filename
-):
+def _save_optimized_image(optimized_image, optimized_image_path, backup_image_path, source_image_filename):
     """Save the optimized image with format-specific settings."""
     try:
         _, file_extension = os.path.splitext(optimized_image_path)
@@ -558,13 +537,7 @@ def _save_optimized_image(
         return False
 
 
-def _verify_and_check_size_reduction(
-    optimized_image_path,
-    backup_image_path,
-    original_file_size,
-    source_image_format,
-    source_image_filename,
-):
+def _verify_and_check_size_reduction(optimized_image_path, backup_image_path, original_file_size, source_image_format, source_image_filename):
     """Verify the optimized image and check if size reduction is beneficial."""
     try:
         with Image.open(optimized_image_path) as verify_image:
@@ -599,7 +572,7 @@ def _verify_and_check_size_reduction(
             return True
 
         sphinx_diagnostics.info(
-            f"Optimized {source_image_filename}: {source_image_format} {original_file_size/1024:.1f}KB → {new_file_size/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
+            f"Optimized {source_image_filename}: {source_image_format} {original_file_size/1024:.1f}KB -> {new_file_size/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
         )
         return True
 

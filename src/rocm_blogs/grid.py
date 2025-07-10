@@ -75,6 +75,14 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
     image = blog.grab_image(ROCmBlogs)
 
     image_str = str(image)
+    
+    # For grid items, use the relative path from blogs directory (no "_images/" prefix)
+    # Remove any leading "./" if present and convert to forward slashes for consistency
+    if image_str.startswith("./"):
+        image_str = image_str[2:]
+    image_str = image_str.replace("\\", "/")
+    image = image_str
+    sphinx_diagnostics.debug(f"Using image path for grid: {image_str}")
 
     if "generic.jpg" in image_str.lower():
 
@@ -179,7 +187,7 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                             )
 
                         webp_path = os.path.splitext(original_image_path)[0] + ".webp"
-                        webp_img.save(webp_path, format="WEBP", quality=85, method=6)
+                        webp_img.save(webp_path, format="WEBP", quality=98, method=6)
 
                         image = webp_image
                         sphinx_diagnostics.info(
