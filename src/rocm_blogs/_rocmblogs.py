@@ -256,7 +256,7 @@ class ROCmBlogs:
             try:
                 metadata = yaml.safe_load(yaml_content)
 
-                category = metadata.get("category", "")
+                category = metadata.get("category", "") 
                 tags = metadata.get("tags", "")
 
                 self.categories.append(category)
