@@ -566,7 +566,7 @@ myst:
                     else:
                         extracted_metadata["author"] = extracted_metadata[
                             "author"
-                        ].replace("'", "''")
+                        ]
                         sphinx_diagnostics.debug(
                             f"Author: {extracted_metadata['author']}"
                         )
