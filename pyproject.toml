@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rocm-blogs-sphinx"
-version = "1.9.7"
+version = "1.10.0"
 authors = [
     {name = "Danny Guan", email = "danny.guan@amd.com"}
 ]
@@ -12,7 +12,25 @@ description = "ROCm Blogs"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy"
+    "numpy",
+    "sphinx>=4.0",
+    "jinja2>=3.0",
+    "pyyaml>=6.0",
+    "pillow>=8.0",
+    "requests>=2.25",
+]
+
+[project.optional-dependencies]
+logging = [
+    "rocm-blogs-logging>=1.0.0",
+]
+dev = [
+    "rocm-blogs-logging>=1.0.0",
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.800",
 ]
 
 [tool.setuptools]

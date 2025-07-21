@@ -18,6 +18,18 @@ from .blog import Blog
 sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
 
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
+
+
 class BlogHolder:
     def __init__(self) -> None:
         """Initialize the BlogHolder class."""
@@ -28,7 +40,14 @@ class BlogHolder:
         self.blogs_featured: dict[str, list[Blog]] = {}
         self.blogs_verticals: dict[str, list[Blog]] = {}
         self.blogs_categories_verticals: dict[(str, str), list[Blog]] = {}
-        self.verticals = ["AI", "HPC", "Data Science", "Systems", "Developers", "Robotics"]
+        self.verticals = [
+            "AI",
+            "HPC",
+            "Data Science",
+            "Systems",
+            "Developers",
+            "Robotics",
+        ]
 
     def _make_key(self, blog: Blog) -> str:
         """Make a key for the blog."""
@@ -80,7 +99,7 @@ class BlogHolder:
             sphinx_diagnostics.warning(f"Duplicate blog detected: '{key}'")
             raise KeyError(f"Blog with title '{key}' already exists.")
         self.blogs[key] = blog
-        sphinx_diagnostics.info(f"Added blog: '{blog}'")
+        log_message("info", "Added blog: '{blog}'", "general", "holder")
         if hasattr(blog, "author"):
             sphinx_diagnostics.debug(f"Adding blog '{key}' to author '{blog.author}'")
             for author in blog.grab_authors_list():
@@ -120,7 +139,12 @@ class BlogHolder:
         key = (title, date)
         if key in self.blogs:
             del self.blogs[key]
-            sphinx_diagnostics.info(f"Removed blog: '{title}' with date '{date}'")
+            log_message(
+                "info",
+                "Removed blog: '{title}' with date '{date}'",
+                "general",
+                "holder",
+            )
         else:
             sphinx_diagnostics.warning(
                 f"Cannot remove blog: '{title}' with date '{date}' not found"
@@ -130,7 +154,7 @@ class BlogHolder:
     def write_to_file(self, filename: str = "blogs.csv") -> None:
         """Write blog information to a CSV file."""
         try:
-            with open(filename, "w", newline="") as file:
+            with open(filename, "w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
                 # Write header row
                 writer.writerow(
@@ -147,17 +171,39 @@ class BlogHolder:
 
                 # Write data rows
                 for blog in self.blogs.values():
+                    # Clean Unicode characters that might cause encoding issues
                     title = (
                         blog.blog_title if hasattr(blog, "blog_title") else "Untitled"
                     )
+                    if title:
+                        # Replace problematic Unicode characters
+                        title = title.replace("\u202f", " ")  # narrow no-break space
+                        title = title.replace("\u00a0", " ")  # non-breaking space
+                        title = title.replace("\u2009", " ")  # thin space
+                        title = title.replace("\u200b", "")  # zero-width space
+
                     date = (
                         blog.date.strftime("%Y-%m-%d")
                         if hasattr(blog, "date") and blog.date
                         else ""
                     )
                     author = blog.author if hasattr(blog, "author") else ""
+                    if author:
+                        # Clean author field
+                        author = author.replace("\u202f", " ").replace("\u00a0", " ")
+
                     category = blog.category if hasattr(blog, "category") else ""
+                    if category:
+                        # Clean category field
+                        category = category.replace("\u202f", " ").replace(
+                            "\u00a0", " "
+                        )
+
                     tags = blog.tags if hasattr(blog, "tags") else ""
+                    if tags:
+                        # Clean tags field
+                        tags = tags.replace("\u202f", " ").replace("\u00a0", " ")
+
                     thumbnail = blog.thumbnail if hasattr(blog, "thumbnail") else ""
                     file_path = blog.file_path if hasattr(blog, "file_path") else ""
 
@@ -165,8 +211,11 @@ class BlogHolder:
                         [title, date, author, category, tags, thumbnail, file_path]
                     )
 
-            sphinx_diagnostics.info(
-                f"Successfully wrote {len(self.blogs)} blog entries to {filename}"
+            log_message(
+                "info",
+                f"Successfully wrote {len(self.blogs)} blog entries to {filename}",
+                "general",
+                "holder",
             )
         except Exception as error:
             sphinx_diagnostics.error(f"Error writing blogs to file: {error}")
@@ -196,11 +245,17 @@ class BlogHolder:
                         # the ones they want
                         writer.writerow([f"# {blog.blog_title}"])
 
-            sphinx_diagnostics.info(
-                f"Successfully created features template at {filename}"
+            log_message(
+                "info",
+                "Successfully created features template at {filename}",
+                "general",
+                "holder",
             )
-            sphinx_diagnostics.info(
-                f"Edit this file to select which blogs to feature, then rename it to 'featured-blogs.csv'"
+            log_message(
+                "info",
+                "Edit this file to select which blogs to feature, then rename it to 'featured-blogs.csv'",
+                "general",
+                "holder",
             )
 
             return filename
@@ -220,8 +275,11 @@ class BlogHolder:
                 sphinx_diagnostics.warning(f"Featured blogs file not found: {filename}")
                 return featured_blogs
 
-            sphinx_diagnostics.info(
-                f"Reading featured blogs from: {os.path.abspath(filename)}"
+            log_message(
+                "info",
+                f"Reading featured blogs from file: {filename}",
+                "general",
+                "holder",
             )
 
             with open(filename, "r", newline="") as file:
@@ -231,8 +289,11 @@ class BlogHolder:
 
                 featured_titles = [row[0] for row in raw_rows if row]
 
-            sphinx_diagnostics.info(
-                f"Found {len(featured_titles)} featured blog titles in {filename}"
+            log_message(
+                "info",
+                f"Found {len(featured_titles)} featured blog titles in {filename}",
+                "general",
+                "holder",
             )
 
             # Log all available blog titles for comparison
@@ -295,8 +356,11 @@ class BlogHolder:
                             f"Featured blog not found: '{title}'. No close matches found."
                         )
 
-            sphinx_diagnostics.info(
-                f"Loaded {len(featured_blogs)} featured blogs out of {len(featured_titles)} titles"
+            log_message(
+                "info",
+                f"Loaded {len(featured_blogs)} featured blogs out of {len(featured_titles)} titles",
+                "general",
+                "holder",
             )
 
             if not featured_blogs:
@@ -385,15 +449,23 @@ class BlogHolder:
 
         blog_count = len(self.blogs)
 
-        sphinx_diagnostics.info(f"Clearing {blog_count} blogs from the blog holder")
+        log_message(
+            "info",
+            "Clearing {blog_count} blogs from the blog holder",
+            "general",
+            "holder",
+        )
         self.blogs.clear()
         sphinx_diagnostics.debug("Blog holder cleared")
 
     def sort_blogs_by_date(self, reverse: bool = True) -> list[Blog]:
         """Sort the blogs by date."""
 
-        sphinx_diagnostics.info(
-            f"Sorting {len(self.blogs)} blogs by date (reverse={reverse})"
+        log_message(
+            "info",
+            f"Sorting {len(self.blogs)} blogs by date (reverse={reverse})",
+            "general",
+            "holder",
         )
 
         self.blogs = dict(
@@ -415,14 +487,18 @@ class BlogHolder:
         for category in self.blogs_categories:
             for blog in self.blogs_categories[category]:
                 if not hasattr(blog, "metadata") or not blog.metadata:
-                    log_file_handle.write("Blog has no metadata\n")
+                    if log_file_handle:
+                        log_file_handle.write("Blog has no metadata\n")
                     continue
                 else:
                     blog_vertical_str = (
                         blog.metadata.get("myst").get("html_meta").get("vertical")
                     )
                     if blog_vertical_str is None:
-                        log_file_handle.write(f"Blog '{blog.blog_title}' has no vertical metadata\n")
+                        if log_file_handle:
+                            log_file_handle.write(
+                                f"Blog '{blog.blog_title}' has no vertical metadata\n"
+                            )
                         continue
                     blog_vertical = [
                         v.strip() for v in blog_vertical_str.split(",") if v.strip()
@@ -445,6 +521,13 @@ class BlogHolder:
 
     def sort_blogs_by_vertical(self) -> list[Blog]:
         """Sort the blogs by market vertical"""
+        # Import the logging check function from __init__.py
+        try:
+            from . import is_logging_enabled_from_config
+        except ImportError:
+            # Fallback if import fails
+            def is_logging_enabled_from_config():
+                return False
 
         self.blogs_verticals = {}
 
@@ -453,69 +536,97 @@ class BlogHolder:
 
             sphinx_diagnostics.debug(f"Initialized vertical: {vertical}")
 
-        logs_directory = Path("logs")
-        logs_directory.mkdir(exist_ok=True)
+        # Only create log files if logging is enabled
+        if is_logging_enabled_from_config():
+            logs_directory = Path("logs")
+            logs_directory.mkdir(exist_ok=True)
 
-        log_filepath = logs_directory / "blogs_vertical.log"
+            log_filepath = logs_directory / "blogs_vertical.log"
+            log_file_handle = open(log_filepath, "w", encoding="utf-8")
+        else:
+            log_file_handle = None
 
-        with open(log_filepath, "w", encoding="utf-8") as log_file_handle:
-            log_file_handle.write("Blogs sorted by vertical:\n")
+        try:
             vertical_counts = {}
             for blog in self.blogs.values():
-                log_file_handle.write(f"Blog: {blog}\n")
-                log_file_handle.write(f"Metadata: {blog.grab_metadata()}\n")
+                if log_file_handle:
+                    log_file_handle.write(f"Blog: {blog}\n")
+                    log_file_handle.write(f"Metadata: {blog.grab_metadata()}\n")
 
                 if not hasattr(blog, "metadata") or not blog.metadata:
-                    log_file_handle.write("Blog has no metadata\n")
+                    if log_file_handle:
+                        log_file_handle.write("Blog has no metadata\n")
                     continue
                 else:
                     blog_vertical_str = (
                         blog.metadata.get("myst").get("html_meta").get("vertical")
                     )
                     if blog_vertical_str is None:
-                        log_file_handle.write(f"Blog '{blog.blog_title}' has no vertical metadata\n")
+                        if log_file_handle:
+                            log_file_handle.write(
+                                f"Blog '{blog.blog_title}' has no vertical metadata\n"
+                            )
                         continue
                     blog_vertical = [
                         v.strip() for v in blog_vertical_str.split(",") if v.strip()
                     ]
                     for vertical in blog_vertical:
                         if vertical not in self.blogs_verticals:
-                            log_file_handle.write(
-                                f"Vertical '{vertical}' not recognized\n"
-                            )
+                            if log_file_handle:
+                                log_file_handle.write(
+                                    f"Vertical '{vertical}' not recognized\n"
+                                )
                             continue
                         if vertical not in vertical_counts:
                             vertical_counts[vertical] = 0
                         vertical_counts[vertical] += 1
                         self.blogs_verticals[vertical].append(blog)
-                        log_file_handle.write(
-                            f"Blog '{blog.blog_title}' added to vertical '{vertical}'\n"
+                        if log_file_handle:
+                            log_file_handle.write(
+                                f"Blog '{blog.blog_title}' added to vertical '{vertical}'\n"
+                            )
+
+            if log_file_handle:
+                log_file_handle.write("\nVertical counts:\n")
+                for vertical, count in vertical_counts.items():
+                    log_file_handle.write(f"{vertical}: {count} blogs\n")
+                    log_message(
+                        "info",
+                        "Vertical '{vertical}' has {count} blogs",
+                        "general",
+                        "holder",
+                    )
+
+                log_file_handle.write("\nBlogs in each vertical:\n")
+                for vertical, blogs in self.blogs_verticals.items():
+                    log_file_handle.write(f"{vertical}:\n")
+                    for blog in blogs:
+                        log_file_handle.write(f"  - {blog.blog_title}\n")
+                        log_message(
+                            "info",
+                            "Blog '{blog.blog_title}' belongs to vertical '{vertical}'",
+                            "general",
+                            "holder",
+                        )
+                    if not blogs:
+                        log_file_handle.write(f"  - No blogs in this vertical\n")
+                        sphinx_diagnostics.warning(
+                            f"Vertical '{vertical}' has no blogs"
                         )
 
-            log_file_handle.write("\nVertical counts:\n")
-            for vertical, count in vertical_counts.items():
-                log_file_handle.write(f"{vertical}: {count} blogs\n")
-                sphinx_diagnostics.info(f"Vertical '{vertical}' has {count} blogs")
-
-            log_file_handle.write("\nBlogs in each vertical:\n")
-            for vertical, blogs in self.blogs_verticals.items():
-                log_file_handle.write(f"{vertical}:\n")
-                for blog in blogs:
-                    log_file_handle.write(f"  - {blog.blog_title}\n")
-                    sphinx_diagnostics.info(
-                        f"Blog '{blog.blog_title}' belongs to vertical '{vertical}'"
-                    )
-                if not blogs:
-                    log_file_handle.write(f"  - No blogs in this vertical\n")
-                    sphinx_diagnostics.warning(f"Vertical '{vertical}' has no blogs")
-
-            log_file_handle.close()
+        finally:
+            # Close the log file handle if it was opened
+            if log_file_handle:
+                log_file_handle.close()
 
     def sort_blogs_by_category(self, categories) -> list[Blog]:
         """Sort the blogs by category."""
 
-        sphinx_diagnostics.info(
-            f"Sorting {len(self.blogs)} blogs into {len(categories)} categories"
+        log_message(
+            "info",
+            f"Sorting {len(self.blogs)} blogs into {len(categories)} categories",
+            "general",
+            "holder",
         )
 
         # Clear existing category lists
@@ -537,7 +648,9 @@ class BlogHolder:
 
         # Log category counts
         for category, count in category_counts.items():
-            sphinx_diagnostics.info(f"Category '{category}' has {count} blogs")
+            log_message(
+                "info", "Category '{category}' has {count} blogs", "general", "holder"
+            )
 
         # Log categories with no blogs
         for category in categories:

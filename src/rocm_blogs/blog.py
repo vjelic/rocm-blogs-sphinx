@@ -12,8 +12,17 @@ from typing import Any, Dict, List, Optional, Union
 from PIL import Image
 from sphinx.util import logging as sphinx_logging
 
-# Initialize logger
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
 
 
 class Blog:
@@ -109,32 +118,51 @@ class Blog:
                 img.save(buffer, format=format)
                 buffer.seek(0)
                 self.image = buffer.getvalue()
-                sphinx_diagnostics.info(
-                    f"Image loaded into memory; size: {len(self.image)} bytes."
+                log_message(
+                    "info",
+                    f"Image loaded into memory; size: {len(self.image)} bytes.",
+                    "general",
+                    "blog",
                 )
         except Exception as error:
-            sphinx_diagnostics.error(f"Error loading image to memory: {error}")
+            log_message(
+                "error", f"Error loading image to memory: {error}", "general", "blog"
+            )
 
     def to_json(self) -> str:
         """Convert the blog metadata to JSON format."""
         try:
             return json.dumps(self.metadata, indent=4)
         except Exception as error:
-            sphinx_diagnostics.error(f"Error converting metadata to JSON: {error}")
+            log_message(
+                "error",
+                f"Error converting metadata to JSON: {error}",
+                "general",
+                "blog",
+            )
             return "{}"
 
     def save_image(self, output_path: str) -> None:
         """Save the image to disk."""
         if self.image is None:
-            sphinx_diagnostics.warning("No image data available in memory to save.")
+            log_message(
+                "warning",
+                "No image data available in memory to save.",
+                "general",
+                "blog",
+            )
             return
 
         try:
             with open(output_path, "wb") as file:
                 file.write(self.image)
-                sphinx_diagnostics.info(f"Image saved to disk at: {output_path}")
+                log_message(
+                    "info", "Image saved to disk at: {output_path}", "general", "blog"
+                )
         except Exception as error:
-            sphinx_diagnostics.error(f"Error saving image to disk: {error}")
+            log_message(
+                "error", f"Error saving image to disk: {error}", "general", "blog"
+            )
 
     def save_image_path(self, image_path: str) -> None:
         """Save the image path for later use."""
@@ -155,9 +183,7 @@ class Blog:
             except ValueError:
                 continue
 
-        sphinx_diagnostics.warning(
-            f"Invalid date format in {self.file_path}: {date_str}"
-        )
+        log_message("warning", f"Invalid date format in {self.file_path}: {date_str}")
         return None
 
     def grab_href(self) -> str:
@@ -167,24 +193,31 @@ class Blog:
     def grab_authors_list(self) -> List[str]:
         """Extract authors from the metadata."""
 
-        sphinx_diagnostics.info(f"Extracting authors from metadata: {self.file_path}")
+        log_message(
+            "info",
+            "Extracting authors from metadata: {self.file_path}",
+            "general",
+            "blog",
+        )
 
-        sphinx_diagnostics.info(f"Authors metadata: {self.author}")
+        log_message("info", "Authors metadata: {self.author}", "general", "blog")
 
         if not self.author:
             return []
 
-        sphinx_diagnostics.info(f"Author type: {type(self.author)}")
+        log_message("info", f"Author type: {type(self.author)}", "general", "blog")
 
         # Ensure authors is a list
         if isinstance(self.author, str):
             authors = list(self.author.split(", "))
 
-        sphinx_diagnostics.info(f"Authors after split: {authors}")
+        log_message("info", "Authors after split: {authors}", "general", "blog")
 
         return authors
 
-    def grab_authors(self, authors_list: List[Union[str, List[str]]], rocm_blogs) -> str:
+    def grab_authors(
+        self, authors_list: List[Union[str, List[str]]], rocm_blogs
+    ) -> str:
         """Generate HTML links for authors, but only if their bio file exists."""
         # Filter out invalid authors
         valid_authors = []
@@ -215,7 +248,6 @@ class Blog:
                 author_elements.append(author)
 
         return ", ".join(author_elements)
-
 
     def grab_image(self, rocmblogs) -> pathlib.Path:
         """Find the image for the blog and return its path."""
@@ -354,7 +386,12 @@ class Blog:
         for path in search_paths:
             if path.exists() and path.is_file():
                 if str(path).lower().endswith(".webp"):
-                    sphinx_diagnostics.info(f"Using WebP version for image: {path}")
+                    log_message(
+                        "info",
+                        "Using WebP version for image: {path}",
+                        "general",
+                        "blog",
+                    )
                 return path
 
         # Try partial matching in the global images directory
@@ -363,8 +400,11 @@ class Blog:
             webp_base = os.path.splitext(image)[0].lower()
             for img_file in images_dir.glob("*.webp"):
                 if img_file.is_file() and webp_base in img_file.name.lower():
-                    sphinx_diagnostics.info(
-                        f"Found WebP version by partial matching: {img_file}"
+                    log_message(
+                        "info",
+                        "Found WebP version by partial matching: {img_file}",
+                        "general",
+                        "blog",
                     )
                     return img_file
 
@@ -393,8 +433,11 @@ class Blog:
                                     webp_img = webp_img.resize(
                                         (new_width, new_height), resample=Image.LANCZOS
                                     )
-                                    sphinx_diagnostics.info(
-                                        f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}"
+                                    log_message(
+                                        "info",
+                                        "Resized image from {original_width}x{original_height} to {new_width}x{new_height}",
+                                        "general",
+                                        "blog",
                                     )
 
                                 webp_path = os.path.splitext(str(img_file))[0] + ".webp"
@@ -403,13 +446,16 @@ class Blog:
                                 )
 
                                 # Return the WebP version
-                                sphinx_diagnostics.info(
-                                    f"Successfully converted {img_file} to WebP: {webp_path}"
+                                log_message(
+                                    "info",
+                                    "Successfully converted {img_file} to WebP: {webp_path}",
+                                    "general",
+                                    "blog",
                                 )
                                 return pathlib.Path(webp_path)
                         except Exception as e:
-                            sphinx_diagnostics.warning(
-                                f"Failed to convert {img_file} to WebP: {e}"
+                            log_message(
+                                "warning", f"Failed to convert {img_file} to WebP: {e}"
                             )
 
                     return img_file

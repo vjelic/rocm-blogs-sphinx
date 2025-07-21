@@ -1,5 +1,7 @@
 import sys
+
 import yaml
+
 
 def validate_metadata(markdown_path):
     """Check if YAML metadata in Markdown file is valid."""
@@ -19,7 +21,7 @@ def validate_metadata(markdown_path):
 
         # Extract YAML content
         yaml_block = content[3:end_idx].strip()
-        
+
         try:
             # Attempt to parse YAML (raises error on invalid syntax)
             yaml.safe_load(yaml_block)

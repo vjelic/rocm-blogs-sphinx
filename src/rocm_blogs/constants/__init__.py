@@ -144,8 +144,15 @@ FORMAT_SETTINGS = {
 
 # Conservative settings for problematic images
 CONSERVATIVE_SETTINGS = {
-    "JPEG": {"quality": 90, "optimize": True, "progressive": True},  # Increased from 80 to 90
-    "PNG": {"optimize": True, "compress_level": 9},  # Reduced compression level for better quality
+    "JPEG": {
+        "quality": 90,
+        "optimize": True,
+        "progressive": True,
+    },  # Increased from 80 to 90
+    "PNG": {
+        "optimize": True,
+        "compress_level": 9,
+    },  # Reduced compression level for better quality
     "WEBP": {"quality": 95, "method": 6},  # Increased quality from 80 to 95
 }
 

@@ -19,7 +19,17 @@ from .grid import *
 from .images import *
 from .utils import *
 
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
 
 
 def quickshare(blog_entry) -> str:
@@ -71,16 +81,27 @@ def quickshare(blog_entry) -> str:
             .replace("{TEXT}", blog_description)
         )
 
-        sphinx_diagnostics.debug(
-            f"Generated quickshare buttons for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}"
+        log_message(
+            "debug",
+            f"Generated quickshare buttons for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+            "general",
+            "process",
         )
 
         return social_bar
     except Exception as quickshare_error:
-        sphinx_diagnostics.error(
-            f"Error generating quickshare buttons for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {quickshare_error}"
+        log_message(
+            "error",
+            f"Error generating quickshare buttons for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {quickshare_error}",
+            "general",
+            "process",
         )
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         return ""
 
 
@@ -142,7 +163,12 @@ def _process_category(
 
     filter_criteria = category_info.get("filter_criteria", {})
 
-    sphinx_diagnostics.info(f"Generating paginated pages for category: {category_name}")
+    log_message(
+        "info",
+        f"Generating paginated pages for category: {category_name}",
+        "general",
+        "process",
+    )
 
     if log_file_handle:
         log_file_handle.write(
@@ -159,16 +185,22 @@ def _process_category(
         # If no filter criteria, use category_key to filter blogs
         if not filter_criteria:
             category_blogs = rocm_blogs.blogs.get_blogs_by_category(category_key)
-            sphinx_diagnostics.info(
-                f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs."
+            log_message(
+                "info",
+                f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs.",
+                "general",
+                "process",
             )
             if log_file_handle:
                 log_file_handle.write(
                     f"Using category_key '{category_key}' to filter blogs. Found {len(category_blogs)} blogs.\n"
                 )
         else:
-            sphinx_diagnostics.info(
-                f"Using filter_criteria to filter blogs: {filter_criteria}"
+            log_message(
+                "info",
+                f"Using filter_criteria to filter blogs: {filter_criteria}",
+                "general",
+                "process",
             )
             if log_file_handle:
                 log_file_handle.write(
@@ -187,8 +219,11 @@ def _process_category(
                         blog_value = getattr(blog, "category", "")
                         if blog_value not in values:
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' does not match any of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' does not match any of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -196,8 +231,11 @@ def _process_category(
                                 )
                             break
                         else:
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' matches one of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' category '{blog_value}' matches one of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -206,8 +244,11 @@ def _process_category(
                     elif field == "vertical":
                         if not hasattr(blog, "metadata") or not blog.metadata:
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no metadata"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no metadata",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -230,8 +271,11 @@ def _process_category(
                             ]
 
                             # Debug log
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals: {blog_verticals}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals: {blog_verticals}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -244,8 +288,11 @@ def _process_category(
                                 bv in values for bv in blog_verticals
                             ):
                                 matches_all_criteria = False
-                                sphinx_diagnostics.debug(
-                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} do not match any of {values}"
+                                log_message(
+                                    "debug",
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} do not match any of {values}",
+                                    "general",
+                                    "process",
                                 )
                                 if log_file_handle:
                                     log_file_handle.write(
@@ -253,8 +300,11 @@ def _process_category(
                                     )
                                 break
                             else:
-                                sphinx_diagnostics.debug(
-                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} match one of {values}"
+                                log_message(
+                                    "debug",
+                                    f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' verticals {blog_verticals} match one of {values}",
+                                    "general",
+                                    "process",
                                 )
                                 if log_file_handle:
                                     log_file_handle.write(
@@ -262,8 +312,11 @@ def _process_category(
                                     )
                         except (AttributeError, KeyError) as e:
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Error getting vertical for blog '{getattr(blog, 'blog_title', 'Unknown')}': {e}"
+                            log_message(
+                                "debug",
+                                f"Error getting vertical for blog '{getattr(blog, 'blog_title', 'Unknown')}': {e}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -273,8 +326,11 @@ def _process_category(
                     elif field == "tags":
                         if not hasattr(blog, "tags") or not blog.tags:
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no tags"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' has no tags",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -292,8 +348,11 @@ def _process_category(
 
                         if not blog_tags or not any(tag in blog_tags for tag in values):
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} do not match any of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} do not match any of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -301,8 +360,11 @@ def _process_category(
                                 )
                             break
                         else:
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} match one of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' tags {blog_tags} match one of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -312,8 +374,11 @@ def _process_category(
                         blog_value = getattr(blog, field, None)
                         if blog_value is None or blog_value not in values:
                             matches_all_criteria = False
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' does not match any of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' does not match any of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -321,8 +386,11 @@ def _process_category(
                                 )
                             break
                         else:
-                            sphinx_diagnostics.debug(
-                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' matches one of {values}"
+                            log_message(
+                                "debug",
+                                f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' field '{field}' value '{blog_value}' matches one of {values}",
+                                "general",
+                                "process",
                             )
                             if log_file_handle:
                                 log_file_handle.write(
@@ -332,16 +400,22 @@ def _process_category(
                 # If blog matches all criteria, add it to category_blogs
                 if matches_all_criteria:
                     category_blogs.append(blog)
-                    sphinx_diagnostics.debug(
-                        f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs"
+                    log_message(
+                        "debug",
+                        f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs",
+                        "general",
+                        "process",
                     )
                     if log_file_handle:
                         log_file_handle.write(
                             f"Blog '{getattr(blog, 'blog_title', 'Unknown')}' matches all filter criteria, adding to category_blogs\n"
                         )
 
-            sphinx_diagnostics.info(
-                f"Found {len(category_blogs)} blogs matching filter criteria"
+            log_message(
+                "info",
+                f"Found {len(category_blogs)} blogs matching filter criteria",
+                "general",
+                "process",
             )
             if log_file_handle:
                 log_file_handle.write(
@@ -350,8 +424,11 @@ def _process_category(
 
     # If no blogs were found for the category, log a warning and return
     if not category_blogs and not filter_criteria:
-        sphinx_diagnostics.warning(
-            f"No blogs found for category: {category_name} and no filter criteria provided"
+        log_message(
+            "warning",
+            f"No blogs found for category: {category_name} and no filter criteria provided",
+            "general",
+            "process",
         )
         if log_file_handle:
             log_file_handle.write(
@@ -359,7 +436,12 @@ def _process_category(
             )
         return
     elif not category_blogs:
-        sphinx_diagnostics.warning(f"No blogs found for category: {category_name}")
+        log_message(
+            "warning",
+            f"No blogs found for category: {category_name}",
+            "general",
+            "process",
+        )
         if log_file_handle:
             log_file_handle.write(f"No blogs found for category: {category_name}\n")
         return
@@ -370,8 +452,11 @@ def _process_category(
         (len(category_blogs) + CATEGORY_BLOGS_PER_PAGE - 1) // CATEGORY_BLOGS_PER_PAGE,
     )
 
-    sphinx_diagnostics.info(
-        f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages"
+    log_message(
+        "info",
+        f"Category {category_name} has {len(category_blogs)} blogs, creating {total_pages} pages",
+        "general",
+        "process",
     )
     if log_file_handle:
         log_file_handle.write(
@@ -382,8 +467,11 @@ def _process_category(
 
     # Check if any grid items were generated
     if not all_grid_items:
-        sphinx_diagnostics.warning(
-            f"No grid items were generated for category: {category_name}. Skipping page generation."
+        log_message(
+            "warning",
+            f"No grid items were generated for category: {category_name}. Skipping page generation.",
+            "general",
+            "process",
         )
         return
 
@@ -455,8 +543,11 @@ def _process_category(
                 log_file_handle.write(f"Successfully wrote to file {output_path}\n")
 
         except FileNotFoundError as fnf_error:
-            sphinx_diagnostics.error(
-                f"File not found error while writing to {output_path}: {fnf_error}"
+            log_message(
+                "error",
+                f"File not found error while writing to {output_path}: {fnf_error}",
+                "general",
+                "process",
             )
             if log_file_handle:
                 log_file_handle.write(
@@ -466,10 +557,18 @@ def _process_category(
                 f"File not found error while writing to {output_path}: {fnf_error}"
             ) from fnf_error
         except Exception as write_error:
-            sphinx_diagnostics.error(
-                f"Error writing to file {output_path}: {write_error}"
+            log_message(
+                "error",
+                f"Error writing to file {output_path}: {write_error}",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
 
             if log_file_handle:
                 log_file_handle.write(
@@ -483,15 +582,23 @@ def _process_category(
 
         # verify the file was created successfully
         if not output_path.exists():
-            sphinx_diagnostics.error(f"File {output_path} was not created successfully")
+            log_message(
+                "error",
+                f"File {output_path} was not created successfully",
+                "general",
+                "process",
+            )
             if log_file_handle:
                 log_file_handle.write(
                     f"File {output_path} was not created successfully\n"
                 )
             raise SphinxError(f"File {output_path} was not created successfully")
 
-        sphinx_diagnostics.info(
-            f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})"
+        log_message(
+            "info",
+            f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})",
+            "general",
+            "process",
         )
 
 
@@ -507,13 +614,24 @@ def _generate_grid_items(
 
         grid_params = inspect.signature(generate_grid).parameters
         if "ROCmBlogs" not in grid_params or "blog" not in grid_params:
-            sphinx_diagnostics.critical(
-                "generate_grid function does not have the expected parameters. Grid items may not be generated correctly."
+            log_message(
+                "critical",
+                "generate_grid function does not have the expected parameters. Grid items may not be generated correctly.",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(
-                f"Available parameters: {list(grid_params.keys())}"
+            log_message(
+                "debug",
+                f"Available parameters: {list(grid_params.keys())}",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
 
         # Generate grid items in parallel
         with ThreadPoolExecutor() as executor:
@@ -522,15 +640,21 @@ def _generate_grid_items(
             for blog_entry in blog_list:
 
                 if skip_used and blog_entry in used_blogs:
-                    sphinx_diagnostics.debug(
-                        f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used"
+                    log_message(
+                        "debug",
+                        f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used",
+                        "general",
+                        "process",
                     )
                     continue
 
                 # Check if we've reached the maximum number of items
                 if item_count >= max_items:
-                    sphinx_diagnostics.debug(
-                        f"Reached maximum number of items ({max_items}), skipping remaining blogs"
+                    log_message(
+                        "debug",
+                        f"Reached maximum number of items ({max_items}), skipping remaining blogs",
+                        "general",
+                        "process",
                     )
                     continue
 
@@ -549,10 +673,18 @@ def _generate_grid_items(
                     grid_result = future.result()
                     if not grid_result or not grid_result.strip():
                         blog_entry = grid_futures[future]
-                        sphinx_diagnostics.warning(
-                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}"
+                        log_message(
+                            "warning",
+                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                            "general",
+                            "process",
                         )
-                        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                        log_message(
+                            "debug",
+                            f"Traceback: {traceback.format_exc()}",
+                            "general",
+                            "process",
+                        )
                         error_count += 1
                         continue
 
@@ -560,47 +692,92 @@ def _generate_grid_items(
                 except Exception as future_error:
                     error_count += 1
                     blog_entry = grid_futures[future]
-                    sphinx_diagnostics.error(
-                        f"Error generating grid item for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {future_error}"
+                    log_message(
+                        "error",
+                        f"Error generating grid item for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {future_error}",
+                        "general",
+                        "process",
                     )
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "process",
+                    )
 
         # Handle the case where no grid items were generated
         if not grid_items:
             # If there were no blogs to process or all were skipped, just
             # return an empty list
             if item_count == 0:
-                sphinx_diagnostics.warning(
-                    "No blogs were available to generate grid items. Returning empty list."
+                log_message(
+                    "warning",
+                    "No blogs were available to generate grid items. Returning empty list.",
+                    "general",
+                    "process",
                 )
                 return []
 
             # If we tried to process blogs but none succeeded, log a warning
             # but don't raise an error
-            sphinx_diagnostics.warning(
-                "No grid items were generated despite having blogs to process. Check for errors in the generate_grid function."
+            log_message(
+                "warning",
+                "No grid items were generated despite having blogs to process. Check for errors in the generate_grid function.",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
             return []
 
         # Log errors and completion status
         elif error_count > 0:
-            sphinx_diagnostics.warning(
-                f"Generated {len(grid_items)} grid items with {error_count} errors"
+            log_message(
+                "warning",
+                f"Generated {len(grid_items)} grid items with {error_count} errors",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
         else:
-            sphinx_diagnostics.info(
-                f"Successfully generated {len(grid_items)} grid items"
+            log_message(
+                "info",
+                f"Successfully generated {len(grid_items)} grid items",
+                "general",
+                "process",
             )
 
         return grid_items
     except ROCmBlogsError:
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         raise
     except Exception as grid_error:
-        sphinx_diagnostics.error(f"Error generating grid items: {grid_error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "error",
+            f"Error generating grid items: {grid_error}",
+            "general",
+            "process",
+        )
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         return []
 
 
@@ -612,17 +789,26 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
 
         grid_params = inspect.signature(generate_grid).parameters
         if "lazy_load" not in grid_params:
-            sphinx_diagnostics.critical(
-                "generate_grid function does not support lazy_load parameter. Grid items may not be generated correctly."
+            log_message(
+                "critical",
+                "generate_grid function does not support lazy_load parameter. Grid items may not be generated correctly.",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(
-                f"Available parameters: {list(grid_params.keys())}"
+            log_message(
+                "debug",
+                f"Available parameters: {list(grid_params.keys())}",
+                "general",
+                "process",
             )
 
             # If lazy_load is not supported, fall back to regular grid
             # generation
-            sphinx_diagnostics.info(
-                "Falling back to regular grid generation without lazy loading"
+            log_message(
+                "info",
+                "Falling back to regular grid generation without lazy loading",
+                "general",
+                "process",
             )
             # Create a temporary empty list for used_blogs since we don't want
             # to mark blogs as used
@@ -634,66 +820,118 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
         for blog_entry in blog_list:
             try:
                 # Generate a grid item with lazy loading
-                sphinx_diagnostics.debug(
-                    f"Generating lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Generating lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                    "general",
+                    "process",
                 )
                 grid_html = generate_grid(rocm_blogs, blog_entry, lazy_load=True)
 
                 if not grid_html or not grid_html.strip():
-                    sphinx_diagnostics.warning(
-                        f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}"
+                    log_message(
+                        "warning",
+                        f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                        "general",
+                        "process",
                     )
                     error_count += 1
                     continue
 
                 lazy_grid_items.append(grid_html)
-                sphinx_diagnostics.debug(
-                    f"Successfully generated lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Successfully generated lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                    "general",
+                    "process",
                 )
             except Exception as blog_error:
                 error_count += 1
-                sphinx_diagnostics.error(
-                    f"Error generating grid item for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}"
+                log_message(
+                    "error",
+                    f"Error generating grid item for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}",
+                    "general",
+                    "process",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "process",
+                )
 
         # Handle the case where no grid items were generated
         if not lazy_grid_items:
             # If there were no blogs to process, just return an empty list
             if not blog_list:
-                sphinx_diagnostics.warning(
-                    "No blogs were provided to generate lazy-loaded grid items. Returning empty list."
+                log_message(
+                    "warning",
+                    "No blogs were provided to generate lazy-loaded grid items. Returning empty list.",
+                    "general",
+                    "process",
                 )
                 return []
 
             # If we tried to process blogs but none succeeded, log a warning
             # but don't raise an error
-            sphinx_diagnostics.warning(
-                "No lazy-loaded grid items were generated despite having blogs to process. Check for errors in the generate_grid function."
+            log_message(
+                "warning",
+                "No lazy-loaded grid items were generated despite having blogs to process. Check for errors in the generate_grid function.",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
             return []
 
         # Log errors and completion status
         elif error_count > 0:
-            sphinx_diagnostics.warning(
-                f"Generated {len(lazy_grid_items)} lazy-loaded grid items with {error_count} errors"
+            log_message(
+                "warning",
+                f"Generated {len(lazy_grid_items)} lazy-loaded grid items with {error_count} errors",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
         else:
-            sphinx_diagnostics.info(
-                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items"
+            log_message(
+                "info",
+                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items",
+                "general",
+                "process",
             )
 
         return lazy_grid_items
     except ROCmBlogsError:
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         raise
     except Exception as lazy_load_error:
-        sphinx_diagnostics.error(
-            f"Error generating lazy-loaded grid items: {lazy_load_error}"
+        log_message(
+            "error",
+            f"Error generating lazy-loaded grid items: {lazy_load_error}",
+            "general",
+            "process",
         )
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         raise ROCmBlogsError(
             f"Error generating lazy-loaded grid-items: {lazy_load_error}"
         ) from lazy_load_error
@@ -707,8 +945,11 @@ def process_single_blog(blog_entry, rocm_blogs):
         blog_directory = os.path.dirname(readme_file_path)
 
         if not hasattr(blog_entry, "author") or not blog_entry.author:
-            sphinx_diagnostics.warning(
-                f"Skipping blog {readme_file_path} without author"
+            log_message(
+                "warning",
+                f"Skipping blog {readme_file_path} without author",
+                "general",
+                "process",
             )
             return
 
@@ -724,8 +965,11 @@ def process_single_blog(blog_entry, rocm_blogs):
         if hasattr(blog_entry, "thumbnail") and blog_entry.thumbnail:
             try:
                 blog_entry.grab_image(rocm_blogs)
-                sphinx_diagnostics.info(
-                    f"Found thumbnail image: {blog_entry.image_paths[0] if blog_entry.image_paths else 'None'}"
+                log_message(
+                    "info",
+                    f"Found thumbnail image: {blog_entry.image_paths[0] if blog_entry.image_paths else 'None'}",
+                    "general",
+                    "process",
                 )
 
                 thumbnail_images = (
@@ -757,8 +1001,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 image_path
                             ):
                                 try:
-                                    sphinx_diagnostics.info(
-                                        f"Converting image to WebP: {image_path}"
+                                    log_message(
+                                        "info",
+                                        f"Converting image to WebP: {image_path}",
+                                        "general",
+                                        "process",
                                     )
                                     webp_success, webp_path = convert_to_webp(
                                         image_path
@@ -770,8 +1017,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         else image_path
                                     )
 
-                                    sphinx_diagnostics.info(
-                                        f"Optimizing image: {path_to_optimize}"
+                                    log_message(
+                                        "info",
+                                        f"Optimizing image: {path_to_optimize}",
+                                        "general",
+                                        "process",
                                     )
                                     optimization_success, optimized_webp_path = (
                                         optimize_image(
@@ -788,11 +1038,17 @@ def process_single_blog(blog_entry, rocm_blogs):
                                             os.path.basename(optimized_webp_path)
                                         )
                                 except Exception as image_error:
-                                    sphinx_diagnostics.warning(
-                                        f"Error processing image {image_path}: {image_error}"
+                                    log_message(
+                                        "warning",
+                                        f"Error processing image {image_path}: {image_error}",
+                                        "general",
+                                        "process",
                                     )
-                                    sphinx_diagnostics.debug(
-                                        f"Traceback: {traceback.format_exc()}"
+                                    log_message(
+                                        "debug",
+                                        f"Traceback: {traceback.format_exc()}",
+                                        "general",
+                                        "process",
                                     )
                                 break
 
@@ -800,8 +1056,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                 if os.path.exists(blog_images_directory) and os.path.isdir(
                     blog_images_directory
                 ):
-                    sphinx_diagnostics.info(
-                        f"Checking for images in blog images directory: {blog_images_directory}"
+                    log_message(
+                        "info",
+                        f"Checking for images in blog images directory: {blog_images_directory}",
+                        "general",
+                        "process",
                     )
                     for filename in os.listdir(blog_images_directory):
                         image_path = os.path.join(blog_images_directory, filename)
@@ -817,8 +1076,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 ".tif",
                             ]:
                                 try:
-                                    sphinx_diagnostics.info(
-                                        f"Converting image to WebP: {image_path}"
+                                    log_message(
+                                        "info",
+                                        f"Converting image to WebP: {image_path}",
+                                        "general",
+                                        "process",
                                     )
                                     webp_success, webp_path = convert_to_webp(
                                         image_path
@@ -830,8 +1092,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         else image_path
                                     )
 
-                                    sphinx_diagnostics.info(
-                                        f"Optimizing image: {path_to_optimize}"
+                                    log_message(
+                                        "info",
+                                        f"Optimizing image: {path_to_optimize}",
+                                        "general",
+                                        "process",
                                     )
                                     optimization_success, optimized_webp_path = (
                                         optimize_image(
@@ -848,11 +1113,17 @@ def process_single_blog(blog_entry, rocm_blogs):
                                             os.path.basename(optimized_webp_path)
                                         )
                                 except Exception as image_error:
-                                    sphinx_diagnostics.warning(
-                                        f"Error processing image {image_path}: {image_error}"
+                                    log_message(
+                                        "warning",
+                                        f"Error processing image {image_path}: {image_error}",
+                                        "general",
+                                        "process",
                                     )
-                                    sphinx_diagnostics.debug(
-                                        f"Traceback: {traceback.format_exc()}"
+                                    log_message(
+                                        "debug",
+                                        f"Traceback: {traceback.format_exc()}",
+                                        "general",
+                                        "process",
                                     )
 
                 if blog_entry.image_paths and webp_versions:
@@ -863,8 +1134,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                             blog_entry.image_paths[i] = img_path.replace(
                                 image_name, webp_name
                             )
-                            sphinx_diagnostics.info(
-                                f"Using WebP version for blog image: {webp_name}"
+                            log_message(
+                                "info",
+                                f"Using WebP version for blog image: {webp_name}",
+                                "general",
+                                "process",
                             )
 
                             if (
@@ -876,8 +1150,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                     blog_entry.thumbnail = blog_entry.thumbnail.replace(
                                         thumbnail_name, webp_name
                                     )
-                                    sphinx_diagnostics.info(
-                                        f"Updated blog thumbnail to use WebP: {webp_name}"
+                                    log_message(
+                                        "info",
+                                        f"Updated blog thumbnail to use WebP: {webp_name}",
+                                        "general",
+                                        "process",
                                     )
 
                                     for j, line in enumerate(content_lines):
@@ -885,26 +1162,48 @@ def process_single_blog(blog_entry, rocm_blogs):
                                             content_lines[j] = line.replace(
                                                 image_name, webp_name
                                             )
-                                            sphinx_diagnostics.info(
-                                                f"Updated image reference in blog content: {image_name} -> {webp_name}"
+                                            log_message(
+                                                "info",
+                                                f"Updated image reference in blog content: {image_name} -> {webp_name}",
+                                                "general",
+                                                "process",
                                             )
             except Exception as thumbnail_error:
-                sphinx_diagnostics.warning(
-                    f"Error processing thumbnail for blog {readme_file_path}: {thumbnail_error}"
+                log_message(
+                    "warning",
+                    f"Error processing thumbnail for blog {readme_file_path}: {thumbnail_error}",
+                    "general",
+                    "process",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "process",
+                )
 
         try:
             word_count = count_words_in_markdown(file_content)
             blog_entry.set_word_count(word_count)
-            sphinx_diagnostics.info(
-                f"\033[33mWord count for {readme_file_path}: {word_count}\033[0m"
+            log_message(
+                "info",
+                f"\033[33mWord count for {readme_file_path}: {word_count}\033[0m",
+                "general",
+                "process",
             )
         except Exception as word_count_error:
-            sphinx_diagnostics.warning(
-                f"Error counting words for blog {readme_file_path}: {word_count_error}"
+            log_message(
+                "warning",
+                f"Error counting words for blog {readme_file_path}: {word_count_error}",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
 
         try:
             authors_list = blog_entry.author.split(",")
@@ -973,8 +1272,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                     break
 
             if not title_line or title_line_number is None:
-                sphinx_diagnostics.warning(
-                    f"Could not find title in blog {readme_file_path}"
+                log_message(
+                    "warning",
+                    f"Could not find title in blog {readme_file_path}",
+                    "general",
+                    "process",
                 )
                 return
 
@@ -988,10 +1290,18 @@ def process_single_blog(blog_entry, rocm_blogs):
                 )
                 giscus_html = import_file("rocm_blogs.templates", "giscus.html")
             except Exception as template_error:
-                sphinx_diagnostics.error(
-                    f"Error loading templates for blog {readme_file_path}: {template_error}"
+                log_message(
+                    "error",
+                    f"Error loading templates for blog {readme_file_path}: {template_error}",
+                    "general",
+                    "process",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "process",
+                )
                 raise
 
             if has_valid_author:
@@ -1024,14 +1334,20 @@ def process_single_blog(blog_entry, rocm_blogs):
                     relative_path = blog_path.relative_to(blogs_directory_path)
 
                     directory_depth = len(relative_path.parts) - 1
-                    sphinx_diagnostics.info(
-                        f"Blog depth: {directory_depth} for {blog_entry.file_path}"
+                    log_message(
+                        "info",
+                        f"Blog depth: {directory_depth} for {blog_entry.file_path}",
+                        "general",
+                        "process",
                     )
 
                     parent_directories = "../" * directory_depth
 
-                    sphinx_diagnostics.info(
-                        f"Using {parent_directories} for blog at depth {directory_depth}: {blog_entry.file_path}"
+                    log_message(
+                        "info",
+                        f"Using {parent_directories} for blog at depth {directory_depth}: {blog_entry.file_path}",
+                        "general",
+                        "process",
                     )
 
                     if blog_entry.image_paths:
@@ -1041,13 +1357,19 @@ def process_single_blog(blog_entry, rocm_blogs):
 
                     blog_image_path = f"{parent_directories}_images/{image_filename}"
 
-                    sphinx_diagnostics.info(
-                        f"Using image path for blog: {blog_image_path}"
+                    log_message(
+                        "info",
+                        f"Using image path for blog: {blog_image_path}",
+                        "general",
+                        "process",
                     )
 
                 except ValueError:
-                    sphinx_diagnostics.warning(
-                        f"Could not determine relative path for {blog_entry.file_path}, using default image path"
+                    log_message(
+                        "warning",
+                        f"Could not determine relative path for {blog_entry.file_path}, using default image path",
+                        "general",
+                        "process",
                     )
                     if blog_entry.image_paths:
                         blog_image_path = f"../../_images/{blog_entry.image_paths[0]}"
@@ -1058,10 +1380,18 @@ def process_single_blog(blog_entry, rocm_blogs):
                     "{IMAGE}", blog_image_path
                 ).replace("{TITLE}", getattr(blog_entry, "blog_title", ""))
             except Exception as image_path_error:
-                sphinx_diagnostics.error(
-                    f"Error determining image path for blog {readme_file_path}: {image_path_error}"
+                log_message(
+                    "error",
+                    f"Error determining image path for blog {readme_file_path}: {image_path_error}",
+                    "general",
+                    "process",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "process",
+                )
                 raise
 
             blog_template = f"""
@@ -1092,27 +1422,54 @@ def process_single_blog(blog_entry, rocm_blogs):
                 ) as output_file:
                     output_file.writelines(updated_lines)
             except Exception as write_error:
-                sphinx_diagnostics.error(
-                    f"Error writing to blog file {readme_file_path}: {write_error}"
+                log_message(
+                    "error",
+                    f"Error writing to blog file {readme_file_path}: {write_error}",
+                    "general",
+                    "process",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "process",
+                )
                 raise
 
             processing_end_time = time.time()
             processing_duration = processing_end_time - processing_start_time
-            sphinx_diagnostics.info(
-                f"\033[33mSuccessfully processed blog {readme_file_path} in \033[96m{processing_duration:.2f} milliseconds\033[33m\033[0m"
+            log_message(
+                "info",
+                f"\033[33mSuccessfully processed blog {readme_file_path} in \033[96m{processing_duration:.2f} milliseconds\033[33m\033[0m",
+                "general",
+                "process",
             )
         except Exception as metadata_error:
-            sphinx_diagnostics.warning(
-                f"Error processing metadata for blog {readme_file_path}: {metadata_error}"
+            log_message(
+                "warning",
+                f"Error processing metadata for blog {readme_file_path}: {metadata_error}",
+                "general",
+                "process",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "general",
+                "process",
+            )
             raise
 
     except Exception as process_error:
-        sphinx_diagnostics.error(
-            f"Error processing blog {getattr(blog_entry, 'file_path', 'Unknown')}: {process_error}"
+        log_message(
+            "error",
+            f"Error processing blog {getattr(blog_entry, 'file_path', 'Unknown')}: {process_error}",
+            "general",
+            "process",
         )
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "general",
+            "process",
+        )
         raise

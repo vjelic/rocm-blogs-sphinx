@@ -7,14 +7,24 @@ import os
 from PIL import Image
 from sphinx.util import logging as sphinx_logging
 
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
 
 
 def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False) -> str:
     """Generate a single banner slide for a blog in NVIDIA-inspired style."""
 
-    sphinx_diagnostics.debug(
-        f"Generating banner slide for blog index {index} (active={active})"
+    log_message(
+        "debug", f"Generating banner slide for blog index {index} (active={active})"
     )
 
     slide_template = """
@@ -55,38 +65,47 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 """
 
     title = blog.blog_title if hasattr(blog, "blog_title") else "No Title"
-    sphinx_diagnostics.debug(f"Banner slide title: {title}")
+    log_message("debug", f"Banner slide title: {title}")
 
     category = getattr(blog, "category", "ROCm Blog")
     category_link = category.lower().replace(" ", "-")
     category_url = f"./blog/category/{category_link}.html"
-    sphinx_diagnostics.debug(f"Banner slide category: {category}, URL: {category_url}")
+    log_message("debug", f"Banner slide category: {category}, URL: {category_url}")
 
     if hasattr(blog, "thumbnail") and blog.thumbnail:
         thumbnail_path = blog.thumbnail
         webp_thumbnail_path = os.path.splitext(thumbnail_path)[0] + ".webp"
 
         if os.path.exists(os.path.join(rocmblogs.blogs_directory, webp_thumbnail_path)):
-            sphinx_diagnostics.info(
-                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}"
+            log_message(
+                "info",
+                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}",
+                "general",
+                "banner",
             )
             blog.thumbnail = webp_thumbnail_path
         elif os.path.exists(
             os.path.join(os.path.dirname(blog.file_path), webp_thumbnail_path)
         ):
-            sphinx_diagnostics.info(
-                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}"
+            log_message(
+                "info",
+                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}",
+                "general",
+                "banner",
             )
             blog.thumbnail = webp_thumbnail_path
         elif os.path.exists(
             os.path.join(os.path.dirname(blog.file_path), "images", webp_thumbnail_path)
         ):
-            sphinx_diagnostics.info(
-                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}"
+            log_message(
+                "info",
+                f"Using WebP version for banner slide thumbnail: {webp_thumbnail_path}",
+                "general",
+                "banner",
             )
             blog.thumbnail = webp_thumbnail_path
 
-    sphinx_diagnostics.debug(f"Getting image for banner slide: {title}")
+    log_message("debug", f"Getting image for banner slide: {title}")
     blog.grab_image(rocmblogs)
 
     if blog.image_paths:
@@ -105,8 +124,11 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
             ):
                 image_filename = webp_filename
                 webp_exists = True
-                sphinx_diagnostics.info(
-                    f"Using WebP version for banner slide image: {webp_filename}"
+                log_message(
+                    "info",
+                    f"Using WebP version for banner slide image: {webp_filename}",
+                    "general",
+                    "banner",
                 )
 
             elif os.path.exists(
@@ -114,8 +136,11 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
             ):
                 image_filename = webp_filename
                 webp_exists = True
-                sphinx_diagnostics.info(
-                    f"Using WebP version for banner slide image: {webp_filename}"
+                log_message(
+                    "info",
+                    f"Using WebP version for banner slide image: {webp_filename}",
+                    "general",
+                    "banner",
                 )
 
             elif os.path.exists(
@@ -123,13 +148,19 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
             ):
                 image_filename = webp_filename
                 webp_exists = True
-                sphinx_diagnostics.info(
-                    f"Using WebP version for banner slide image: {webp_filename}"
+                log_message(
+                    "info",
+                    f"Using WebP version for banner slide image: {webp_filename}",
+                    "general",
+                    "banner",
                 )
 
             if not webp_exists:
-                sphinx_diagnostics.info(
-                    f"WebP version not found for {image_filename}, attempting to convert"
+                log_message(
+                    "info",
+                    f"WebP version not found for {image_filename}, attempting to convert",
+                    "general",
+                    "banner",
                 )
 
                 original_image_path = None
@@ -177,8 +208,11 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
                                 webp_img = webp_img.resize(
                                     (new_width, new_height), resample=Image.LANCZOS
                                 )
-                                sphinx_diagnostics.info(
-                                    f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}"
+                                log_message(
+                                    "info",
+                                    f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}",
+                                    "general",
+                                    "banner",
                                 )
 
                             webp_path = (
@@ -189,15 +223,19 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
                             )
 
                             image_filename = webp_filename
-                            sphinx_diagnostics.info(
-                                f"Successfully converted {image_filename} to WebP: {webp_path}"
+                            log_message(
+                                "info",
+                                f"Successfully converted {image_filename} to WebP: {webp_path}",
+                                "general",
+                                "banner",
                             )
                     except Exception as error:
-                        sphinx_diagnostics.warning(
-                            f"Failed to convert {image_filename} to WebP: {error}"
+                        log_message(
+                            "warning",
+                            f"Failed to convert {image_filename} to WebP: {error}",
                         )
             image = f"./_images/{image_filename}"
-            sphinx_diagnostics.debug(f"Using image for banner slide: {image}")
+            log_message("debug", f"Using image for banner slide: {image}")
     else:
         generic_webp_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
@@ -207,13 +245,16 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
         )
         if os.path.exists(generic_webp_path):
             image = "./_images/generic.webp"
-            sphinx_diagnostics.info(
-                f"Using WebP version for generic banner image: {image}"
+            log_message(
+                "info",
+                f"Using WebP version for generic banner image: {image}",
+                "general",
+                "banner",
             )
         else:
             image = "./_images/generic.jpg"
-            sphinx_diagnostics.debug(
-                f"No image found for banner slide, using generic: {image}"
+            log_message(
+                "debug", f"No image found for banner slide, using generic: {image}"
             )
 
     raw_href = blog.grab_href()
@@ -221,41 +262,45 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
         href = "." + raw_href.split("/blogs")[-1].replace("\\", "/")
     else:
         href = "." + str(raw_href).split("/blogs")[-1].replace("\\", "/")
-        sphinx_diagnostics.debug(f"Banner slide href: {href}")
+        log_message("debug", f"Banner slide href: {href}")
 
     description = "Explore the latest insights and developments in ROCm technology."
     if hasattr(blog, "myst") and blog.myst:
         html_meta = blog.myst.get("html_meta", {})
         if html_meta and "description lang=en" in html_meta:
             description = html_meta["description lang=en"]
-            sphinx_diagnostics.debug(f"Using description from myst html_meta")
+            log_message("debug", f"Using description from myst html_meta")
     elif hasattr(blog, "description") and blog.description:
         description = blog.description
-        sphinx_diagnostics.debug(f"Using description from blog.description")
+        log_message("debug", f"Using description from blog.description")
     elif hasattr(blog, "summary") and blog.summary:
         description = blog.summary
-        sphinx_diagnostics.debug(f"Using description from blog.summary")
+        log_message("debug", f"Using description from blog.summary")
     else:
-        sphinx_diagnostics.debug(f"Using default description for banner slide")
+        log_message("debug", f"Using default description for banner slide")
 
     authors_list = getattr(blog, "author", "").split(",")
-    sphinx_diagnostics.debug(f"Authors list for banner slide: {authors_list}")
+    log_message("debug", f"Authors list for banner slide: {authors_list}")
 
     authors_html = ""
 
     if authors_list and authors_list[0]:
         authors_html = blog.grab_authors(authors_list, rocmblogs)
-        sphinx_diagnostics.debug(f"Generated authors HTML: {authors_html}")
+        log_message("debug", f"Generated authors HTML: {authors_html}")
 
     if authors_html:
         author = f"by {authors_html}"
     else:
         author = "."
-        sphinx_diagnostics.debug(f"No valid authors found, using default: {author}")
+        log_message("debug", f"No valid authors found, using default: {author}")
 
-    sphinx_diagnostics.info(
-        f"Generated banner slide for '{title}' (index: {index}, active: {active})"
+    log_message(
+        "info",
+        f"Generated banner slide for '{title}' (index: {index}, active: {active})",
+        "general",
+        "banner",
     )
+
     return slide_template.format(
         title=title,
         category=category,
@@ -270,8 +315,9 @@ def generate_banner_slide(blog, rocmblogs, index: int = 0, active: bool = False)
 def generate_banner_navigation_item(blog, index: int = 0, active: bool = False) -> str:
     """Generate a banner navigation item in NVIDIA-inspired style."""
 
-    sphinx_diagnostics.debug(
-        f"Generating banner navigation item for blog index {index} (active={active})"
+    log_message(
+        "debug",
+        f"Generating banner navigation item for blog index {index} (active={active})",
     )
 
     active_class = " active" if active else ""
@@ -293,8 +339,8 @@ def generate_banner_navigation_item(blog, index: int = 0, active: bool = False) 
     title = blog.blog_title if hasattr(blog, "blog_title") else "No Title"
     category = getattr(blog, "category", "ROCm Blog")
 
-    sphinx_diagnostics.debug(
-        f"Banner navigation item - Title: {title}, Category: {category}"
+    log_message(
+        "debug", f"Banner navigation item - Title: {title}, Category: {category}"
     )
 
     result = nav_template.format(
@@ -305,7 +351,8 @@ def generate_banner_navigation_item(blog, index: int = 0, active: bool = False) 
         index=index,
     )
 
-    sphinx_diagnostics.debug(
-        f"Generated banner navigation item for '{title}' (index: {index}, active: {active})"
+    log_message(
+        "debug",
+        f"Generated banner navigation item for '{title}' (index: {index}, active: {active})",
     )
     return result

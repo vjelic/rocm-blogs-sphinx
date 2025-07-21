@@ -15,7 +15,18 @@ from sphinx.util import logging as sphinx_logging
 from ._rocmblogs import ROCmBlogs
 from .constants import *
 
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
+
 
 WEBP_CONVERSION_STATISTICS = {
     "converted": 0,
@@ -32,31 +43,33 @@ def convert_to_webp(source_image_path):
     webp_image_path = os.path.splitext(source_image_path)[0] + ".webp"
 
     if not os.path.exists(source_image_path):
-        sphinx_diagnostics.warning(f"Image file not found: {source_image_path}")
+        log_message("warning", f"Image file not found: {source_image_path}")
         return False, None
 
     _, file_extension = os.path.splitext(source_image_path)
     if file_extension.lower() not in SUPPORTED_FORMATS:
-        sphinx_diagnostics.warning(
-            f"Unsupported image format: {file_extension} for {source_image_path}"
+        log_message(
+            "warning",
+            f"Unsupported image format: {file_extension} for {source_image_path}",
         )
         return False, None
 
     # Skip conversion for .gif files (and other excluded extensions)
     if file_extension.lower() in EXCLUDED_EXTENSIONS:
-        sphinx_diagnostics.info(
-            f"Skipping WebP conversion for excluded image format: {file_extension} for {source_image_path}"
+        log_message(
+            "info",
+            "Skipping WebP conversion for excluded image format: {file_extension} for {source_image_path}",
+            "general",
+            "images",
         )
         return True, source_image_path
 
     if file_extension.lower() == ".webp":
-        sphinx_diagnostics.debug(
-            f"Image is already in WebP format: {source_image_path}"
-        )
+        log_message("debug", f"Image is already in WebP format: {source_image_path}")
         return True, source_image_path
 
     if os.path.exists(webp_image_path):
-        sphinx_diagnostics.debug(f"WebP version already exists: {webp_image_path}")
+        log_message("debug", f"WebP version already exists: {webp_image_path}")
         return True, webp_image_path
 
     try:
@@ -79,8 +92,11 @@ def convert_to_webp(source_image_path):
                     force_exact=True,
                     source_image_filename=source_image_filename,
                 )
-                sphinx_diagnostics.info(
-                    f"Resized banner image to {BANNER_DIMENSIONS[0]}x{BANNER_DIMENSIONS[1]}: {source_image_filename}"
+                log_message(
+                    "info",
+                    "Resized banner image to {BANNER_DIMENSIONS[0]}x{BANNER_DIMENSIONS[1]}: {source_image_filename}",
+                    "general",
+                    "images",
                 )
             else:
                 webp_image = _resize_content_image(
@@ -91,23 +107,28 @@ def convert_to_webp(source_image_path):
                 )
                 if webp_image.size != (original_width, original_height):
                     new_width, new_height = webp_image.size
-                    sphinx_diagnostics.info(
-                        f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}: {source_image_filename}"
+                    log_message(
+                        "info",
+                        "Resized image from {original_width}x{original_height} to {new_width}x{new_height}: {source_image_filename}",
+                        "general",
+                        "images",
                     )
 
             webp_image.save(
                 webp_image_path, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD
             )
 
-            sphinx_diagnostics.info(
-                f"Created WebP version: {os.path.basename(webp_image_path)}"
+            log_message(
+                "info",
+                f"Created WebP version: {os.path.basename(webp_image_path)}",
+                "general",
+                "images",
             )
+
             return True, webp_image_path
 
     except Exception as webp_conversion_error:
-        sphinx_diagnostics.warning(
-            f"Error creating WebP version: {webp_conversion_error}"
-        )
+        log_message("warning", f"Error creating WebP version: {webp_conversion_error}")
         if os.path.exists(webp_image_path):
             os.remove(webp_image_path)
         return False, None
@@ -135,8 +156,9 @@ def optimize_image(source_image_path, blog_thumbnail_filenames=None):
             source_image_format = pil_image.format
             source_image_mode = pil_image.mode
 
-            sphinx_diagnostics.debug(
-                f"Image details: {source_image_filename}, Format: {source_image_format}, Mode: {source_image_mode}, Size: {source_image_width}x{source_image_height}"
+            log_message(
+                "debug",
+                f"Image details: {source_image_filename}, Format: {source_image_format}, Mode: {source_image_mode}, Size: {source_image_width}x{source_image_height}",
             )
 
             if not _verify_image_integrity(
@@ -192,8 +214,9 @@ def optimize_image(source_image_path, blog_thumbnail_filenames=None):
         return True, webp_image_path if webp_conversion_success else None
 
     except Exception as optimize_error:
-        sphinx_diagnostics.warning(
-            f"Error optimizing image {source_image_filename}: {optimize_error}"
+        log_message(
+            "warning",
+            f"Error optimizing image {source_image_filename}: {optimize_error}",
         )
         _restore_from_backup(
             backup_image_path, source_image_path, source_image_filename
@@ -212,19 +235,18 @@ def _should_optimize_image(
             and source_image_filename.lower()
             not in [thumbnail.lower() for thumbnail in blog_thumbnail_filenames]
         ):
-            sphinx_diagnostics.debug(
-                f"Skipping non-thumbnail image: {source_image_path}"
-            )
+            log_message("debug", f"Skipping non-thumbnail image: {source_image_path}")
             return False
 
     if not os.path.exists(source_image_path):
-        sphinx_diagnostics.warning(f"Image file not found: {source_image_path}")
+        log_message("warning", f"Image file not found: {source_image_path}")
         return False
 
     _, file_extension = os.path.splitext(source_image_path)
     if file_extension.lower() not in SUPPORTED_FORMATS:
-        sphinx_diagnostics.warning(
-            f"Unsupported image format: {file_extension} for {source_image_path}"
+        log_message(
+            "warning",
+            f"Unsupported image format: {file_extension} for {source_image_path}",
         )
         return False
 
@@ -237,8 +259,8 @@ def _create_backup(source_image_path, backup_image_path):
         shutil.copy2(source_image_path, backup_image_path)
         return True
     except Exception as backup_error:
-        sphinx_diagnostics.warning(
-            f"Failed to create backup of {source_image_path}: {backup_error}"
+        log_message(
+            "warning", f"Failed to create backup of {source_image_path}: {backup_error}"
         )
         return False
 
@@ -246,24 +268,29 @@ def _create_backup(source_image_path, backup_image_path):
 def _restore_from_backup(backup_image_path, source_image_path, source_image_filename):
     """Restore the original image from backup."""
     if os.path.exists(backup_image_path):
-        sphinx_diagnostics.info(
-            f"Restoring original image from backup for {source_image_filename}"
+        log_message(
+            "info",
+            "Restoring original image from backup for {source_image_filename}",
+            "general",
+            "images",
         )
         try:
             shutil.copy2(backup_image_path, source_image_path)
             os.remove(backup_image_path)
         except Exception as restore_error:
-            sphinx_diagnostics.warning(f"Error restoring from backup: {restore_error}")
+            log_message("warning", f"Error restoring from backup: {restore_error}")
 
 
-def _verify_image_integrity(pil_image, source_image_path, backup_image_path, source_image_filename):
+def _verify_image_integrity(
+    pil_image, source_image_path, backup_image_path, source_image_filename
+):
     """Verify the image is not corrupted."""
     try:
         pil_image.verify()
         return True
     except Exception as verify_error:
-        sphinx_diagnostics.warning(
-            f"Corrupted image detected: {source_image_path} - {verify_error}"
+        log_message(
+            "warning", f"Corrupted image detected: {source_image_path} - {verify_error}"
         )
         _restore_from_backup(
             backup_image_path, source_image_path, source_image_filename
@@ -271,10 +298,15 @@ def _verify_image_integrity(pil_image, source_image_path, backup_image_path, sou
         return False
 
 
-def _handle_problematic_image(pil_image, source_image_path, backup_image_path, source_image_filename):
+def _handle_problematic_image(
+    pil_image, source_image_path, backup_image_path, source_image_filename
+):
     """Apply extremely conservative optimization for known problematic images."""
-    sphinx_diagnostics.info(
-        f"Using conservative optimization for {source_image_filename}"
+    log_message(
+        "info",
+        "Using conservative optimization for {source_image_filename}",
+        "general",
+        "images",
     )
     webp_image_path = os.path.splitext(source_image_path)[0] + ".webp"
 
@@ -308,8 +340,11 @@ def _handle_problematic_image(pil_image, source_image_path, backup_image_path, s
             webp_image_path
         )
 
-        sphinx_diagnostics.info(
-            f"Conservative optimization completed for {source_image_filename} with WebP version"
+        log_message(
+            "info",
+            "Conservative optimization completed for {source_image_filename} with WebP version",
+            "general",
+            "images",
         )
 
         if os.path.exists(backup_image_path):
@@ -317,8 +352,9 @@ def _handle_problematic_image(pil_image, source_image_path, backup_image_path, s
 
         return True, webp_image_path
     except Exception as conservative_error:
-        sphinx_diagnostics.warning(
-            f"Conservative optimization failed for {source_image_filename}: {conservative_error}"
+        log_message(
+            "warning",
+            f"Conservative optimization failed for {source_image_filename}: {conservative_error}",
         )
         _restore_from_backup(
             backup_image_path, source_image_path, source_image_filename
@@ -327,15 +363,20 @@ def _handle_problematic_image(pil_image, source_image_path, backup_image_path, s
         return False, None
 
 
-def _create_webp_version(optimized_image, webp_image_path, original_image_path, original_file_size):
+def _create_webp_version(
+    optimized_image, webp_image_path, original_image_path, original_file_size
+):
     """Create a WebP version of the image."""
 
     # check if file extension is in excluded list
     _, file_extension = os.path.splitext(original_image_path)
     file_extension = file_extension.lower()
     if file_extension in EXCLUDED_EXTENSIONS:
-        sphinx_diagnostics.info(
-            f"Skipping WebP conversion for excluded image format: {file_extension} for {original_image_path}"
+        log_message(
+            "info",
+            "Skipping WebP conversion for excluded image format: {file_extension} for {original_image_path}",
+            "general",
+            "images",
         )
         return False
     try:
@@ -360,9 +401,13 @@ def _create_webp_version(optimized_image, webp_image_path, original_image_path, 
             webp_file_size >= original_file_size
             or size_reduction_percentage < MIN_SIZE_REDUCTION_PCT
         ):
-            sphinx_diagnostics.info(
-                f"WebP conversion not beneficial (reduction: {size_reduction_percentage:.1f}%), removing WebP version"
+            log_message(
+                "info",
+                f"WebP conversion not beneficial (size reduction: {size_reduction_percentage:.1f}%), skipping: {os.path.basename(webp_image_path)}",
+                "general",
+                "images",
             )
+
             if os.path.exists(webp_image_path):
                 os.remove(webp_image_path)
             WEBP_CONVERSION_STATISTICS["skipped"] += 1
@@ -374,30 +419,49 @@ def _create_webp_version(optimized_image, webp_image_path, original_image_path, 
             webp_image_path
         )
 
-        sphinx_diagnostics.info(
-            f"Created WebP version: {os.path.basename(webp_image_path)}, Original: {original_file_size/1024:.1f}KB -> WebP: {os.path.getsize(webp_image_path)/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
+        log_message(
+            "info",
+            f"Created WebP version: {os.path.basename(webp_image_path)}",
+            "general",
+            "images",
         )
+        log_message(
+            "info",
+            f"Original: {original_file_size/1024:.1f}KB -> WebP: {os.path.getsize(webp_image_path)/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)",
+            "general",
+            "images",
+        )
+
         return True
 
     except Exception as webp_conversion_error:
-        sphinx_diagnostics.warning(
-            f"Error creating WebP version: {webp_conversion_error}"
-        )
+        log_message("warning", f"Error creating WebP version: {webp_conversion_error}")
         if os.path.exists(webp_image_path):
             os.remove(webp_image_path)
         WEBP_CONVERSION_STATISTICS["failed"] += 1
         return False
 
 
-def _process_image(pil_image, source_image_path, source_image_mode, source_image_width, source_image_height, backup_image_path, source_image_filename):
+def _process_image(
+    pil_image,
+    source_image_path,
+    source_image_mode,
+    source_image_width,
+    source_image_height,
+    backup_image_path,
+    source_image_filename,
+):
     """Process the image by stripping metadata and resizing if needed."""
 
     # check if file extension is in excluded list
     _, file_extension = os.path.splitext(source_image_path)
     file_extension = file_extension.lower()
     if file_extension in EXCLUDED_EXTENSIONS:
-        sphinx_diagnostics.info(
-            f"Skipping optimization for excluded image format: {file_extension} for {source_image_path}"
+        log_message(
+            "info",
+            "Skipping optimization for excluded image format: {file_extension} for {source_image_path}",
+            "general",
+            "images",
         )
         return None
     try:
@@ -431,14 +495,20 @@ def _process_image(pil_image, source_image_path, source_image_mode, source_image
         return image_without_exif
 
     except Exception as process_error:
-        sphinx_diagnostics.warning(f"Error processing image: {process_error}")
+        log_message("warning", f"Error processing image: {process_error}")
         _restore_from_backup(
             backup_image_path, source_image_path, source_image_filename
         )
         return None
 
 
-def _resize_image(pil_image, target_width, target_height, force_exact=False, source_image_filename=None,):
+def _resize_image(
+    pil_image,
+    target_width,
+    target_height,
+    force_exact=False,
+    source_image_filename=None,
+):
     """Resize image to target dimensions."""
     try:
         if force_exact:
@@ -446,13 +516,14 @@ def _resize_image(pil_image, target_width, target_height, force_exact=False, sou
                 (target_width, target_height), resample=Image.LANCZOS
             )
             if source_image_filename:
-                sphinx_diagnostics.debug(
-                    f"Resized image to exact dimensions: {target_width}x{target_height}"
+                log_message(
+                    "debug",
+                    f"Resized image to exact dimensions: {target_width}x{target_height}",
                 )
             return resized_image
         return pil_image
     except Exception as resize_error:
-        sphinx_diagnostics.warning(f"Error resizing image: {resize_error}")
+        log_message("warning", f"Error resizing image: {resize_error}")
         return pil_image
 
 
@@ -477,19 +548,20 @@ def _resize_content_image(
                     (new_width, new_height), resample=Image.LANCZOS
                 )
                 if source_image_filename:
-                    sphinx_diagnostics.debug(
-                        f"Resized image: {source_image_width}x{source_image_height} -> {new_width}x{new_height}"
+                    log_message(
+                        "debug",
+                        f"Resized image: {source_image_width}x{source_image_height} -> {new_width}x{new_height}",
                     )
                 return resized_image
             except Exception as resize_error:
-                sphinx_diagnostics.warning(
-                    f"Error resizing content image: {resize_error}"
-                )
+                log_message("warning", f"Error resizing content image: {resize_error}")
 
     return pil_image
 
 
-def _save_optimized_image(optimized_image, optimized_image_path, backup_image_path, source_image_filename):
+def _save_optimized_image(
+    optimized_image, optimized_image_path, backup_image_path, source_image_filename
+):
     """Save the optimized image with format-specific settings."""
     try:
         _, file_extension = os.path.splitext(optimized_image_path)
@@ -519,8 +591,11 @@ def _save_optimized_image(optimized_image, optimized_image_path, backup_image_pa
             )
         elif file_extension in EXCLUDED_EXTENSIONS:
             # skip GIF optimization
-            sphinx_diagnostics.info(
-                f"Skipping optimization for {source_image_filename}"
+            log_message(
+                "info",
+                "Skipping optimization for {source_image_filename}",
+                "general",
+                "images",
             )
         else:
             optimized_image.save(optimized_image_path)
@@ -528,8 +603,9 @@ def _save_optimized_image(optimized_image, optimized_image_path, backup_image_pa
         return True
 
     except Exception as save_error:
-        sphinx_diagnostics.warning(
-            f"Error saving optimized image {optimized_image_path}: {save_error}"
+        log_message(
+            "warning",
+            f"Error saving optimized image {optimized_image_path}: {save_error}",
         )
         _restore_from_backup(
             backup_image_path, optimized_image_path, source_image_filename
@@ -537,15 +613,19 @@ def _save_optimized_image(optimized_image, optimized_image_path, backup_image_pa
         return False
 
 
-def _verify_and_check_size_reduction(optimized_image_path, backup_image_path, original_file_size, source_image_format, source_image_filename):
+def _verify_and_check_size_reduction(
+    optimized_image_path,
+    backup_image_path,
+    original_file_size,
+    source_image_format,
+    source_image_filename,
+):
     """Verify the optimized image and check if size reduction is beneficial."""
     try:
         with Image.open(optimized_image_path) as verify_image:
             verify_image.verify()
     except Exception as verify_error:
-        sphinx_diagnostics.warning(
-            f"Optimized image verification failed: {verify_error}"
-        )
+        log_message("warning", f"Optimized image verification failed: {verify_error}")
         _restore_from_backup(
             backup_image_path, optimized_image_path, source_image_filename
         )
@@ -563,21 +643,29 @@ def _verify_and_check_size_reduction(optimized_image_path, backup_image_path, or
             new_file_size > original_file_size
             or size_reduction_percentage < MIN_SIZE_REDUCTION_PCT
         ):
-            sphinx_diagnostics.info(
-                f"Optimization not beneficial (size reduction: {size_reduction_percentage:.1f}%), reverting"
+            log_message(
+                "info",
+                f"Optimization not beneficial (size reduction: {size_reduction_percentage:.1f}%), reverting",
+                "general",
+                "images",
             )
+
             _restore_from_backup(
                 backup_image_path, optimized_image_path, source_image_filename
             )
             return True
 
-        sphinx_diagnostics.info(
-            f"Optimized {source_image_filename}: {source_image_format} {original_file_size/1024:.1f}KB -> {new_file_size/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)"
+        log_message(
+            "info",
+            f"Optimized {source_image_filename}: {source_image_format} {original_file_size/1024:.1f}KB -> {new_file_size/1024:.1f}KB ({size_reduction_percentage:.1f}% reduction)",
+            "general",
+            "images",
         )
+
         return True
 
     except Exception as size_error:
-        sphinx_diagnostics.warning(f"Error calculating file size: {size_error}")
+        log_message("warning", f"Error calculating file size: {size_error}")
         _restore_from_backup(
             backup_image_path, optimized_image_path, source_image_filename
         )
@@ -595,23 +683,31 @@ def optimize_generic_image(sphinx_app=None):
     )
 
     if os.path.exists(static_generic_image_path):
-        sphinx_diagnostics.info(
-            f"Optimizing generic image in static directory: {static_generic_image_path}"
+        log_message(
+            "info",
+            "Optimizing generic image in static directory: {static_generic_image_path}",
+            "general",
+            "images",
         )
         optimization_success, webp_image_path = optimize_image(
             static_generic_image_path
         )
         if optimization_success and webp_image_path:
-            sphinx_diagnostics.info(
-                f"Successfully optimized static generic image and created WebP version: {webp_image_path}"
+            log_message(
+                "info",
+                "Successfully optimized static generic image and created WebP version: {webp_image_path}",
+                "general",
+                "images",
             )
         else:
-            sphinx_diagnostics.warning(
-                f"Failed to optimize static generic image or create WebP version"
+            log_message(
+                "warning",
+                f"Failed to optimize static generic image or create WebP version",
             )
     else:
-        sphinx_diagnostics.warning(
-            f"Generic image not found in static directory: {static_generic_image_path}"
+        log_message(
+            "warning",
+            f"Generic image not found in static directory: {static_generic_image_path}",
         )
 
     if sphinx_app:
@@ -625,27 +721,36 @@ def optimize_generic_image(sphinx_app=None):
                     blogs_directory, "images", "generic.jpg"
                 )
                 if os.path.exists(blogs_generic_image_path):
-                    sphinx_diagnostics.info(
-                        f"Optimizing generic image in blogs directory: {blogs_generic_image_path}"
+                    log_message(
+                        "info",
+                        "Optimizing generic image in blogs directory: {blogs_generic_image_path}",
+                        "general",
+                        "images",
                     )
                     optimization_success, webp_image_path = optimize_image(
                         blogs_generic_image_path
                     )
                     if optimization_success and webp_image_path:
-                        sphinx_diagnostics.info(
-                            f"Successfully optimized blogs generic image and created WebP version: {webp_image_path}"
+                        log_message(
+                            "info",
+                            "Successfully optimized blogs generic image and created WebP version: {webp_image_path}",
+                            "general",
+                            "images",
                         )
                     else:
-                        sphinx_diagnostics.warning(
-                            f"Failed to optimize blogs generic image or create WebP version"
+                        log_message(
+                            "warning",
+                            f"Failed to optimize blogs generic image or create WebP version",
                         )
                 else:
-                    sphinx_diagnostics.warning(
-                        f"Generic image not found in blogs directory: {blogs_generic_image_path}"
+                    log_message(
+                        "warning",
+                        f"Generic image not found in blogs directory: {blogs_generic_image_path}",
                     )
         except Exception as generic_optimize_error:
-            sphinx_diagnostics.warning(
-                f"Error optimizing generic image in blogs directory: {generic_optimize_error}"
+            log_message(
+                "warning",
+                f"Error optimizing generic image in blogs directory: {generic_optimize_error}",
             )
 
     end_time = datetime.now()
@@ -654,22 +759,40 @@ def optimize_generic_image(sphinx_app=None):
     total_webp_kb = WEBP_CONVERSION_STATISTICS["total_size_webp"] / 1024
     size_saved_kb = total_original_kb - total_webp_kb
 
-    sphinx_diagnostics.info("=" * 80)
-    sphinx_diagnostics.info("IMAGE OPTIMIZATION SUMMARY")
-    sphinx_diagnostics.info("-" * 80)
-    sphinx_diagnostics.info(
-        f"Total WebP conversions: {WEBP_CONVERSION_STATISTICS['converted']}"
+    log_message("info", "=" * 80, "general", "images")
+    log_message("info", "IMAGE OPTIMIZATION SUMMARY", "general", "images")
+    log_message("info", "-" * 80, "general", "images")
+    log_message(
+        "info",
+        "Total WebP conversions: {WEBP_CONVERSION_STATISTICS['converted']}",
+        "general",
+        "images",
     )
-    sphinx_diagnostics.info(
-        f"Total WebP conversions skipped: {WEBP_CONVERSION_STATISTICS['skipped']}"
+    log_message(
+        "info",
+        "Total WebP conversions skipped: {WEBP_CONVERSION_STATISTICS['skipped']}",
+        "general",
+        "images",
     )
-    sphinx_diagnostics.info(
-        f"Total WebP conversions failed: {WEBP_CONVERSION_STATISTICS['failed']}"
+    log_message(
+        "info",
+        "Total WebP conversions failed: {WEBP_CONVERSION_STATISTICS['failed']}",
+        "general",
+        "images",
     )
-    sphinx_diagnostics.info(f"Total original image size: {total_original_kb:.1f} KB")
-    sphinx_diagnostics.info(f"Total WebP image size: {total_webp_kb:.1f} KB")
-    sphinx_diagnostics.info(f"Total size saved: {size_saved_kb:.1f} KB")
-    sphinx_diagnostics.info(f"Total time taken: {total_time:.2f} seconds")
-    sphinx_diagnostics.info("-" * 80)
-    sphinx_diagnostics.info("END OF IMAGE OPTIMIZATION SUMMARY")
-    sphinx_diagnostics.info("=" * 80)
+    log_message(
+        "info",
+        "Total original image size: {total_original_kb:.1f} KB",
+        "general",
+        "images",
+    )
+    log_message(
+        "info", "Total WebP image size: {total_webp_kb:.1f} KB", "general", "images"
+    )
+    log_message("info", "Total size saved: {size_saved_kb:.1f} KB", "general", "images")
+    log_message(
+        "info", "Total time taken: {total_time:.2f} seconds", "general", "images"
+    )
+    log_message("info", "-" * 80, "general", "images")
+    log_message("info", "END OF IMAGE OPTIMIZATION SUMMARY", "general", "images")
+    log_message("info", "=" * 80, "general", "images")

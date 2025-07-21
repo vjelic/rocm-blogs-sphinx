@@ -10,7 +10,17 @@ from sphinx.util import logging as sphinx_logging
 from ._rocmblogs import *
 from .constants import *
 
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
 
 
 class ROCmBlogsError(SphinxError):
@@ -22,18 +32,18 @@ class ROCmBlogsError(SphinxError):
 def import_file(package: str, resource: str) -> str:
     """Important file imports as part of the pypi package."""
     try:
-        sphinx_diagnostics.debug(f"Importing file {resource} from package {package}")
+        log_message("debug", f"Importing file {resource} from package {package}")
         content = pkg_resources.read_text(package, resource)
         if not content:
-            sphinx_diagnostics.warning(
-                f"Imported file {resource} from package {package} is empty"
+            log_message(
+                "warning", f"Imported file {resource} from package {package} is empty"
             )
         return content
     except Exception as error:
-        sphinx_diagnostics.error(
-            f"Error importing file {resource} from package {package}: {error}"
+        log_message(
+            "error", f"Error importing file {resource} from package {package}: {error}"
         )
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("debug", f"Traceback: {traceback.format_exc()}")
         raise ROCmBlogsError(
             f"Error importing file {resource} from package {package}: {error}"
         ) from error
@@ -52,8 +62,8 @@ def truncate_string(input_string: str) -> str:
 
         return slug
     except Exception as error:
-        sphinx_diagnostics.error(f"Error truncating string '{input_string}': {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("error", f"Error truncating string '{input_string}': {error}")
+        log_message("debug", f"Traceback: {traceback.format_exc()}")
         return input_string if input_string else ""
 
 
@@ -65,8 +75,8 @@ def calculate_read_time(words: int) -> int:
 
         return round(words / AVERAGE_READING_SPEED_WPM)
     except Exception as error:
-        sphinx_diagnostics.error(f"Error calculating read time: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("error", f"Error calculating read time: {error}")
+        log_message("debug", f"Traceback: {traceback.format_exc()}")
         return 0
 
 
@@ -126,6 +136,6 @@ def count_words_in_markdown(content: str) -> int:
         return len(words)
 
     except Exception as error:
-        sphinx_diagnostics.warning(f"Error counting words in markdown: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("warning", f"Error counting words in markdown: {error}")
+        log_message("debug", f"Traceback: {traceback.format_exc()}")
         return 0

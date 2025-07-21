@@ -5,7 +5,6 @@ __init__.py for the rocm_blogs package.
 
 import functools
 import importlib.resources as pkg_resources
-import logging
 import os
 import pathlib
 import time
@@ -17,7 +16,33 @@ from pathlib import Path
 from jinja2 import Template
 from sphinx.application import Sphinx
 from sphinx.errors import SphinxError
-from sphinx.util import logging as sphinx_logging
+
+# Import the new structured logging system
+try:
+    from rocm_blogs_logging import (LogCategory, LogLevel, configure_logging,
+                                    get_logger, is_logging_enabled,
+                                    log_operation)
+
+    LOGGING_AVAILABLE = True
+except ImportError:
+    # Fallback if logging package is not available
+    LOGGING_AVAILABLE = False
+    get_logger = lambda *args, **kwargs: None
+    configure_logging = lambda *args, **kwargs: None
+    log_operation = lambda *args, **kwargs: lambda func: func
+    is_logging_enabled = lambda auth_key=None: False
+
+    class LogLevel:
+        DEBUG = "DEBUG"
+        INFO = "INFO"
+        WARNING = "WARNING"
+        ERROR = "ERROR"
+        CRITICAL = "CRITICAL"
+
+    class LogCategory:
+        SYSTEM = "system"
+        PERFORMANCE = "performance"
+
 
 from ._rocmblogs import ROCmBlogs
 from ._version import __version__
@@ -40,45 +65,64 @@ __all__ = [
 ]
 
 
-def setup_file_logging():
-    """Set up file logging for debug messages while preserving Sphinx logging."""
+# Initialize the structured logger
+structured_logger = None
+if LOGGING_AVAILABLE and is_logging_enabled():
     try:
-        # Create logs directory if it doesn't exist
-        logs_dir = Path("../logs")
-        logs_dir.mkdir(exist_ok=True)
-
-        # Create a file handler that logs debug and higher level messages
-        log_file = logs_dir / "rocm_blogs_debug.log"
-        file_handler = logging.FileHandler(str(log_file), mode="w")
-        file_handler.setLevel(logging.DEBUG)
-
-        # Create a formatter and set it for the handler
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        # Configure structured logging
+        log_file_path = Path("logs/rocm_blogs.log")
+        structured_logger = configure_logging(
+            level=LogLevel.INFO,
+            log_file=log_file_path,
+            enable_console=True,
+            name="rocm_blogs",
         )
-        file_handler.setFormatter(formatter)
+        if structured_logger:
+            structured_logger.info(
+                "Structured logging system initialized",
+                "initialization",
+                "logging_system",
+                extra_data={"log_file": str(log_file_path)},
+            )
+    except Exception as logging_error:
+        print(f"Failed to initialize structured logging: {logging_error}")
+        structured_logger = None
 
-        # Add handler to the root logger to capture all logs
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
-        root_logger.addHandler(file_handler)
 
-        for _, logger in logging.Logger.manager.loggerDict.items():
-            if isinstance(logger, logging.Logger):
-                logger.propagate = True
+def log_message(
+    level: str,
+    message: str,
+    operation: str = "general",
+    component: str = "rocm_blogs",
+    **kwargs,
+):
+    """
+    Unified logging function that uses structured logging when available,
+    falls back to print when not available.
+    """
+    if not is_logging_enabled_from_config():
+        return
 
-        # Return the log file path
-        return log_file
-    except Exception as error:
-        print(f"Error setting up file logging: {error}")
-        traceback.print_exc()
-        return None
+    if structured_logger:
+        try:
+            log_level = getattr(LogLevel, level.upper(), LogLevel.INFO)
+            structured_logger.log(log_level, message, operation, component, **kwargs)
+        except Exception as e:
+            # Fallback to print if structured logging fails
+            print(f"[{level.upper()}] {message}")
+    else:
+        # Fallback when structured logging is not available
+        print(f"[{level.upper()}] {message}")
 
 
 def create_step_log_file(step_name):
-    """Create a log file for a specific build step."""
+    """Create a log file for a specific build step - only creates step logs when logging is enabled."""
+    # Check if logging is enabled before creating any log files
+    if not is_logging_enabled_from_config():
+        return None, None
+
     try:
-        # Create logs directory if it doesn't exist
+        # Create logs directory and step log files only when logging is enabled
         logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
 
@@ -93,24 +137,48 @@ def create_step_log_file(step_name):
         )
         log_file_handle.write("=" * 80 + "\n\n")
 
-        sphinx_diagnostics.info(
-            f"Detailed logs for {step_name} will be written to: {log_filepath}"
+        # Log to structured logging if available, but don't fail if it's not
+        log_message(
+            "info",
+            f"Detailed logs for {step_name} will be written to: {log_filepath}",
+            "step_logging",
+            "log_management",
         )
 
         return log_filepath, log_file_handle
     except Exception as error:
-        sphinx_diagnostics.error(f"Error creating log file for {step_name}: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        # Log error if structured logging is available, but don't fail
+        log_message(
+            "error",
+            f"Error creating log file for {step_name}: {error}",
+            "step_logging",
+            "log_management",
+            error=error,
+        )
+        # Still return None, None if we can't create the log file
         return None, None
 
 
-# Set up the logger
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
-log_file = setup_file_logging()
-if log_file:
-    sphinx_diagnostics.info(
-        f"Debug logs will be written to {log_file} while maintaining Sphinx console output"
-    )
+def safe_log_write(log_file_handle, message):
+    """Safely write to log file handle, checking if it exists and is valid."""
+    if log_file_handle is not None:
+        try:
+            log_file_handle.write(message)
+            log_file_handle.flush()  # Ensure immediate write
+        except Exception as write_error:
+            # If writing fails, just continue silently
+            pass
+
+
+def safe_log_close(log_file_handle):
+    """Safely close log file handle, checking if it exists and is valid."""
+    if log_file_handle is not None:
+        try:
+            log_file_handle.close()
+        except Exception as close_error:
+            # If closing fails, just continue silently
+            pass
+
 
 _CRITICAL_ERROR_OCCURRED = False
 
@@ -134,16 +202,34 @@ def log_total_build_time(sphinx_app, build_exception):
         _log_timing_summary(total_elapsed_time)
 
         if build_exception:
-            sphinx_diagnostics.error(f"Build completed with errors: {build_exception}")
+            log_message(
+                "error",
+                f"Build completed with errors: {build_exception}",
+                "build_process",
+                "log_total_build_time",
+            )
 
         if _CRITICAL_ERROR_OCCURRED:
-            sphinx_diagnostics.critical(
-                "Critical errors occurred during the build process"
+            log_message(
+                "critical",
+                "Critical errors occurred during the build process",
+                "build_process",
+                "log_total_build_time",
             )
             raise ROCmBlogsError("Critical errors occurred during the build process")
     except Exception as error:
-        sphinx_diagnostics.critical(f"Error in log_total_build_time: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "critical",
+            f"Error in log_total_build_time: {error}",
+            "build_process",
+            "log_total_build_time",
+        )
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "build_process",
+            "log_total_build_time",
+        )
         raise
 
 
@@ -162,9 +248,11 @@ def _log_timing_summary(total_elapsed_time):
         ]
 
         # Log the header
-        sphinx_diagnostics.info("=" * 80)
-        sphinx_diagnostics.info("BUILD PROCESS TIMING SUMMARY:")
-        sphinx_diagnostics.info("-" * 80)
+        log_message("info", "=" * 80, "timing_summary", "build_process")
+        log_message(
+            "info", "BUILD PROCESS TIMING SUMMARY:", "timing_summary", "build_process"
+        )
+        log_message("info", "-" * 80, "timing_summary", "build_process")
 
         # Log each phase
         for phase_key, phase_display_name in phases_to_display:
@@ -177,19 +265,35 @@ def _log_timing_summary(total_elapsed_time):
                 )
                 # Format the phase name to align all timing values
                 padded_name = f"{phase_display_name}:".ljust(30)
-                sphinx_diagnostics.info(
-                    f"{padded_name} \033[96m{phase_duration:.2f} seconds\033[0m ({percentage:.1f}%)"
+                log_message(
+                    "info",
+                    f"{padded_name} \033[96m{phase_duration:.2f} seconds\033[0m ({percentage:.1f}%)",
+                    "timing_summary",
+                    "build_process",
                 )
 
         # Log the footer and total time
-        sphinx_diagnostics.info("-" * 80)
-        sphinx_diagnostics.info(
-            f"Total build process completed in \033[92m{total_elapsed_time:.2f} seconds\033[0m"
+        log_message("info", "-" * 80, "timing_summary", "build_process")
+        log_message(
+            "info",
+            f"Total build process completed in \033[92m{total_elapsed_time:.2f} seconds\033[0m",
+            "timing_summary",
+            "build_process",
         )
-        sphinx_diagnostics.info("=" * 80)
+        log_message("info", "=" * 80, "timing_summary", "build_process")
     except Exception as error:
-        sphinx_diagnostics.error(f"Error logging timing summary: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "error",
+            f"Error logging timing summary: {error}",
+            "timing_summary",
+            "build_process",
+        )
+        log_message(
+            "debug",
+            f"Traceback: {traceback.format_exc()}",
+            "timing_summary",
+            "build_process",
+        )
 
 
 def log_time(func):
@@ -201,13 +305,20 @@ def log_time(func):
             function_start_time = time.time()
             result = func(*args, **kwargs)
             execution_time = time.time() - function_start_time
-            sphinx_diagnostics.info(
-                f"{func.__name__} completed in \033[96m{execution_time:.4f} seconds\033[0m"
+            log_message(
+                "info",
+                "{func.__name__} completed in \033[96m{execution_time:.4f} seconds\033[0m",
+                "general",
+                "__init__",
             )
             return result
         except Exception as error:
-            sphinx_diagnostics.error(f"Error in {func.__name__}: {error}")
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "error", f"Error in {func.__name__}: {error}", "general", "__init__"
+            )
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
             raise
 
     return wrapper
@@ -227,27 +338,43 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
     log_filepath, log_file_handle = create_step_log_file(phase_name)
 
-    if log_file_handle:
-        log_file_handle.write(f"Starting {phase_name} process\n")
+    safe_log_write(log_file_handle, f"Starting {phase_name} process\n")
 
     for blog in rocm_blogs.blogs.get_blogs():
-        log_file_handle.write(f"Blog: {blog}\n")
+        safe_log_write(log_file_handle, f"Blog: {blog}\n")
 
-    sphinx_diagnostics.info(f"Author files to be updated: {rocm_blogs.author_paths}")
+    log_message(
+        "info",
+        "Author files to be updated: {rocm_blogs.author_paths}",
+        "general",
+        "__init__",
+    )
 
-    sphinx_diagnostics.info(f"Authors found: {rocm_blogs.blogs.blogs_authors}")
+    log_message(
+        "info", "Authors found: {rocm_blogs.blogs.blogs_authors}", "general", "__init__"
+    )
 
     for author in rocm_blogs.blogs.blogs_authors:
-        sphinx_diagnostics.info(f"Processing author: {author}")
+        log_message("info", "Processing author: {author}", "general", "__init__")
 
         name = "-".join(author.split(" ")).lower()
 
         author_file_path = Path(rocm_blogs.blogs_directory) / f"authors/{name}.md"
 
         if not author_file_path.exists():
-            sphinx_diagnostics.warning(f"Author file not found: {author_file_path}")
+            log_message(
+                "warning",
+                f"Author file not found: {author_file_path}",
+                "general",
+                "__init__",
+            )
         else:
-            sphinx_diagnostics.info(f"Updating author file: {author_file_path}")
+            log_message(
+                "info",
+                "Updating author file: {author_file_path}",
+                "general",
+                "__init__",
+            )
 
             with author_file_path.open("r", encoding="utf-8") as author_file:
                 author_content = author_file.read()
@@ -272,7 +399,12 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                         destination_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy(image_path, destination_path)
             try:
-                sphinx_diagnostics.info(f"Generating grid items for author: {author}")
+                log_message(
+                    "info",
+                    "Generating grid items for author: {author}",
+                    "general",
+                    "__init__",
+                )
 
                 author_css = import_file("rocm_blogs.static.css", "index.css")
 
@@ -284,16 +416,32 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                     .replace("{author_css}", author_css)
                 )
                 if "{author_blogs}" in updated_author_content:
-                    sphinx_diagnostics.warning(
-                        f"Error: replacement failed for {author_file_path}"
+                    log_message(
+                        "warning",
+                        f"Error: replacement failed for {author_file_path}",
+                        "general",
+                        "__init__",
                     )
                 else:
-                    sphinx_diagnostics.info(
-                        f"Successfully updated author file: {author_file_path}"
+                    log_message(
+                        "info",
+                        "Successfully updated author file: {author_file_path}",
+                        "general",
+                        "__init__",
                     )
             except Exception as error:
-                sphinx_diagnostics.error(f"Error processing author file: {error}")
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "error",
+                    f"Error processing author file: {error}",
+                    "general",
+                    "__init__",
+                )
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "__init__",
+                )
                 _CRITICAL_ERROR_OCCURRED = True
                 raise ROCmBlogsError(f"Error processing author file: {error}")
 
@@ -301,12 +449,18 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 author_file.write(updated_author_content)
 
                 if author_content != updated_author_content:
-                    sphinx_diagnostics.info(
-                        f"Author file updated successfully: {author_file_path}"
+                    log_message(
+                        "info",
+                        "Author file updated successfully: {author_file_path}",
+                        "general",
+                        "__init__",
                     )
                 else:
-                    sphinx_diagnostics.warning(
-                        f"Author file content unchanged: {author_file_path}"
+                    log_message(
+                        "warning",
+                        f"Author file content unchanged: {author_file_path}",
+                        "general",
+                        "__init__",
                     )
 
 
@@ -321,10 +475,12 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting blog statistics generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(
+                log_file_handle, "Starting blog statistics generation process\n"
+            )
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
-        sphinx_diagnostics.info("Generating blog statistics page...")
+        log_message("info", "Generating blog statistics page...", "general", "__init__")
 
         # Load templates and styles
         blog_statistics_css = import_file(
@@ -335,13 +491,15 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         )
 
         if log_file_handle:
-            log_file_handle.write("Successfully loaded templates and styles\n")
+            safe_log_write(
+                log_file_handle, "Successfully loaded templates and styles\n"
+            )
 
         # Get all blogs
         all_blogs = rocm_blogs.blogs.get_blogs()
 
         if log_file_handle:
-            log_file_handle.write(f"Retrieved {len(all_blogs)} total blogs\n")
+            safe_log_write(log_file_handle, f"Retrieved {len(all_blogs)} total blogs\n")
 
         # Filter blogs to only include real blog posts
         filtered_blogs = []
@@ -353,26 +511,35 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             if hasattr(blog, "blogpost") and blog.blogpost:
                 filtered_blogs.append(blog)
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
             else:
                 skipped_count += 1
-                sphinx_diagnostics.debug(
-                    f"Skipping non-blog README file for statistics page: {getattr(blog, 'file_path', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Skipping non-blog README file for statistics page: {getattr(blog, 'file_path', 'Unknown')}",
+                    "general",
+                    "__init__",
                 )
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
 
-        sphinx_diagnostics.info(
-            f"Filtered out {skipped_count} non-blog README files for statistics page, kept {len(filtered_blogs)} genuine blog posts"
+        log_message(
+            "info",
+            f"Filtered out {skipped_count} non-blog README files for statistics page, kept {len(filtered_blogs)} genuine blog posts",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n"
+            safe_log_write(
+                log_file_handle,
+                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n",
             )
 
         # Replace all_blogs with filtered_blogs
@@ -380,17 +547,17 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
         if not all_blogs:
             warning_message = "No valid blogs found to generate statistics"
-            sphinx_diagnostics.warning(warning_message)
+            log_message("warning", warning_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"WARNING: {warning_message}\n")
+                safe_log_write(log_file_handle, f"WARNING: {warning_message}\n")
             return
 
         # Generate author statistics
         author_stats = []
 
         if log_file_handle:
-            log_file_handle.write("Generating author statistics\n")
+            safe_log_write(log_file_handle, "Generating author statistics\n")
 
         for author, blogs in rocm_blogs.blogs.blogs_authors.items():
             # Include all authors, even those with no blogs
@@ -406,7 +573,7 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             if author == "No author":
                 author = "ROCm Blogs Team"
 
-            log_file_handle.write(f"Processing author: {author}\n")
+            safe_log_write(log_file_handle, f"Processing author: {author}\n")
 
             # check if author has a page
             if pathlib.Path.exists(
@@ -417,7 +584,7 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             else:
                 author_link = "None"
 
-            log_file_handle.write(f"Author link: {author_link}\n")
+            safe_log_write(log_file_handle, f"Author link: {author_link}\n")
 
             # Create author statistics
 
@@ -456,8 +623,9 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         author_stats.sort(key=lambda x: x["blog_count"], reverse=True)
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generated statistics for {len(author_stats)} authors\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generated statistics for {len(author_stats)} authors\n",
             )
 
         # Generate author table rows
@@ -492,11 +660,13 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             author_rows.append(row)
 
         if log_file_handle:
-            log_file_handle.write(f"Generated {len(author_rows)} author table rows\n")
+            safe_log_write(
+                log_file_handle, f"Generated {len(author_rows)} author table rows\n"
+            )
 
         # Generate monthly blog data
         if log_file_handle:
-            log_file_handle.write("Generating monthly blog data\n")
+            safe_log_write(log_file_handle, "Generating monthly blog data\n")
 
         # Count blogs by month
         monthly_counts = {}
@@ -519,13 +689,14 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         monthly_blog_data = {"labels": monthly_labels, "data": monthly_data}
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n",
             )
 
         # Generate category distribution data
         if log_file_handle:
-            log_file_handle.write("Generating category distribution data\n")
+            safe_log_write(log_file_handle, "Generating category distribution data\n")
 
         # Count blogs by category
         category_counts = {}
@@ -562,13 +733,14 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         category_distribution = {"labels": category_labels, "data": category_data}
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generated category distribution data with {len(category_distribution['labels'])} categories\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generated category distribution data with {len(category_distribution['labels'])} categories\n",
             )
 
         # Generate monthly blog data
         if log_file_handle:
-            log_file_handle.write("Generating monthly blog data\n")
+            safe_log_write(log_file_handle, "Generating monthly blog data\n")
 
         # Count blogs by month
         monthly_counts = {}
@@ -591,13 +763,14 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         monthly_blog_data = {"labels": monthly_labels, "data": monthly_data}
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generated monthly blog data with {len(monthly_blog_data['labels'])} months\n",
             )
 
         # Generate tag distribution data
         if log_file_handle:
-            log_file_handle.write("Generating tag distribution data\n")
+            safe_log_write(log_file_handle, "Generating tag distribution data\n")
 
         # Count blogs by tag
         tag_counts = {}
@@ -635,8 +808,9 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         tag_distribution = {"labels": tag_labels, "data": tag_data}
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generated tag distribution data with {len(tag_distribution['labels'])} tags\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generated tag distribution data with {len(tag_distribution['labels'])} tags\n",
             )
 
         # Combine all statistics data
@@ -649,7 +823,7 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
         # Replace placeholders in the template
         if log_file_handle:
-            log_file_handle.write("Replacing placeholders in the template\n")
+            safe_log_write(log_file_handle, "Replacing placeholders in the template\n")
 
         updated_html = blog_statistics_template.replace(
             "{author_rows}", "\n".join(author_rows)
@@ -684,7 +858,9 @@ myst:
         output_path = Path(rocm_blogs.blogs_directory) / "blog_statistics.md"
 
         if log_file_handle:
-            log_file_handle.write(f"Writing statistics page to {output_path}\n")
+            safe_log_write(
+                log_file_handle, f"Writing statistics page to {output_path}\n"
+            )
 
         with output_path.open("w", encoding="utf-8") as output_file:
             output_file.write(final_content)
@@ -692,23 +868,29 @@ myst:
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES["blog_statistics"] = phase_duration
-        sphinx_diagnostics.info(
-            f"Successfully generated blog statistics page at {output_path} in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Successfully generated blog statistics page at {output_path} in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Successfully generated blog statistics page in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Successfully generated blog statistics page in {phase_duration:.2f} seconds\n",
             )
 
     except Exception as stats_error:
         error_message = f"Failed to generate blog statistics page: {stats_error}"
-        sphinx_diagnostics.error(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("error", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES["blog_statistics"] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -719,15 +901,17 @@ myst:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("BLOG STATISTICS GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "BLOG STATISTICS GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
-def update_index_file(sphinx_app: Sphinx) -> None:
+def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
     """Update the index file with new blog posts."""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
@@ -746,8 +930,8 @@ def update_index_file(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting index file update process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(log_file_handle, "Starting index file update process\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
         # Load templates and styles
         template_html = import_file("rocm_blogs.templates", "index.html")
@@ -755,25 +939,34 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         banner_css_content = import_file("rocm_blogs.static.css", "banner-slider.css")
 
         if log_file_handle:
-            log_file_handle.write("Successfully loaded templates and styles\n")
+            safe_log_write(
+                log_file_handle, "Successfully loaded templates and styles\n"
+            )
 
         # Format the index template
         index_template = INDEX_TEMPLATE.format(
             CSS=css_content, BANNER_CSS=banner_css_content, HTML=template_html
         )
 
-        # Initialize ROCmBlogs and load blog data
-        rocm_blogs = ROCmBlogs()
-        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
+        # Initialize ROCmBlogs if not provided
+        if rocm_blogs is None:
+            rocm_blogs = ROCmBlogs()
+            blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
+        else:
+            blogs_directory = rocm_blogs.blogs_directory
 
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message("error", error_message, "general", "__init__")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
-                log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+                safe_log_write(
+                    log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                )
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -781,12 +974,14 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs_directory = str(blogs_directory)
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         readme_count = rocm_blogs.find_readme_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} README files\n")
+            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
         rocm_blogs.create_blog_objects()
 
@@ -799,22 +994,25 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         blog_statistics(sphinx_app, rocm_blogs)
 
         if log_file_handle:
-            log_file_handle.write(f"Created blog objects\n")
+            safe_log_write(log_file_handle, f"Created blog objects\n")
 
         # Write blogs to CSV file for reference
         blogs_csv_path = Path(blogs_directory) / "blogs.csv"
         rocm_blogs.blogs.write_to_file(str(blogs_csv_path))
 
         if log_file_handle:
-            log_file_handle.write(f"Wrote blog information to {blogs_csv_path}\n")
+            safe_log_write(
+                log_file_handle, f"Wrote blog information to {blogs_csv_path}\n"
+            )
 
         features_csv_path = Path(blogs_directory) / "featured-blogs.csv"
         featured_blogs = []
 
         if features_csv_path.exists():
             if log_file_handle:
-                log_file_handle.write(
-                    f"Found featured-blogs.csv file at {features_csv_path}\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Found featured-blogs.csv file at {features_csv_path}\n",
                 )
 
             featured_blogs = rocm_blogs.blogs.load_featured_blogs_from_csv(
@@ -822,41 +1020,50 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             )
 
             if log_file_handle:
-                log_file_handle.write(
-                    f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n",
                 )
         else:
             if log_file_handle:
-                log_file_handle.write(
-                    f"featured-blogs.csv file not found at {features_csv_path}, no featured blogs will be displayed\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"featured-blogs.csv file not found at {features_csv_path}, no featured blogs will be displayed\n",
                 )
 
         # Sort the blogs (this happens on all blogs before filtering)
         rocm_blogs.blogs.sort_blogs_by_date()
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by date\n")
+            safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
         # Extract category keys from BLOG_CATEGORIES to use for sorting
         category_keys = [
             category_info.get("category_key", category_info["name"])
             for category_info in BLOG_CATEGORIES
         ]
-        sphinx_diagnostics.info(f"Using category keys for sorting: {category_keys}")
+        log_message(
+            "info",
+            "Using category keys for sorting: {category_keys}",
+            "general",
+            "__init__",
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"Using category keys for sorting: {category_keys}\n")
+            safe_log_write(
+                log_file_handle, f"Using category keys for sorting: {category_keys}\n"
+            )
 
         rocm_blogs.blogs.sort_blogs_by_category(category_keys)
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by category\n")
+            safe_log_write(log_file_handle, "Sorted blogs by category\n")
 
         # Get all blogs
         all_blogs = rocm_blogs.blogs.get_blogs()
 
         if log_file_handle:
-            log_file_handle.write(f"Retrieved {len(all_blogs)} total blogs\n")
+            safe_log_write(log_file_handle, f"Retrieved {len(all_blogs)} total blogs\n")
 
         # Filter blogs to only include real blog posts
         filtered_blogs = []
@@ -869,27 +1076,36 @@ def update_index_file(sphinx_app: Sphinx) -> None:
                 filtered_blogs.append(blog)
                 total_blogs_processed += 1
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
             else:
                 skipped_count += 1
                 total_blogs_skipped += 1
-                sphinx_diagnostics.debug(
-                    f"Skipping non-blog README file for index page: {getattr(blog, 'file_path', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Skipping non-blog README file for index page: {getattr(blog, 'file_path', 'Unknown')}",
+                    "general",
+                    "__init__",
                 )
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
 
-        sphinx_diagnostics.info(
-            f"Filtered out {skipped_count} non-blog README files for index page, kept {len(filtered_blogs)} genuine blog posts"
+        log_message(
+            "info",
+            f"Filtered out {skipped_count} non-blog README files for index page, kept {len(filtered_blogs)} genuine blog posts",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n"
+            safe_log_write(
+                log_file_handle,
+                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n",
             )
 
         # Replace all_blogs with filtered_blogs
@@ -897,10 +1113,10 @@ def update_index_file(sphinx_app: Sphinx) -> None:
 
         if not all_blogs:
             warning_message = "No valid blogs found to display on index page"
-            sphinx_diagnostics.warning(warning_message)
+            log_message("warning", warning_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"WARNING: {warning_message}\n")
+                safe_log_write(log_file_handle, f"WARNING: {warning_message}\n")
 
             total_blogs_warning += 1
             return
@@ -915,40 +1131,52 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             banner_blogs = all_blogs[:BANNER_BLOGS_COUNT]
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generating banner slider with {len(banner_blogs)} blogs (using featured blogs: {bool(featured_blogs)})\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generating banner slider with {len(banner_blogs)} blogs (using featured blogs: {bool(featured_blogs)})\n",
             )
             if featured_blogs:
-                log_file_handle.write(
-                    f"Using {len(banner_blogs)} featured blogs for banner slider (limited to BANNER_BLOGS_COUNT={BANNER_BLOGS_COUNT})\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Using {len(banner_blogs)} featured blogs for banner slider (limited to BANNER_BLOGS_COUNT={BANNER_BLOGS_COUNT})\n",
                 )
             else:
-                log_file_handle.write(
-                    f"No featured blogs found, using first {BANNER_BLOGS_COUNT} blogs for banner slider\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"No featured blogs found, using first {BANNER_BLOGS_COUNT} blogs for banner slider\n",
                 )
 
         # Generate banner slider content
         banner_content = _generate_banner_slider(rocm_blogs, banner_blogs, used_blogs)
 
         if log_file_handle:
-            log_file_handle.write("Banner slider generation completed\n")
+            safe_log_write(log_file_handle, "Banner slider generation completed\n")
 
         # Generate grid items for different sections
-        sphinx_diagnostics.info("Generating grid items for index page sections")
+        log_message(
+            "info",
+            "Generating grid items for index page sections",
+            "general",
+            "__init__",
+        )
 
         if log_file_handle:
-            log_file_handle.write("Generating grid items for index page sections\n")
+            safe_log_write(
+                log_file_handle, "Generating grid items for index page sections\n"
+            )
 
         # Create a list of featured blog IDs to exclude them from the main grid
         featured_blog_ids = [id(blog) for blog in featured_blogs]
 
         # Main grid items - will exclude banner blogs and featured blogs
         if log_file_handle:
-            log_file_handle.write(
-                f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n",
             )
-            log_file_handle.write(
-                f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n"
+            safe_log_write(
+                log_file_handle,
+                f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n",
             )
 
         # Filter out featured blogs from the main grid
@@ -965,7 +1193,9 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         )
 
         if log_file_handle:
-            log_file_handle.write(f"Generated {len(main_grid_items)} main grid items\n")
+            safe_log_write(
+                log_file_handle, f"Generated {len(main_grid_items)} main grid items\n"
+            )
 
         # Filter blogs by category and ensure they're all blog posts
         ecosystem_blogs = [
@@ -986,21 +1216,25 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         ]
 
         if log_file_handle:
-            log_file_handle.write(f"Filtered blogs by category:\n")
-            log_file_handle.write(
-                f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n"
+            safe_log_write(log_file_handle, f"Filtered blogs by category:\n")
+            safe_log_write(
+                log_file_handle,
+                f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n",
             )
-            log_file_handle.write(
-                f"  - Applications & models: {len(application_blogs)} blogs\n"
+            safe_log_write(
+                log_file_handle,
+                f"  - Applications & models: {len(application_blogs)} blogs\n",
             )
-            log_file_handle.write(
-                f"  - Software tools & optimizations: {len(software_blogs)} blogs\n"
+            safe_log_write(
+                log_file_handle,
+                f"  - Software tools & optimizations: {len(software_blogs)} blogs\n",
             )
 
         # Generate grid items for each category
         if log_file_handle:
-            log_file_handle.write(
-                f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category\n",
             )
 
         ecosystem_grid_items = _generate_grid_items(
@@ -1029,23 +1263,27 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         )
 
         if log_file_handle:
-            log_file_handle.write(f"Generated category grid items:\n")
-            log_file_handle.write(
-                f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n"
+            safe_log_write(log_file_handle, f"Generated category grid items:\n")
+            safe_log_write(
+                log_file_handle,
+                f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n",
             )
-            log_file_handle.write(
-                f"  - Applications & models: {len(application_grid_items)} grid items\n"
+            safe_log_write(
+                log_file_handle,
+                f"  - Applications & models: {len(application_grid_items)} grid items\n",
             )
-            log_file_handle.write(
-                f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n"
+            safe_log_write(
+                log_file_handle,
+                f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n",
             )
 
         # Generate featured grid items if we have featured blogs
         featured_grid_items = []
         if featured_blogs:
             if log_file_handle:
-                log_file_handle.write(
-                    f"Generating featured grid items with {len(featured_blogs)} featured blogs\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Generating featured grid items with {len(featured_blogs)} featured blogs\n",
                 )
 
             try:
@@ -1062,34 +1300,49 @@ def update_index_file(sphinx_app: Sphinx) -> None:
                     )
 
                     if log_file_handle:
-                        log_file_handle.write(
-                            f"Generated {len(featured_grid_items)} featured grid items\n"
+                        safe_log_write(
+                            log_file_handle,
+                            f"Generated {len(featured_grid_items)} featured grid items\n",
                         )
                 else:
                     if log_file_handle:
-                        log_file_handle.write(
-                            "Featured blogs list is empty, skipping grid item generation\n"
+                        safe_log_write(
+                            log_file_handle,
+                            "Featured blogs list is empty, skipping grid item generation\n",
                         )
             except Exception as featured_error:
                 # Log the error but continue with the build
-                sphinx_diagnostics.warning(
-                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs."
+                log_message(
+                    "warning",
+                    f"Error generating featured grid items: {featured_error}. Continuing without featured blogs.",
+                    "general",
+                    "__init__",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "__init__",
+                )
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"WARNING: Error generating featured grid items: {featured_error}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: Error generating featured grid items: {featured_error}\n",
                     )
-                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
-                    log_file_handle.write("Continuing without featured blogs\n")
+                    safe_log_write(
+                        log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                    )
+                    safe_log_write(
+                        log_file_handle, "Continuing without featured blogs\n"
+                    )
         else:
             if log_file_handle:
-                log_file_handle.write("No featured blogs to display\n")
+                safe_log_write(log_file_handle, "No featured blogs to display\n")
 
         # Replace placeholders in the template
         if log_file_handle:
-            log_file_handle.write("Replacing placeholders in the template\n")
+            safe_log_write(log_file_handle, "Replacing placeholders in the template\n")
 
         updated_html = (
             index_template.replace("{grid_items}", "\n".join(main_grid_items))
@@ -1107,7 +1360,7 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         output_path = Path(blogs_directory) / "index.md"
 
         if log_file_handle:
-            log_file_handle.write(f"Writing updated HTML to {output_path}\n")
+            safe_log_write(log_file_handle, f"Writing updated HTML to {output_path}\n")
 
         with output_path.open("w", encoding="utf-8") as output_file:
             output_file.write(updated_html)
@@ -1117,13 +1370,17 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES[phase_name] = phase_duration
-        sphinx_diagnostics.info(
-            f"Successfully updated {output_path} with new content in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Successfully updated {output_path} with new content in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Successfully updated {output_path} with new content in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Successfully updated {output_path} with new content in {phase_duration:.2f} seconds\n",
             )
 
     except ROCmBlogsError:
@@ -1131,18 +1388,20 @@ def update_index_file(sphinx_app: Sphinx) -> None:
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
 
         if log_file_handle:
-            log_file_handle.write(f"ERROR: ROCmBlogsError occurred\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"ERROR: ROCmBlogsError occurred\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         raise
     except Exception as error:
         error_message = f"Error updating index file: {error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -1153,27 +1412,35 @@ def update_index_file(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("INDEX UPDATE SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total blogs processed: {total_blogs_processed}\n")
-            log_file_handle.write(f"Successful: {total_blogs_successful}\n")
-            log_file_handle.write(f"Errors: {total_blogs_error}\n")
-            log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
-            log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "INDEX UPDATE SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total blogs processed: {total_blogs_processed}\n"
+            )
+            safe_log_write(log_file_handle, f"Successful: {total_blogs_successful}\n")
+            safe_log_write(log_file_handle, f"Errors: {total_blogs_error}\n")
+            safe_log_write(log_file_handle, f"Warnings: {total_blogs_warning}\n")
+            safe_log_write(log_file_handle, f"Skipped: {total_blogs_skipped}\n")
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
             if all_error_details:
-                log_file_handle.write("\nERROR DETAILS:\n")
-                log_file_handle.write("-" * 80 + "\n")
+                safe_log_write(log_file_handle, "\nERROR DETAILS:\n")
+                safe_log_write(log_file_handle, "-" * 80 + "\n")
                 for index, error_detail in enumerate(all_error_details):
-                    log_file_handle.write(f"{index+1}. Blog: {error_detail['blog']}\n")
-                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+                    safe_log_write(
+                        log_file_handle, f"{index+1}. Blog: {error_detail['blog']}\n"
+                    )
+                    safe_log_write(
+                        log_file_handle, f"   Error: {error_detail['error']}\n\n"
+                    )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
-def blog_generation(sphinx_app: Sphinx) -> None:
+def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
     """Generate blog pages with styling and metadata."""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
@@ -1192,27 +1459,36 @@ def blog_generation(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting blog generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(log_file_handle, "Starting blog generation process\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
-        # Initialize ROCmBlogs and load blog data
-        build_env = sphinx_app.builder.env
-        source_dir = Path(build_env.srcdir)
-        rocm_blogs = ROCmBlogs()
+        # Initialize ROCmBlogs if not provided
+        if rocm_blogs is None:
+            build_env = sphinx_app.builder.env
+            source_dir = Path(build_env.srcdir)
+            rocm_blogs = ROCmBlogs()
 
-        rocm_blogs.sphinx_app = sphinx_app
-        rocm_blogs.sphinx_env = build_env
+            rocm_blogs.sphinx_app = sphinx_app
+            rocm_blogs.sphinx_env = build_env
 
-        # Find and process blogs
-        blogs_directory = rocm_blogs.find_blogs_directory(str(source_dir))
+            # Find and process blogs
+            blogs_directory = rocm_blogs.find_blogs_directory(str(source_dir))
+        else:
+            rocm_blogs.sphinx_app = sphinx_app
+            rocm_blogs.sphinx_env = sphinx_app.builder.env
+            blogs_directory = rocm_blogs.blogs_directory
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message("error", error_message, "general", "__init__")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
-                log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+                safe_log_write(
+                    log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                )
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -1222,22 +1498,24 @@ def blog_generation(sphinx_app: Sphinx) -> None:
         rocm_blogs.find_author_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         readme_count = rocm_blogs.find_readme_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} README files\n")
+            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
         rocm_blogs.create_blog_objects()
 
         if log_file_handle:
-            log_file_handle.write("Created blog objects\n")
+            safe_log_write(log_file_handle, "Created blog objects\n")
 
         rocm_blogs.blogs.sort_blogs_by_date()
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by date\n")
+            safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
         # Get all blogs
         blog_list = rocm_blogs.blogs.get_blogs()
@@ -1245,22 +1523,26 @@ def blog_generation(sphinx_app: Sphinx) -> None:
 
         if not blog_list:
             warning_message = "No blogs found to process"
-            sphinx_diagnostics.warning(warning_message)
+            log_message("warning", warning_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"WARNING: {warning_message}\n")
+                safe_log_write(log_file_handle, f"WARNING: {warning_message}\n")
 
             total_blogs_warning += 1
             return
 
         max_workers = os.cpu_count()
-        sphinx_diagnostics.info(
-            f"Processing {total_blogs} blogs with {max_workers} workers"
+        log_message(
+            "info",
+            "Processing {total_blogs} blogs with {max_workers} workers",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Processing {total_blogs} blogs with {max_workers} workers\n"
+            safe_log_write(
+                log_file_handle,
+                f"Processing {total_blogs} blogs with {max_workers} workers\n",
             )
 
         # Process blogs with thread pool
@@ -1269,8 +1551,8 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             processing_futures = []
 
             if log_file_handle:
-                log_file_handle.write(
-                    "Submitting blog processing tasks to thread pool\n"
+                safe_log_write(
+                    log_file_handle, "Submitting blog processing tasks to thread pool\n"
                 )
 
             for blog_index, blog in enumerate(blog_list):
@@ -1279,13 +1561,14 @@ def blog_generation(sphinx_app: Sphinx) -> None:
                 total_blogs_processed += 1
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Submitted blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Submitted blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
 
             # Process results as they complete
             if log_file_handle:
-                log_file_handle.write("Processing results as they complete\n")
+                safe_log_write(log_file_handle, "Processing results as they complete\n")
 
             for blog_index, blog, future in processing_futures:
                 try:
@@ -1293,21 +1576,25 @@ def blog_generation(sphinx_app: Sphinx) -> None:
                     total_blogs_successful += 1
 
                     if log_file_handle:
-                        log_file_handle.write(
-                            f"Successfully processed blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n"
+                        safe_log_write(
+                            log_file_handle,
+                            f"Successfully processed blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
                         )
 
                 except Exception as processing_error:
                     error_message = f"Error processing blog: {processing_error}"
-                    sphinx_diagnostics.warning(error_message)
+                    log_message("warning", error_message, "general", "__init__")
 
                     if log_file_handle:
-                        log_file_handle.write(
-                            f"WARNING: Error processing blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n"
+                        safe_log_write(
+                            log_file_handle,
+                            f"WARNING: Error processing blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
                         )
-                        log_file_handle.write(f"  Error: {processing_error}\n")
-                        log_file_handle.write(
-                            f"  Traceback: {traceback.format_exc()}\n"
+                        safe_log_write(
+                            log_file_handle, f"  Error: {processing_error}\n"
+                        )
+                        safe_log_write(
+                            log_file_handle, f"  Traceback: {traceback.format_exc()}\n"
                         )
 
                     total_blogs_error += 1
@@ -1328,41 +1615,49 @@ def blog_generation(sphinx_app: Sphinx) -> None:
         error_threshold = total_blogs * 0.25
         if total_blogs_error > error_threshold:
             error_message = f"Too many errors occurred during blog generation: {total_blogs_error} errors"
-            sphinx_diagnostics.critical(error_message)
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message("critical", error_message, "general", "__init__")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
 
             if log_file_handle:
-                log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
+                safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
 
-        sphinx_diagnostics.info(
-            f"Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, "
-            f"in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, "
+            f"in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, in {phase_duration:.2f} seconds\n",
             )
 
     except ROCmBlogsError:
         _BUILD_PHASES["blog_generation"] = time.time() - phase_start_time
 
         if log_file_handle:
-            log_file_handle.write(f"ERROR: ROCmBlogsError occurred\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"ERROR: ROCmBlogsError occurred\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         raise
     except Exception as generation_error:
         error_message = f"Error generating blog pages: {generation_error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES["blog_generation"] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -1373,31 +1668,39 @@ def blog_generation(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("BLOG GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total blogs processed: {total_blogs_processed}\n")
-            log_file_handle.write(f"Successful: {total_blogs_successful}\n")
-            log_file_handle.write(f"Errors: {total_blogs_error}\n")
-            log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
-            log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "BLOG GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total blogs processed: {total_blogs_processed}\n"
+            )
+            safe_log_write(log_file_handle, f"Successful: {total_blogs_successful}\n")
+            safe_log_write(log_file_handle, f"Errors: {total_blogs_error}\n")
+            safe_log_write(log_file_handle, f"Warnings: {total_blogs_warning}\n")
+            safe_log_write(log_file_handle, f"Skipped: {total_blogs_skipped}\n")
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
             if all_error_details:
-                log_file_handle.write("\nERROR DETAILS:\n")
-                log_file_handle.write("-" * 80 + "\n")
+                safe_log_write(log_file_handle, "\nERROR DETAILS:\n")
+                safe_log_write(log_file_handle, "-" * 80 + "\n")
                 for index, error_detail in enumerate(all_error_details):
-                    log_file_handle.write(f"{index+1}. Blog: {error_detail['blog']}\n")
-                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+                    safe_log_write(
+                        log_file_handle, f"{index+1}. Blog: {error_detail['blog']}\n"
+                    )
+                    safe_log_write(
+                        log_file_handle, f"   Error: {error_detail['error']}\n\n"
+                    )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
 def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
     """Generate banner slider content for the index page."""
     try:
         banner_start_time = time.time()
-        sphinx_diagnostics.info("Generating banner slider content")
+        log_message("info", "Generating banner slider content", "general", "__init__")
 
         # Generate banner slides and navigation items directly without parameter checking
         # The functions are already defined with the correct parameters
@@ -1413,15 +1716,21 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
                 nav_html = generate_banner_navigation_item(blog, i, i == 0)
 
                 if not slide_html or not slide_html.strip():
-                    sphinx_diagnostics.warning(
-                        f"Empty banner slide HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}"
+                    log_message(
+                        "warning",
+                        f"Empty banner slide HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}",
+                        "general",
+                        "__init__",
                     )
                     error_count += 1
                     continue
 
                 if not nav_html or not nav_html.strip():
-                    sphinx_diagnostics.warning(
-                        f"Empty banner navigation HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}"
+                    log_message(
+                        "warning",
+                        f"Empty banner navigation HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}",
+                        "general",
+                        "__init__",
                     )
                     error_count += 1
                     continue
@@ -1430,22 +1739,38 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
                 banner_navigation.append(nav_html)
                 # Add banner blogs to the used list to avoid duplication
                 used_blogs.append(blog)
-                sphinx_diagnostics.debug(
-                    f"Successfully generated banner slide for blog: {getattr(blog, 'blog_title', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Successfully generated banner slide for blog: {getattr(blog, 'blog_title', 'Unknown')}",
+                    "general",
+                    "__init__",
                 )
             except Exception as blog_error:
                 error_count += 1
-                sphinx_diagnostics.error(
-                    f"Error generating banner slide for blog {getattr(blog, 'blog_title', 'Unknown')}: {blog_error}"
+                log_message(
+                    "error",
+                    f"Error generating banner slide for blog {getattr(blog, 'blog_title', 'Unknown')}: {blog_error}",
+                    "general",
+                    "__init__",
                 )
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "__init__",
+                )
 
         # Check if any slides were generated
         if not banner_slides:
-            sphinx_diagnostics.critical(
-                "No banner slides were generated. Check for errors in the banner slide generation functions."
+            log_message(
+                "critical",
+                f"No banner slides were generated. Check for errors in the banner slide generation functions.",
+                "general",
+                "__init__",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
             raise ROCmBlogsError("No banner slides were generated")
 
         # Load banner slider template
@@ -1453,12 +1778,22 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
             banner_slider_template = import_file(
                 "rocm_blogs.templates", "banner-slider.html"
             )
-            sphinx_diagnostics.debug("Successfully loaded banner slider template")
-        except Exception as template_error:
-            sphinx_diagnostics.critical(
-                f"Failed to load banner slider template: {template_error}"
+            log_message(
+                "debug",
+                "Successfully loaded banner slider template",
+                "general",
+                "__init__",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        except Exception as template_error:
+            log_message(
+                "critical",
+                f"Failed to load banner slider template: {template_error}",
+                "general",
+                "__init__",
+            )
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
             return ""
 
         # Fill in the banner slider template
@@ -1475,25 +1810,40 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
         banner_elapsed_time = time.time() - banner_start_time
 
         if error_count > 0:
-            sphinx_diagnostics.warning(
-                f"Generated {len(banner_slides)} banner slides with {error_count} errors"
+            log_message(
+                "warning",
+                f"Generated {len(banner_slides)} banner slides with {error_count} errors",
+                "general",
+                "__init__",
             )
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
         else:
-            sphinx_diagnostics.info(
-                f"Successfully generated {len(banner_slides)} banner slides"
+            log_message(
+                "info",
+                f"Successfully generated {len(banner_slides)} banner slides",
+                "general",
+                "__init__",
             )
 
-        sphinx_diagnostics.info(
-            f"Banner slider generation completed in \033[96m{banner_elapsed_time:.4f} seconds\033[0m"
+        log_message(
+            "info",
+            "Banner slider generation completed in \033[96m{banner_elapsed_time:.4f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         return banner_slider_content
     except ROCmBlogsError:
         raise
     except Exception as error:
-        sphinx_diagnostics.error(f"Error generating banner slider: {error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "error", f"Error generating banner slider: {error}", "general", "__init__"
+        )
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
         return ""
 
 
@@ -1516,10 +1866,10 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting metadata generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(log_file_handle, "Starting metadata generation process\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
-        sphinx_diagnostics.info("Running metadata generator...")
+        log_message("info", "Running metadata generator...", "general", "__init__")
 
         # Initialize ROCmBlogs and load blog data
         rocm_blogs = ROCmBlogs()
@@ -1527,10 +1877,13 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
 
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
+            log_message("error", error_message, "general", "__init__")
+            log_message(
+                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+            )
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -1538,35 +1891,48 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs_directory = str(blogs_directory)
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         # Find and process readme files
         readme_count = rocm_blogs.find_readme_files()
-        sphinx_diagnostics.info(f"Found {readme_count} readme files to process")
+        log_message(
+            "info",
+            "Found {readme_count} readme files to process",
+            "general",
+            "__init__",
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} readme files to process\n")
+            safe_log_write(
+                log_file_handle, f"Found {readme_count} readme files to process\n"
+            )
 
         # Generate metadata
         if log_file_handle:
-            log_file_handle.write("Calling metadata_generator function\n")
+            safe_log_write(log_file_handle, "Calling metadata_generator function\n")
 
         # The metadata_generator function already creates its own log file
         metadata_generator(rocm_blogs)
 
         if log_file_handle:
-            log_file_handle.write("Metadata generation completed\n")
+            safe_log_write(log_file_handle, "Metadata generation completed\n")
 
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES[phase_name] = phase_duration
-        sphinx_diagnostics.info(
-            f"Metadata generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Metadata generation completed in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Metadata generation completed in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Metadata generation completed in {phase_duration:.2f} seconds\n",
             )
 
     except ROCmBlogsError:
@@ -1574,18 +1940,20 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
 
         if log_file_handle:
-            log_file_handle.write(f"ERROR: ROCmBlogsError occurred\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"ERROR: ROCmBlogsError occurred\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         raise
     except Exception as metadata_error:
         error_message = f"Failed to generate metadata: {metadata_error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -1596,15 +1964,18 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("METADATA GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
-            log_file_handle.write(
-                "Note: Detailed metadata generation logs are available in metadata_generation.log\n"
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "METADATA GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
+            safe_log_write(
+                log_file_handle,
+                "Note: Detailed metadata generation logs are available in metadata_generation.log\n",
             )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
 def process_templates_for_vertical(
@@ -1614,7 +1985,7 @@ def process_templates_for_vertical(
     application_grid_items,
     software_grid_items,
     template_string,
-    formatted_vertical
+    formatted_vertical,
 ):
     """Process template for a specific vertical category using Jinja2."""
 
@@ -1624,9 +1995,15 @@ def process_templates_for_vertical(
         "page_description": f"Blogs related to {vertical} market vertical",
         "formatted_vertical": formatted_vertical,
         "grid_items": "\n".join(main_grid_items) if main_grid_items else "",
-        "eco_grid_items": "\n".join(ecosystem_grid_items) if ecosystem_grid_items else "",
-        "application_grid_items": "\n".join(application_grid_items) if application_grid_items else "",
-        "software_grid_items": "\n".join(software_grid_items) if software_grid_items else "",
+        "eco_grid_items": (
+            "\n".join(ecosystem_grid_items) if ecosystem_grid_items else ""
+        ),
+        "application_grid_items": (
+            "\n".join(application_grid_items) if application_grid_items else ""
+        ),
+        "software_grid_items": (
+            "\n".join(software_grid_items) if software_grid_items else ""
+        ),
         # Boolean flags for conditional rendering
         "has_recent_blogs": bool(main_grid_items),
         "has_eco_blogs": bool(ecosystem_grid_items),
@@ -1663,8 +2040,8 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting posts file generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(log_file_handle, "Starting posts file generation process\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
         # Load templates and styles
         template_html = import_file("rocm_blogs.templates", "posts.html")
@@ -1673,7 +2050,9 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
         pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
 
         if log_file_handle:
-            log_file_handle.write("Successfully loaded templates and styles\n")
+            safe_log_write(
+                log_file_handle, "Successfully loaded templates and styles\n"
+            )
 
         # Initialize ROCmBlogs and load blog data
         rocm_blogs = ROCmBlogs()
@@ -1681,10 +2060,10 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
 
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
+            log_message("error", error_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -1692,23 +2071,25 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs_directory = str(blogs_directory)
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         readme_count = rocm_blogs.find_readme_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} README files\n")
+            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
         rocm_blogs.create_blog_objects()
 
         if log_file_handle:
-            log_file_handle.write("Created blog objects\n")
+            safe_log_write(log_file_handle, "Created blog objects\n")
 
         # Get all blogs first
         all_blogs = rocm_blogs.blogs.get_blogs()
 
         if log_file_handle:
-            log_file_handle.write(f"Retrieved {len(all_blogs)} total blogs\n")
+            safe_log_write(log_file_handle, f"Retrieved {len(all_blogs)} total blogs\n")
 
         # Filter blogs to only include real blog posts
         filtered_blogs = []
@@ -1721,28 +2102,37 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
                 total_blogs_processed += 1
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Including blog: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
             else:
                 skipped_count += 1
                 total_blogs_skipped += 1
-                sphinx_diagnostics.debug(
-                    f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}"
+                log_message(
+                    "debug",
+                    f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}",
+                    "general",
+                    "__init__",
                 )
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Skipping non-blog README file: {getattr(blog, 'file_path', 'Unknown')}\n",
                     )
 
-        sphinx_diagnostics.info(
-            f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts"
+        log_message(
+            "info",
+            f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n"
+            safe_log_write(
+                log_file_handle,
+                f"Filtered out {skipped_count} non-blog README files, kept {len(filtered_blogs)} genuine blog posts\n",
             )
 
         sorted_blogs = sorted(
@@ -1752,48 +2142,56 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
         )
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by date (newest first)\n")
+            safe_log_write(log_file_handle, "Sorted blogs by date (newest first)\n")
 
         # Get all filtered blogs and calculate pagination
         all_blogs = sorted_blogs
         total_blogs = len(all_blogs)
         total_pages = max(1, (total_blogs + BLOGS_PER_PAGE - 1) // BLOGS_PER_PAGE)
 
-        sphinx_diagnostics.info(
-            f"Generating {total_pages} paginated posts pages with {BLOGS_PER_PAGE} blogs per page"
+        log_message(
+            "info",
+            "Generating {total_pages} paginated posts pages with {BLOGS_PER_PAGE} blogs per page",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Generating {total_pages} paginated posts pages with {BLOGS_PER_PAGE} blogs per page\n"
+            safe_log_write(
+                log_file_handle,
+                f"Generating {total_pages} paginated posts pages with {BLOGS_PER_PAGE} blogs per page\n",
             )
 
         # Generate all grid items in parallel with lazy loading
         if log_file_handle:
-            log_file_handle.write("Generating lazy-loaded grid items for all blogs\n")
+            safe_log_write(
+                log_file_handle, "Generating lazy-loaded grid items for all blogs\n"
+            )
 
         all_grid_items = _generate_lazy_loaded_grid_items(rocm_blogs, all_blogs)
 
         # Check if any grid items were generated
         if not all_grid_items:
             warning_message = "No grid items were generated for posts pages. Skipping page generation."
-            sphinx_diagnostics.warning(warning_message)
+            log_message("warning", warning_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"WARNING: {warning_message}\n")
+                safe_log_write(log_file_handle, f"WARNING: {warning_message}\n")
 
             total_blogs_warning += 1
             return
 
         if log_file_handle:
-            log_file_handle.write(f"Generated {len(all_grid_items)} grid items\n")
+            safe_log_write(
+                log_file_handle, f"Generated {len(all_grid_items)} grid items\n"
+            )
 
         # Current datetime for template
         current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
         # Generate each page
         if log_file_handle:
-            log_file_handle.write("Generating individual pages\n")
+            safe_log_write(log_file_handle, "Generating individual pages\n")
 
         for page_num in range(1, total_pages + 1):
             # Get grid items for this page
@@ -1803,8 +2201,9 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
             grid_content = "\n".join(page_grid_items)
 
             if log_file_handle:
-                log_file_handle.write(
-                    f"Processing page {page_num}/{total_pages} with {len(page_grid_items)} grid items\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Processing page {page_num}/{total_pages} with {len(page_grid_items)} grid items\n",
                 )
 
             # Create pagination controls
@@ -1838,7 +2237,7 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
             output_path = Path(blogs_directory) / output_filename
 
             if log_file_handle:
-                log_file_handle.write(f"Writing page to {output_path}\n")
+                safe_log_write(log_file_handle, f"Writing page to {output_path}\n")
 
             with output_path.open("w", encoding="utf-8") as output_file:
                 output_file.write(page_content)
@@ -1846,30 +2245,39 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
             total_pages_created += 1
             total_blogs_successful += len(page_grid_items)
 
-            sphinx_diagnostics.info(
-                f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})"
+            log_message(
+                "info",
+                f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})",
+                "general",
+                "__init__",
             )
 
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES["update_posts"] = phase_duration
-        sphinx_diagnostics.info(
-            f"Successfully created {total_pages} paginated posts pages in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Successfully created {total_pages} paginated posts pages in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Successfully created {total_pages} paginated posts pages in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Successfully created {total_pages} paginated posts pages in {phase_duration:.2f} seconds\n",
             )
 
     except Exception as page_error:
         error_message = f"Failed to create posts files: {page_error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES["update_posts"] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -1880,27 +2288,37 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("POSTS GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total blogs processed: {total_blogs_processed}\n")
-            log_file_handle.write(f"Total pages created: {total_pages_created}\n")
-            log_file_handle.write(
-                f"Blogs included in pages: {total_blogs_successful}\n"
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "POSTS GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total blogs processed: {total_blogs_processed}\n"
             )
-            log_file_handle.write(f"Errors: {total_blogs_error}\n")
-            log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
-            log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(
+                log_file_handle, f"Total pages created: {total_pages_created}\n"
+            )
+            safe_log_write(
+                log_file_handle, f"Blogs included in pages: {total_blogs_successful}\n"
+            )
+            safe_log_write(log_file_handle, f"Errors: {total_blogs_error}\n")
+            safe_log_write(log_file_handle, f"Warnings: {total_blogs_warning}\n")
+            safe_log_write(log_file_handle, f"Skipped: {total_blogs_skipped}\n")
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
             if all_error_details:
-                log_file_handle.write("\nERROR DETAILS:\n")
-                log_file_handle.write("-" * 80 + "\n")
+                safe_log_write(log_file_handle, "\nERROR DETAILS:\n")
+                safe_log_write(log_file_handle, "-" * 80 + "\n")
                 for index, error_detail in enumerate(all_error_details):
-                    log_file_handle.write(f"{index+1}. Blog: {error_detail['blog']}\n")
-                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+                    safe_log_write(
+                        log_file_handle, f"{index+1}. Blog: {error_detail['blog']}\n"
+                    )
+                    safe_log_write(
+                        log_file_handle, f"   Error: {error_detail['error']}\n\n"
+                    )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
 def clean_html(html_content):
@@ -1946,31 +2364,33 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
     rocm_blogs.blogs_directory = str(blogs_directory)
 
     if log_file_handle:
-        log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+        safe_log_write(log_file_handle, f"Found blogs directory: {blogs_directory}\n")
 
     readme_count = rocm_blogs.find_readme_files()
 
     if log_file_handle:
-        log_file_handle.write(f"Found {readme_count} README files\n")
+        safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
     rocm_blogs.create_blog_objects()
 
     if log_file_handle:
-        log_file_handle.write("Created blog objects\n")
+        safe_log_write(log_file_handle, "Created blog objects\n")
 
     rocm_blogs.blogs.sort_blogs_by_date()
 
     if log_file_handle:
-        log_file_handle.write("Sorted blogs by date\n")
+        safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
     rocm_blogs.blogs.sort_blogs_by_vertical()
 
     if log_file_handle:
-        log_file_handle.write("Sorted blogs by market vertical\n")
+        safe_log_write(log_file_handle, "Sorted blogs by market vertical\n")
 
     if log_file_handle:
-        log_file_handle.write(f"Vertical Blogs: {rocm_blogs.blogs.blogs_verticals}\n")
-        log_file_handle.write("Generating vertical pages\n")
+        safe_log_write(
+            log_file_handle, f"Vertical Blogs: {rocm_blogs.blogs.blogs_verticals}\n"
+        )
+        safe_log_write(log_file_handle, "Generating vertical pages\n")
 
     try:
         posts_template_html = import_file("rocm_blogs.templates", "posts.html")
@@ -2018,7 +2438,9 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
 
             if not vertical_blogs:
                 if log_file_handle:
-                    log_file_handle.write(f"No blogs found for vertical: {vertical}\n")
+                    safe_log_write(
+                        log_file_handle, f"No blogs found for vertical: {vertical}\n"
+                    )
                 continue
 
             BLOGS_PER_PAGE = POST_BLOGS_PER_PAGE
@@ -2086,17 +2508,20 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
                     output_file.write(page_content)
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Created {output_path} with {len(page_grid_items)} grid items (page {page_num}/{total_pages})\n",
                     )
     except Exception as verticals_page_error:
         error_message = f"Failed to create verticals pages: {verticals_page_error}"
-        sphinx_diagnostics.error(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("error", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
     # Generate individual vertical pages using Jinja2 templating
     verticals = rocm_blogs.blogs.blogs_verticals
@@ -2161,7 +2586,9 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             and not software_grid_items
         ):
             if log_file_handle:
-                log_file_handle.write(f"No grid items found for vertical: {vertical}\n")
+                safe_log_write(
+                    log_file_handle, f"No grid items found for vertical: {vertical}\n"
+                )
             continue
 
         # Format the vertical name for links
@@ -2177,7 +2604,7 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             application_grid_items,
             software_grid_items,
             index_template,
-            formatted_vertical
+            formatted_vertical,
         )
 
         output_filename = vertical.replace(" ", "-").lower()
@@ -2189,20 +2616,27 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
             output_file.write(updated_html)
 
         if log_file_handle:
-            log_file_handle.write(f"Generated vertical page for {vertical} using Jinja2 templating\n")
+            safe_log_write(
+                log_file_handle,
+                f"Generated vertical page for {vertical} using Jinja2 templating\n",
+            )
 
     # Record timing information
     phase_duration = time.time() - phase_start_time
     _BUILD_PHASES["update_vertical_pages"] = phase_duration
-    sphinx_diagnostics.info(
-        f"Vertical pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+    log_message(
+        "info",
+        "Vertical pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m",
+        "general",
+        "__init__",
     )
 
     if log_file_handle:
-        log_file_handle.write(
-            f"Vertical pages generation completed in {phase_duration:.2f} seconds\n"
+        safe_log_write(
+            log_file_handle,
+            f"Vertical pages generation completed in {phase_duration:.2f} seconds\n",
         )
-        log_file_handle.close()
+        safe_log_close(log_file_handle)
 
 
 def update_category_verticals(sphinx_app: Sphinx) -> None:
@@ -2221,8 +2655,10 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting multi-filter pages generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(
+                log_file_handle, "Starting multi-filter pages generation process\n"
+            )
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
         # Load templates and styles
         pagination_template = import_file("rocm_blogs.templates", "pagination.html")
@@ -2230,7 +2666,9 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
         pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
 
         if log_file_handle:
-            log_file_handle.write("Successfully loaded templates and styles\n")
+            safe_log_write(
+                log_file_handle, "Successfully loaded templates and styles\n"
+            )
 
         # Initialize ROCmBlogs and load blog data
         rocm_blogs = ROCmBlogs()
@@ -2238,10 +2676,10 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
 
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
+            log_message("error", error_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -2249,22 +2687,24 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs_directory = str(blogs_directory)
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         readme_count = rocm_blogs.find_readme_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} README files\n")
+            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
         rocm_blogs.create_blog_objects()
 
         if log_file_handle:
-            log_file_handle.write("Created blog objects\n")
+            safe_log_write(log_file_handle, "Created blog objects\n")
 
         rocm_blogs.blogs.sort_blogs_by_date()
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by date\n")
+            safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
         # Get category keys from BLOG_CATEGORIES
         category_keys = [
@@ -2276,20 +2716,23 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs.sort_categories_by_vertical(log_file_handle)
         rocm_blogs.blogs.sort_blogs_by_vertical()
 
-        log_file_handle.write("Sorted blogs by category and vertical\n")
+        safe_log_write(log_file_handle, "Sorted blogs by category and vertical\n")
 
         # Get all vertical-category combinations
         keys = rocm_blogs.blogs.get_vertical_category_blog_keys()
 
-        log_file_handle.write(f"Found {len(keys)} vertical-category combinations\n")
+        safe_log_write(
+            log_file_handle, f"Found {len(keys)} vertical-category combinations\n"
+        )
 
         # Process each vertical-category combination
         for key in keys:
             total_pages_processed += 1
             category, vertical = key
 
-            log_file_handle.write(
-                f"\nProcessing vertical-category: {vertical} - {category}\n"
+            safe_log_write(
+                log_file_handle,
+                f"\nProcessing vertical-category: {vertical} - {category}\n",
             )
 
             # Get blogs for this vertical-category combination
@@ -2298,13 +2741,15 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             )
 
             if not category_vertical_blogs:
-                log_file_handle.write(
-                    f"No blogs found for category {category} and vertical {vertical}\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"No blogs found for category {category} and vertical {vertical}\n",
                 )
                 continue
 
-            log_file_handle.write(
-                f"Found {len(category_vertical_blogs)} blogs for category {category} and vertical {vertical}\n"
+            safe_log_write(
+                log_file_handle,
+                f"Found {len(category_vertical_blogs)} blogs for category {category} and vertical {vertical}\n",
             )
 
             page_name = f"{vertical}-{category}".lower()
@@ -2313,8 +2758,9 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             page_name = re.sub(r"[^a-z0-9-]", "", page_name)
             page_name = re.sub(r"-+", "-", page_name)
 
-            log_file_handle.write(
-                f"Creating title from vertical and category: {vertical} - {category}\n"
+            safe_log_write(
+                log_file_handle,
+                f"Creating title from vertical and category: {vertical} - {category}\n",
             )
 
             if vertical.lower() == "ai":
@@ -2325,11 +2771,13 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                 title_vertical = vertical
             else:
                 # Apply title case to each word
-                words_vertical = vertical.split(' ')
+                words_vertical = vertical.split(" ")
                 title_vertical = " ".join(word.capitalize() for word in words_vertical)
             title_vertical = title_vertical.replace("and", "&").replace("And", "&")
 
-            log_file_handle.write(f"Formatted vertical name: {title_vertical}\n")
+            safe_log_write(
+                log_file_handle, f"Formatted vertical name: {title_vertical}\n"
+            )
 
             words_category = category.split(" ")
             title_category = (
@@ -2364,7 +2812,7 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                 "filter_criteria": {"category": [category], "vertical": [vertical]},
             }
 
-            log_file_handle.write(f"Created filter info: {filter_info}\n")
+            safe_log_write(log_file_handle, f"Created filter info: {filter_info}\n")
 
             try:
                 _process_category(
@@ -2381,44 +2829,55 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                 )
 
                 total_pages_successful += 1
-                log_file_handle.write(
-                    f"Successfully processed vertical-category: {vertical} - {category}\n"
+                safe_log_write(
+                    log_file_handle,
+                    f"Successfully processed vertical-category: {vertical} - {category}\n",
                 )
 
             except Exception as processing_error:
                 error_message = f"Error processing vertical-category {vertical} - {category}: {processing_error}"
-                sphinx_diagnostics.error(error_message)
+                log_message("error", error_message, "general", "__init__")
 
                 if log_file_handle:
-                    log_file_handle.write(f"ERROR: {error_message}\n")
-                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+                    safe_log_write(
+                        log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                    )
 
                 total_pages_error += 1
                 all_error_details.append(
                     {"page": f"{vertical} - {category}", "error": str(processing_error)}
                 )
 
-        log_file_handle.write("\nNo additional custom filter pages will be generated\n")
+        safe_log_write(
+            log_file_handle, "\nNo additional custom filter pages will be generated\n"
+        )
 
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES[phase_name] = phase_duration
-        sphinx_diagnostics.info(
-            f"Multi-filter pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Multi-filter pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Multi-filter pages generation completed in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Multi-filter pages generation completed in {phase_duration:.2f} seconds\n",
             )
 
     except Exception as generation_error:
         error_message = f"Failed to generate multi-filter pages: {generation_error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -2429,22 +2888,34 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("MULTI-FILTER PAGES GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(f"Total pages processed: {total_pages_processed}\n")
-            log_file_handle.write(f"Total pages successful: {total_pages_successful}\n")
-            log_file_handle.write(f"Total pages with errors: {total_pages_error}\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "MULTI-FILTER PAGES GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle, f"Total pages processed: {total_pages_processed}\n"
+            )
+            safe_log_write(
+                log_file_handle, f"Total pages successful: {total_pages_successful}\n"
+            )
+            safe_log_write(
+                log_file_handle, f"Total pages with errors: {total_pages_error}\n"
+            )
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
             if all_error_details:
-                log_file_handle.write("\nERROR DETAILS:\n")
-                log_file_handle.write("-" * 80 + "\n")
+                safe_log_write(log_file_handle, "\nERROR DETAILS:\n")
+                safe_log_write(log_file_handle, "-" * 80 + "\n")
                 for index, error_detail in enumerate(all_error_details):
-                    log_file_handle.write(f"{index+1}. Page: {error_detail['page']}\n")
-                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+                    safe_log_write(
+                        log_file_handle, f"{index+1}. Page: {error_detail['page']}\n"
+                    )
+                    safe_log_write(
+                        log_file_handle, f"   Error: {error_detail['error']}\n\n"
+                    )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
 def update_category_pages(sphinx_app: Sphinx) -> None:
@@ -2464,8 +2935,10 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
 
     try:
         if log_file_handle:
-            log_file_handle.write("Starting category pages generation process\n")
-            log_file_handle.write("-" * 80 + "\n\n")
+            safe_log_write(
+                log_file_handle, "Starting category pages generation process\n"
+            )
+            safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
         # Load templates and styles
         pagination_template = import_file("rocm_blogs.templates", "pagination.html")
@@ -2473,7 +2946,9 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
         pagination_css = import_file("rocm_blogs.static.css", "pagination.css")
 
         if log_file_handle:
-            log_file_handle.write("Successfully loaded templates and styles\n")
+            safe_log_write(
+                log_file_handle, "Successfully loaded templates and styles\n"
+            )
 
         # Initialize ROCmBlogs and load blog data
         rocm_blogs = ROCmBlogs()
@@ -2481,10 +2956,10 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
 
         if not blogs_directory:
             error_message = "Could not find blogs directory"
-            sphinx_diagnostics.error(error_message)
+            log_message("error", error_message, "general", "__init__")
 
             if log_file_handle:
-                log_file_handle.write(f"ERROR: {error_message}\n")
+                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
 
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
@@ -2492,46 +2967,53 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
         rocm_blogs.blogs_directory = str(blogs_directory)
 
         if log_file_handle:
-            log_file_handle.write(f"Found blogs directory: {blogs_directory}\n")
+            safe_log_write(
+                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+            )
 
         readme_count = rocm_blogs.find_readme_files()
 
         if log_file_handle:
-            log_file_handle.write(f"Found {readme_count} README files\n")
+            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
         rocm_blogs.create_blog_objects()
 
         if log_file_handle:
-            log_file_handle.write("Created blog objects\n")
+            safe_log_write(log_file_handle, "Created blog objects\n")
 
         rocm_blogs.blogs.sort_blogs_by_date()
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by date\n")
+            safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
         rocm_blogs.blogs.sort_blogs_by_category(rocm_blogs.categories)
 
         if log_file_handle:
-            log_file_handle.write("Sorted blogs by category\n")
+            safe_log_write(log_file_handle, "Sorted blogs by category\n")
 
         # Current datetime for template
         current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
         # Process each category
         if log_file_handle:
-            log_file_handle.write(f"Processing {len(BLOG_CATEGORIES)} categories\n")
+            safe_log_write(
+                log_file_handle, f"Processing {len(BLOG_CATEGORIES)} categories\n"
+            )
 
         for category_info in BLOG_CATEGORIES:
             total_categories_processed += 1
             category_name = category_info["name"]
 
             if log_file_handle:
-                log_file_handle.write(f"\nProcessing category: {category_name}\n")
-                log_file_handle.write(
-                    f"  Output base: {category_info['output_base']}\n"
+                safe_log_write(
+                    log_file_handle, f"\nProcessing category: {category_name}\n"
                 )
-                log_file_handle.write(
-                    f"  Category key: {category_info['category_key']}\n"
+                safe_log_write(
+                    log_file_handle, f"  Output base: {category_info['output_base']}\n"
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"  Category key: {category_info['category_key']}\n",
                 )
 
             category_key = category_info["category_key"]
@@ -2563,17 +3045,20 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
                 total_pages_created += 1
 
                 if log_file_handle:
-                    log_file_handle.write(
-                        f"Successfully processed category: {category_name}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"Successfully processed category: {category_name}\n",
                     )
 
             except Exception as category_processing_error:
                 error_message = f"Error processing category {category_name}: {category_processing_error}"
-                sphinx_diagnostics.error(error_message)
+                log_message("error", error_message, "general", "__init__")
 
                 if log_file_handle:
-                    log_file_handle.write(f"ERROR: {error_message}\n")
-                    log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+                    safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
+                    safe_log_write(
+                        log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                    )
 
                 total_categories_error += 1
                 all_error_details.append(
@@ -2583,23 +3068,29 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES["update_category_pages"] = phase_duration
-        sphinx_diagnostics.info(
-            f"Category pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            "Category pages generation completed in \033[96m{phase_duration:.2f} seconds\033[0m",
+            "general",
+            "__init__",
         )
 
         if log_file_handle:
-            log_file_handle.write(
-                f"Category pages generation completed in {phase_duration:.2f} seconds\n"
+            safe_log_write(
+                log_file_handle,
+                f"Category pages generation completed in {phase_duration:.2f} seconds\n",
             )
 
     except Exception as category_error:
         error_message = f"Failed to generate category pages: {category_error}"
-        sphinx_diagnostics.critical(error_message)
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message("critical", error_message, "general", "__init__")
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
 
         if log_file_handle:
-            log_file_handle.write(f"CRITICAL ERROR: {error_message}\n")
-            log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+            safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
+            safe_log_write(log_file_handle, f"Traceback: {traceback.format_exc()}\n")
 
         _BUILD_PHASES["update_category_pages"] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
@@ -2610,46 +3101,83 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
             end_time = time.time()
             total_duration = end_time - phase_start_time
 
-            log_file_handle.write("\n" + "=" * 80 + "\n")
-            log_file_handle.write("CATEGORY PAGES GENERATION SUMMARY\n")
-            log_file_handle.write("-" * 80 + "\n")
-            log_file_handle.write(
-                f"Total categories processed: {total_categories_processed}\n"
+            safe_log_write(log_file_handle, "\n" + "=" * 80 + "\n")
+            safe_log_write(log_file_handle, "CATEGORY PAGES GENERATION SUMMARY\n")
+            safe_log_write(log_file_handle, "-" * 80 + "\n")
+            safe_log_write(
+                log_file_handle,
+                f"Total categories processed: {total_categories_processed}\n",
             )
-            log_file_handle.write(
-                f"Total categories successful: {total_categories_successful}\n"
+            safe_log_write(
+                log_file_handle,
+                f"Total categories successful: {total_categories_successful}\n",
             )
-            log_file_handle.write(
-                f"Total categories with errors: {total_categories_error}\n"
+            safe_log_write(
+                log_file_handle,
+                f"Total categories with errors: {total_categories_error}\n",
             )
-            log_file_handle.write(f"Total pages created: {total_pages_created}\n")
-            log_file_handle.write(f"Total time: {total_duration:.2f} seconds\n")
+            safe_log_write(
+                log_file_handle, f"Total pages created: {total_pages_created}\n"
+            )
+            safe_log_write(
+                log_file_handle, f"Total time: {total_duration:.2f} seconds\n"
+            )
 
             if all_error_details:
-                log_file_handle.write("\nERROR DETAILS:\n")
-                log_file_handle.write("-" * 80 + "\n")
+                safe_log_write(log_file_handle, "\nERROR DETAILS:\n")
+                safe_log_write(log_file_handle, "-" * 80 + "\n")
                 for index, error_detail in enumerate(all_error_details):
-                    log_file_handle.write(
-                        f"{index+1}. Category: {error_detail['category']}\n"
+                    safe_log_write(
+                        log_file_handle,
+                        f"{index+1}. Category: {error_detail['category']}\n",
                     )
-                    log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+                    safe_log_write(
+                        log_file_handle, f"   Error: {error_detail['error']}\n\n"
+                    )
 
-            log_file_handle.close()
+            safe_log_close(log_file_handle)
 
 
 def setup(sphinx_app: Sphinx) -> dict:
     """Set up the ROCm Blogs extension."""
-    global _CRITICAL_ERROR_OCCURRED
+    global _CRITICAL_ERROR_OCCURRED, structured_logger
     phase_start_time = time.time()
     phase_name = "setup"
 
-    sphinx_diagnostics.info(f"Setting up ROCm Blogs extension, version: {__version__}")
-    sphinx_diagnostics.info(
-        f"Build process started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_BUILD_START_TIME))}"
+    # Add configuration values for ROCm Blogs extension
+    sphinx_app.add_config_value("rocm_blogs_debug", False, "env", [bool])
+    sphinx_app.add_config_value("rocm_blogs_enable_logging", False, "env", [bool])
+    sphinx_app.add_config_value("rocm_blogs_log_level", "INFO", "env", [str])
+    sphinx_app.add_config_value("rocm_blogs_log_file", None, "env", [str, type(None)])
+    sphinx_app.add_config_value(
+        "rocm_blogs_enable_performance_tracking", False, "env", [bool]
+    )
+
+    # Authentication key configuration (supports multiple key names for compatibility)
+    sphinx_app.add_config_value("rocm_blogs_auth_key", None, "env", [str, type(None)])
+    sphinx_app.add_config_value("sphinx_decrypt_key", None, "env", [str, type(None)])
+    sphinx_app.add_config_value(
+        "sphinx_encrypt_key", None, "env", [str, type(None)]
+    )  # Legacy support
+
+    # Initialize logging based on configuration
+    _initialize_logging_from_config(sphinx_app)
+
+    log_message(
+        "info",
+        f"Setting up ROCm Blogs extension, version: {__version__}",
+        "setup",
+        "extension",
+    )
+    log_message(
+        "info",
+        f"Build process started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_BUILD_START_TIME))}",
+        "setup",
+        "extension",
     )
 
     try:
-        sphinx_diagnostics.info("Setting up ROCm Blogs extension...")
+        log_message("info", "Setting up ROCm Blogs extension...", "setup", "extension")
 
         # Set up static files
         _setup_static_files(sphinx_app)
@@ -2660,8 +3188,12 @@ def setup(sphinx_app: Sphinx) -> dict:
         # Record timing information
         phase_duration = time.time() - phase_start_time
         _BUILD_PHASES[phase_name] = phase_duration
-        sphinx_diagnostics.info(
-            f"ROCm Blogs extension setup completed in \033[96m{phase_duration:.2f} seconds\033[0m"
+        log_message(
+            "info",
+            f"ROCm Blogs extension setup completed in {phase_duration:.2f} seconds",
+            "setup",
+            "extension",
+            extra_data={"duration_seconds": phase_duration},
         )
 
         # Return extension metadata
@@ -2672,15 +3204,160 @@ def setup(sphinx_app: Sphinx) -> dict:
         }
 
     except Exception as setup_error:
-        sphinx_diagnostics.critical(
-            f"Failed to set up ROCm Blogs extension: {setup_error}"
+        log_message(
+            "critical",
+            f"Failed to set up ROCm Blogs extension: {setup_error}",
+            "setup",
+            "extension",
+            error=setup_error,
         )
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
         raise ROCmBlogsError(
             f"Failed to set up ROCm Blogs extension: {setup_error}"
         ) from setup_error
+
+
+# Global variable to store the current Sphinx app for configuration access
+_current_sphinx_app = None
+
+
+def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
+    """Initialize logging based on Sphinx configuration."""
+    global structured_logger, _current_sphinx_app
+
+    # Store the Sphinx app globally so other functions can access config
+    _current_sphinx_app = sphinx_app
+
+    try:
+        # Get configuration values
+        debug_enabled = getattr(sphinx_app.config, "rocm_blogs_debug", False)
+        logging_enabled = getattr(sphinx_app.config, "rocm_blogs_enable_logging", False)
+        log_level = getattr(sphinx_app.config, "rocm_blogs_log_level", "INFO")
+        log_file = getattr(sphinx_app.config, "rocm_blogs_log_file", None)
+        performance_tracking = getattr(
+            sphinx_app.config, "rocm_blogs_enable_performance_tracking", False
+        )
+        auth_key = getattr(sphinx_app.config, "rocm_blogs_auth_key", None)
+
+        # Debug authentication if key is provided
+        if auth_key and LOGGING_AVAILABLE:
+            try:
+                from rocm_blogs_logging.debug import (
+                    debug_authentication_key, should_debug_authentication)
+
+                # Always debug authentication during build if key is provided
+                print("\n🔍 ROCm Blogs Authentication Debug")
+                print("-" * 50)
+                debug_info = debug_authentication_key(
+                    auth_key, "sphinx_build", print_report=True
+                )
+
+                # If authentication failed, provide clear guidance
+                if not debug_info.get("validation_result", False):
+                    print("\n⚠️  Authentication failed - logging will be disabled!")
+                    print("   See recommendations above for how to fix this.")
+                else:
+                    print("\n✅ Authentication successful - logging is enabled!")
+
+            except ImportError:
+                print(
+                    "🔍 Authentication debugging not available (rocm_blogs_logging not found)"
+                )
+            except Exception as debug_error:
+                print(f"🔍 Authentication debug error: {debug_error}")
+
+        # Override environment variables with Sphinx config
+        if not debug_enabled:
+            # If debug is disabled in config, disable all logging
+            os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "true"
+        else:
+            # If debug is enabled, respect the logging_enabled setting
+            if logging_enabled:
+                os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "false"
+                os.environ["ROCM_BLOGS_ENABLE_LOGGING"] = "true"
+            else:
+                os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "true"
+
+        # Set other configuration options
+        if log_level:
+            os.environ["ROCM_BLOGS_LOG_LEVEL"] = log_level.upper()
+
+        if log_file:
+            os.environ["ROCM_BLOGS_LOG_FILE"] = str(log_file)
+
+        if not performance_tracking:
+            os.environ["ROCM_BLOGS_ENABLE_PERFORMANCE"] = "false"
+
+        # Set authentication key if provided
+        if auth_key:
+            os.environ["ROCM_BLOGS_AUTH_KEY"] = str(auth_key)
+
+        # Reinitialize the structured logger with new configuration
+        if LOGGING_AVAILABLE and is_logging_enabled(auth_key):
+            try:
+                log_file_path = (
+                    Path(log_file) if log_file else Path("logs/rocm_blogs.log")
+                )
+                log_level_enum = getattr(LogLevel, log_level.upper(), LogLevel.INFO)
+
+                structured_logger = configure_logging(
+                    level=log_level_enum,
+                    log_file=log_file_path,
+                    enable_console=True,
+                    name="rocm_blogs",
+                )
+
+                if structured_logger:
+                    structured_logger.info(
+                        "Logging system reconfigured from Sphinx config",
+                        "configuration",
+                        "logging_system",
+                        extra_data={
+                            "debug_enabled": debug_enabled,
+                            "logging_enabled": logging_enabled,
+                            "log_level": log_level,
+                            "log_file": str(log_file_path),
+                            "performance_tracking": performance_tracking,
+                        },
+                    )
+            except Exception as logging_error:
+                print(f"Failed to reconfigure structured logging: {logging_error}")
+                structured_logger = None
+        else:
+            structured_logger = None
+
+    except Exception as config_error:
+        print(f"Error initializing logging from config: {config_error}")
+        # Fallback to environment-based configuration
+        pass
+
+
+def is_logging_enabled_from_config():
+    """Check if logging is enabled based on Sphinx configuration (overrides environment variables)."""
+    global _current_sphinx_app
+
+    if _current_sphinx_app is not None:
+        # Use Sphinx configuration as highest priority
+        debug_enabled = getattr(_current_sphinx_app.config, "rocm_blogs_debug", False)
+        logging_enabled = getattr(
+            _current_sphinx_app.config, "rocm_blogs_enable_logging", False
+        )
+        auth_key = getattr(_current_sphinx_app.config, "rocm_blogs_auth_key", None)
+
+        # If debug is disabled, logging is disabled regardless of other settings
+        if not debug_enabled:
+            return False
+
+        # If debug is enabled, check the logging_enabled setting and authentication
+        if logging_enabled and auth_key:
+            # Use the authentication-aware is_logging_enabled function with the key
+            return is_logging_enabled(auth_key)
+        else:
+            return False
+
+    # Fallback to the imported is_logging_enabled function
+    return is_logging_enabled()
 
 
 def _setup_static_files(sphinx_app: Sphinx) -> None:
@@ -2699,36 +3376,168 @@ def _setup_static_files(sphinx_app: Sphinx) -> None:
             if generic_img_path.exists():
                 optimize_generic_image(str(generic_img_path))
             else:
-                sphinx_diagnostics.warning(
-                    f"Generic image not found at {generic_img_path}"
+                log_message(
+                    "warning",
+                    f"Generic image not found at {generic_img_path}",
+                    "static_files",
+                    "__init__",
                 )
         except Exception as image_error:
-            sphinx_diagnostics.warning(f"Error optimizing generic image: {image_error}")
-            sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+            log_message(
+                "warning",
+                f"Error optimizing generic image: {image_error}",
+                "static_files",
+                "__init__",
+            )
+            log_message(
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "static_files",
+                "__init__",
+            )
+        log_message(
+            "info",
+            "Static files setup completed successfully",
+            "static_files",
+            "__init__",
+        )
 
-        sphinx_diagnostics.info("Static files setup completed")
+        log_message("info", "Static files setup completed", "general", "__init__")
 
     except Exception as static_files_error:
-        sphinx_diagnostics.error(f"Error setting up static files: {static_files_error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "error",
+            f"Error setting up static files: {static_files_error}",
+            "static_files",
+            "__init__",
+        )
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "static_files", "__init__"
+        )
         raise
+
+
+def _initialize_shared_rocm_blogs(sphinx_app: Sphinx) -> ROCmBlogs:
+    """Initialize a shared ROCmBlogs instance for all functions to use."""
+    try:
+        log_message(
+            "info", "Initializing shared ROCmBlogs instance...", "general", "__init__"
+        )
+
+        # Create the shared instance
+        rocm_blogs = ROCmBlogs()
+
+        # Find blogs directory
+        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
+        if not blogs_directory:
+            error_message = "Could not find blogs directory during initialization"
+            log_message("error", error_message, "general", "__init__")
+            raise ROCmBlogsError(error_message)
+
+        rocm_blogs.blogs_directory = str(blogs_directory)
+        log_message(
+            "info", "Found blogs directory: {blogs_directory}", "general", "__init__"
+        )
+
+        # Find README files
+        readme_count = rocm_blogs.find_readme_files()
+        log_message("info", "Found {readme_count} README files", "general", "__init__")
+
+        # Create blog objects
+        rocm_blogs.create_blog_objects()
+        log_message("info", "Created blog objects", "general", "__init__")
+
+        # Find author files
+        rocm_blogs.find_author_files()
+        log_message("info", "Found author files", "general", "__init__")
+
+        # Sort blogs
+        rocm_blogs.blogs.sort_blogs_by_date()
+        log_message("info", "Sorted blogs by date", "general", "__init__")
+
+        # Extract category keys from BLOG_CATEGORIES to use for sorting
+        category_keys = [
+            category_info.get("category_key", category_info["name"])
+            for category_info in BLOG_CATEGORIES
+        ]
+        rocm_blogs.blogs.sort_blogs_by_category(category_keys)
+        log_message("info", "Sorted blogs by category", "general", "__init__")
+
+        # Sort by vertical
+        rocm_blogs.blogs.sort_blogs_by_vertical()
+        log_message("info", "Sorted blogs by vertical", "general", "__init__")
+
+        log_message(
+            "info",
+            "Shared ROCmBlogs instance initialized successfully",
+            "general",
+            "__init__",
+        )
+        return rocm_blogs
+
+    except Exception as init_error:
+        log_message(
+            "error",
+            f"Error initializing shared ROCmBlogs instance: {init_error}",
+            "general",
+            "__init__",
+        )
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
+        raise
+
+
+def _create_event_handler_with_shared_instance(func, rocm_blogs):
+    """Create an event handler that passes the shared ROCmBlogs instance to the function."""
+
+    def handler(sphinx_app):
+        return func(sphinx_app, rocm_blogs)
+
+    return handler
 
 
 def _register_event_handlers(sphinx_app: Sphinx) -> None:
     """Register event handlers for the ROCm Blogs extension."""
     try:
-        # Register event handlers
+        # Initialize shared ROCmBlogs instance
+        shared_rocm_blogs = _initialize_shared_rocm_blogs(sphinx_app)
+
+        # Register event handlers with shared instance
         sphinx_app.connect("builder-inited", run_metadata_generator)
-        sphinx_app.connect("builder-inited", update_index_file)
-        sphinx_app.connect("builder-inited", blog_generation)
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                update_index_file, shared_rocm_blogs
+            ),
+        )
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                blog_generation, shared_rocm_blogs
+            ),
+        )
         sphinx_app.connect("builder-inited", update_posts_file)
         sphinx_app.connect("builder-inited", update_vertical_pages)
         sphinx_app.connect("builder-inited", update_category_pages)
         sphinx_app.connect("builder-inited", update_category_verticals)
         sphinx_app.connect("build-finished", log_total_build_time)
 
-        sphinx_diagnostics.info("Event handlers registered")
+        log_message(
+            "info",
+            "Event handlers registered with shared ROCmBlogs instance",
+            "general",
+            "__init__",
+        )
 
     except Exception as handler_error:
-        sphinx_diagnostics.error(f"Error registering event handlers: {handler_error}")
-        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+        log_message(
+            "error",
+            f"Error registering event handlers: {handler_error}",
+            "general",
+            "__init__",
+        )
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+        )
+        raise

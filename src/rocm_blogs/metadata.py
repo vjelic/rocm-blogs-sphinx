@@ -14,7 +14,17 @@ from rocm_blogs.constants import SUPPORTED_FORMATS
 
 from .utils import calculate_day_of_week
 
-sphinx_diagnostics = sphinx_logging.getLogger(__name__)
+
+# Import log_message from the main module
+def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
+    """Import log_message function from main module to avoid circular imports."""
+    try:
+        from . import log_message as main_log_message
+
+        return main_log_message(level, message, operation, component, **kwargs)
+    except ImportError:
+        # Fallback to print if import fails
+        print(f"[{level.upper()}] {message}")
 
 
 def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
@@ -146,22 +156,25 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
     primary_matches = defaultdict(list)
     secondary_matches = defaultdict(list)
 
-    metadata_log_file_handle.write(f"Blog Tags: {tags}\n")
+    if metadata_log_file_handle:
+        metadata_log_file_handle.write(f"Blog Tags: {tags}\n")
 
-    metadata_log_file_handle.write(
-        f"Checking Blog Tags: {', '.join(tags)} for market verticals.\n"
-    )
+        metadata_log_file_handle.write(
+            f"Checking Blog Tags: {', '.join(tags)} for market verticals.\n"
+        )
 
     for tag in tags:
         normalized_tag = tag.strip()
         tag_matched = False
 
-        metadata_log_file_handle.write(f"Checking tag: {normalized_tag}\n")
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write(f"Checking tag: {normalized_tag}\n")
 
         if normalized_tag not in tag_weights:
-            metadata_log_file_handle.write(
-                f"WARNING: Tag '{normalized_tag}' not found in tag weights.\n"
-            )
+            if metadata_log_file_handle:
+                metadata_log_file_handle.write(
+                    f"WARNING: Tag '{normalized_tag}' not found in tag weights.\n"
+                )
             continue
 
         for vertical, primary_tag_list in primary_tags.items():
@@ -174,9 +187,10 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
                 primary_matches[vertical].append(normalized_tag)
                 tag_matched = True
 
-                metadata_log_file_handle.write(
-                    f"Tag: {tag} is a PRIMARY tag for vertical: {vertical} with score: {score:.2f}\n"
-                )
+                if metadata_log_file_handle:
+                    metadata_log_file_handle.write(
+                        f"Tag: {tag} is a PRIMARY tag for vertical: {vertical} with score: {score:.2f}\n"
+                    )
 
                 break
 
@@ -194,9 +208,11 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
                     secondary_matches[vertical].append(normalized_tag)
                     tag_matched = True
 
+                if metadata_log_file_handle:
                     metadata_log_file_handle.write(
                         f"Tag: {tag} is a SECONDARY tag for vertical: {vertical} with score: {score:.2f}\n"
                     )
+                    break
 
     for vertical in vertical_scores.keys():
         primary_count = len(primary_matches[vertical])
@@ -306,15 +322,24 @@ def classify_blog_tags(blog_tags, metadata_log_file_handle=None):
 
 def metadata_generator(rocm_blogs_instance: ROCmBlogs) -> None:
     """Generate metadata for the ROCm blogs with Open Graph support."""
+    # Import the logging check function from __init__.py
+    from . import is_logging_enabled_from_config
+
     generation_start_time = datetime.now()
-    sphinx_diagnostics.info(
-        f"Starting metadata generation at {generation_start_time.isoformat()}"
+    log_message(
+        "info",
+        f"Starting metadata generation at {generation_start_time.isoformat()}",
+        "general",
+        "metadata",
     )
-    sphinx_diagnostics.info("=" * 80)
-    sphinx_diagnostics.info(
-        "Generating metadata for ROCm blogs with Open Graph protocol support..."
+    log_message("info", "=" * 80, "general", "metadata")
+    log_message(
+        "info",
+        "Generating metadata for ROCm blogs with Open Graph protocol support...",
+        "general",
+        "metadata",
     )
-    sphinx_diagnostics.info("-" * 80)
+    log_message("info", "-" * 80, "general", "metadata")
 
     open_graph_metadata_template = """---
 blogpost: true
@@ -362,19 +387,29 @@ myst:
 
     all_error_details = []
 
-    logs_directory = Path("logs")
-    logs_directory.mkdir(exist_ok=True)
+    # Only create log files if logging is enabled
+    if is_logging_enabled_from_config():
+        logs_directory = Path("logs")
+        logs_directory.mkdir(exist_ok=True)
 
-    metadata_log_filepath = logs_directory / "metadata_generation.log"
-    sphinx_diagnostics.info(
-        f"Detailed logs will be written to: {metadata_log_filepath}"
-    )
-
-    with open(metadata_log_filepath, "w", encoding="utf-8") as metadata_log_file_handle:
-        metadata_log_file_handle.write(
-            f"ROCm Blogs Metadata Generation Log - {generation_start_time.isoformat()}\n"
+        metadata_log_filepath = logs_directory / "metadata_generation.log"
+        log_message(
+            "info",
+            "Detailed logs will be written to: {metadata_log_filepath}",
+            "general",
+            "metadata",
         )
-        metadata_log_file_handle.write("=" * 80 + "\n\n")
+
+        metadata_log_file_handle = open(metadata_log_filepath, "w", encoding="utf-8")
+    else:
+        metadata_log_file_handle = None
+
+    try:
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write(
+                f"ROCm Blogs Metadata Generation Log - {generation_start_time.isoformat()}\n"
+            )
+            metadata_log_file_handle.write("=" * 80 + "\n\n")
 
         for current_blog_index, blog_filepath in enumerate(
             rocm_blogs_instance.blog_paths
@@ -386,8 +421,11 @@ myst:
             )
 
             try:
-                sphinx_diagnostics.info(
-                    f"Processing {blog_identifier}: {current_blog_path.name}"
+                log_message(
+                    "info",
+                    "Processing {blog_identifier}: {current_blog_path.name}",
+                    "general",
+                    "metadata",
                 )
                 metadata_log_file_handle.write(
                     f"\n{'-' * 40}\nProcessing: {blog_filepath}\n{'-' * 40}\n"
@@ -395,7 +433,7 @@ myst:
 
                 if not current_blog_path.exists():
                     error_message = f"Blog file does not exist: {blog_filepath}"
-                    sphinx_diagnostics.error(f"{error_message}")
+                    log_message("error", error_message, "general", "metadata")
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     all_error_details.append(
                         {"blog": blog_filepath, "error": error_message}
@@ -405,7 +443,7 @@ myst:
 
                 if not os.access(blog_filepath, os.R_OK):
                     error_message = f"Blog file is not readable: {blog_filepath}"
-                    sphinx_diagnostics.error(f"{error_message}")
+                    log_message("error", error_message, "general", "metadata")
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     all_error_details.append(
                         {"blog": blog_filepath, "error": error_message}
@@ -424,8 +462,11 @@ myst:
                 metadata_match = metadata_regex_pattern.search(blog_file_content)
 
                 if not metadata_match:
-                    sphinx_diagnostics.info(
-                        f"Skipping {blog_identifier}: No metadata section found, not a blog post"
+                    log_message(
+                        "info",
+                        "Skipping {blog_identifier}: No metadata section found, not a blog post",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"INFO: No metadata section found, skipping as not a blog post\n"
@@ -437,8 +478,11 @@ myst:
                 metadata_content_extracted = metadata_match.group(1)
                 blogpost_regex_pattern = re.compile(r"blogpost:\s*true", re.IGNORECASE)
                 if not blogpost_regex_pattern.search(metadata_content_extracted):
-                    sphinx_diagnostics.info(
-                        f"Skipping {blog_identifier}: Not marked as a blog post (blogpost: true not found)"
+                    log_message(
+                        "info",
+                        f"Skipping {blog_identifier}: Not marked as a blog post (blogpost: true not found)",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"INFO: Not marked as a blog post in metadata, skipping\n"
@@ -456,8 +500,13 @@ myst:
                     )
                 except Exception as metadata_extraction_exception:
                     error_message = f"Failed to extract metadata from {blog_filepath}: {metadata_extraction_exception}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -469,8 +518,11 @@ myst:
                     continue
 
                 if not extracted_metadata:
-                    sphinx_diagnostics.warning(
-                        f"No metadata found for blog: {blog_filepath}"
+                    log_message(
+                        "warning",
+                        f"No metadata found for blog: {blog_filepath}",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"WARNING: No metadata found for blog\n"
@@ -480,8 +532,11 @@ myst:
                     continue
 
                 if not extracted_metadata.get("blogpost"):
-                    sphinx_diagnostics.info(
-                        f"Skipping {blog_identifier}: Not marked as a blog post in extracted metadata"
+                    log_message(
+                        "info",
+                        "Skipping {blog_identifier}: Not marked as a blog post in extracted metadata",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"INFO: Not marked as a blog post in extracted metadata, skipping\n"
@@ -497,8 +552,11 @@ myst:
                     html_metadata = myst_section.get("html_meta", {})
                     blog_description = html_metadata.get("description lang=en", "")
                     if not blog_description:
-                        sphinx_diagnostics.warning(
-                            f"No description found for blog: {blog_filepath}"
+                        log_message(
+                            "warning",
+                            f"No description found for blog: {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"WARNING: No description found\n"
@@ -506,19 +564,29 @@ myst:
                         total_blogs_warning += 1
                         blog_description = "ROCm Blog post"
                     else:
-                        sphinx_diagnostics.debug(f"Description: {blog_description}")
+                        log_message(
+                            "debug",
+                            f"Description: {blog_description}",
+                            "general",
+                            "metadata",
+                        )
                         metadata_log_file_handle.write(
                             f"Description: {blog_description}\n"
                         )
 
                     blog_keywords = html_metadata.get("keywords", "")
                     if not blog_keywords:
-                        sphinx_diagnostics.debug(
-                            f"No keywords found for blog: {blog_filepath}"
+                        log_message(
+                            "debug",
+                            f"No keywords found for blog: {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(f"INFO: No keywords found\n")
                     else:
-                        sphinx_diagnostics.debug(f"Keywords: {blog_keywords}")
+                        log_message(
+                            "debug", f"Keywords: {blog_keywords}", "general", "metadata"
+                        )
                         metadata_log_file_handle.write(f"Keywords: {blog_keywords}\n")
 
                     title_regex_pattern = re.compile(r"^# (.+)$", re.MULTILINE)
@@ -527,8 +595,11 @@ myst:
                         extracted_title = title_match.group(1)
                         extracted_title = extracted_title.replace('"', "'")
                         extracted_metadata["blog_title"] = extracted_title
-                        sphinx_diagnostics.debug(
-                            f"Extracted title from markdown: {extracted_title}"
+                        log_message(
+                            "debug",
+                            f"Extracted title from markdown: {extracted_title}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"Extracted title: {extracted_title}\n"
@@ -536,8 +607,11 @@ myst:
                     else:
                         fallback_description = blog_description.replace("'", '"')
                         extracted_metadata["blog_title"] = fallback_description
-                        sphinx_diagnostics.warning(
-                            f"No title found in markdown for {blog_filepath}, using description as title"
+                        log_message(
+                            "warning",
+                            f"No title found in markdown for {blog_filepath}, using description as title",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"WARNING: No title found in markdown, using description as title: {fallback_description[:30]}...\n"
@@ -545,8 +619,13 @@ myst:
                         total_blogs_warning += 1
                 except Exception as metadata_field_exception:
                     error_message = f"Error extracting metadata from {blog_filepath}: {metadata_field_exception}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -560,19 +639,23 @@ myst:
                 try:
                     if "author" not in extracted_metadata:
                         extracted_metadata["author"] = "No author"
-                        sphinx_diagnostics.warning(
-                            f"No author found for blog: {blog_filepath}, using default"
+                        log_message(
+                            "warning",
+                            f"No author found for blog: {blog_filepath}, using default",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
-                            f"WARNING: No author found, using default: 'No author'\n"
+                            f"WARNING: No author found, using default: {extracted_metadata['author']}\n"
                         )
                         total_blogs_warning += 1
                     else:
-                        extracted_metadata["author"] = extracted_metadata[
-                            "author"
-                        ]
-                        sphinx_diagnostics.debug(
-                            f"Author: {extracted_metadata['author']}"
+                        extracted_metadata["author"] = extracted_metadata["author"]
+                        log_message(
+                            "debug",
+                            f"Author: {extracted_metadata['author']}",
+                            "general",
+                            "metadata",
                         )
                         release_author = ";".join(
                             extracted_metadata.get("author", "").split(",")
@@ -582,20 +665,32 @@ myst:
                         )
 
                     if not extracted_metadata.get("thumbnail"):
-                        sphinx_diagnostics.info(
-                            f"Blog: {blog_filepath} does not have a thumbnail specified: {extracted_metadata}"
+                        log_message(
+                            "info",
+                            "Blog: {blog_filepath} does not have a thumbnail specified: {extracted_metadata}",
+                            "general",
+                            "metadata",
                         )
                         extracted_thumbnail = "generic.webp"
                         og_image_extracted = "generic.webp"
-                        sphinx_diagnostics.debug(
-                            f"No thumbnail specified for blog: {blog_filepath}"
+                        log_message(
+                            "debug",
+                            f"No thumbnail specified for blog: {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"INFO: No thumbnail specified\n"
                         )
                     else:
-                        sphinx_diagnostics.debug(
-                            f"Thumbnail: {extracted_metadata['thumbnail']}"
+                        log_message(
+                            "debug",
+                            f"Thumbnail: {extracted_metadata['thumbnail']}",
+                            "general",
+                            "metadata",
+                        )
+                        metadata_log_file_handle.write(
+                            f"Thumbnail: {extracted_metadata['thumbnail']}\n"
                         )
 
                         # Store original thumbnail for og:image (non-webp)
@@ -624,15 +719,23 @@ myst:
 
                     if "date" not in extracted_metadata:
                         extracted_metadata["date"] = datetime.now().strftime("%d %B %Y")
-                        sphinx_diagnostics.warning(
-                            f"No date found for blog: {blog_filepath}, using current date"
+                        log_message(
+                            "warning",
+                            f"No date found for blog: {blog_filepath}, using current date",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"WARNING: No date found, using current date: {extracted_metadata['date']}\n"
                         )
                         total_blogs_warning += 1
                     else:
-                        sphinx_diagnostics.debug(f"Date: {extracted_metadata['date']}")
+                        log_message(
+                            "debug",
+                            f"Date: {extracted_metadata['date']}",
+                            "general",
+                            "metadata",
+                        )
                         metadata_log_file_handle.write(
                             f"Date: {extracted_metadata['date']}\n"
                         )
@@ -643,13 +746,19 @@ myst:
 
                     if "tags" not in extracted_metadata:
                         extracted_metadata["tags"] = ""
-                        sphinx_diagnostics.debug(
-                            f"No tags specified for blog: {blog_filepath}"
+                        log_message(
+                            "debug",
+                            f"No tags specified for blog: {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(f"ERROR: No tags specified\n")
                     else:
-                        sphinx_diagnostics.debug(
-                            f"Blog Tags Specified: {extracted_metadata['tags']}"
+                        log_message(
+                            "debug",
+                            f"Blog Tags Specified: {extracted_metadata['tags']}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"INFO: Blog Tags Specified: {extracted_metadata['tags']}\n"
@@ -714,15 +823,23 @@ myst:
                         )
                         market_vertical = html_metadata["vertical"]
                         market_vertical = f'"{market_vertical}"'
-                        sphinx_diagnostics.debug(f"Market Vertical: {market_vertical}")
+                        log_message(
+                            "debug",
+                            f"Market Vertical: {market_vertical}",
+                            "general",
+                            "metadata",
+                        )
                         metadata_log_file_handle.write(
                             f"Market Vertical: {market_vertical}\n"
                         )
 
                     metadata_log_file_handle.write(f"Blog Tags: {blog_tags}")
                     if not blog_tags and not market_vertical:
-                        sphinx_diagnostics.debug(
-                            f"No tags found for blog: {blog_filepath}"
+                        log_message(
+                            "debug",
+                            f"No tags found for blog: {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(f"INFO: No tags found\n")
                         blog_tags = ""
@@ -730,15 +847,21 @@ myst:
 
                     if "category" not in extracted_metadata:
                         extracted_metadata["category"] = "ROCm Blog"
-                        sphinx_diagnostics.debug(
-                            f"No category specified for blog: {blog_filepath}, using default"
+                        log_message(
+                            "debug",
+                            f"No category specified for blog: {blog_filepath}, using default",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"INFO: No category specified, using default: 'ROCm Blog'\n"
                         )
                     else:
-                        sphinx_diagnostics.debug(
-                            f"Category: {extracted_metadata['category']}"
+                        log_message(
+                            "debug",
+                            f"Category: {extracted_metadata['category']}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"Category: {extracted_metadata['category']}\n"
@@ -862,8 +985,13 @@ myst:
 
                 except KeyError as key_error:
                     error_message = f"KeyError: {key_error} in {blog_filepath}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -876,8 +1004,13 @@ myst:
 
                 except Exception as default_field_exception:
                     error_message = f"Error setting default values for {blog_filepath}: {default_field_exception}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -892,8 +1025,11 @@ myst:
                     extracted_metadata["date"] = extracted_metadata["date"].replace(
                         "Sept", "Sep"
                     )
-                    sphinx_diagnostics.debug(
-                        f"Normalized date format: {extracted_metadata['date']}"
+                    log_message(
+                        "debug",
+                        f"Normalized date format: {extracted_metadata['date']}",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"INFO: Normalized date format: {extracted_metadata['date']}\n"
@@ -972,8 +1108,11 @@ myst:
 
                         if not parsed_date:
                             parsed_date = datetime.now()
-                            sphinx_diagnostics.warning(
-                                f"Could not parse date '{blog_date}' for {blog_filepath}, using current date"
+                            log_message(
+                                "warning",
+                                f"Could not parse date '{blog_date}' for {blog_filepath}, using current date",
+                                "general",
+                                "metadata",
                             )
                             metadata_log_file_handle.write(
                                 f"WARNING: Could not parse date '{blog_date}', using current date\n"
@@ -991,8 +1130,11 @@ myst:
 
                         amd_blog_releasedate = f"{year}/{month}/{day}"
 
-                        sphinx_diagnostics.debug(
-                            f"Generated release date: {amd_blog_releasedate}"
+                        log_message(
+                            "debug",
+                            f"Generated release date: {amd_blog_releasedate}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"Generated release date: {amd_blog_releasedate}\n"
@@ -1052,16 +1194,22 @@ myst:
                                 ).strftime("%Y/%m/%d@%H:%M:%S")
 
                             except ValueError:
-                                sphinx_diagnostics.warning(
-                                    f"Could not parse date '{extracted_metadata['date']}' for {blog_filepath}, using current time"
+                                log_message(
+                                    "warning",
+                                    f"Could not parse date '{extracted_metadata['date']}' for {blog_filepath}, using current time",
+                                    "general",
+                                    "metadata",
                                 )
                                 metadata_log_file_handle.write(
                                     f"WARNING: Could not parse date '{extracted_metadata['date']}', using current time: {amd_blog_releasedate}\n"
                                 )
                                 total_blogs_warning += 1
 
-                    sphinx_diagnostics.debug(
-                        f"Generated AMD Release Date: {amd_blog_releasedate}"
+                    log_message(
+                        "debug",
+                        f"Generated AMD Release Date: {amd_blog_releasedate}",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"Generated AMD Release Date: {amd_blog_releasedate}\n"
@@ -1075,23 +1223,34 @@ myst:
                         # Convert Windows backslashes to forward slashes for URLs
                         blog_directory = blog_directory.replace("\\", "/")
                         generated_blog_url = f"/{blog_directory}/README.html"
-                        sphinx_diagnostics.debug(
-                            f"Generated blog URL: {generated_blog_url}"
+                        log_message(
+                            "debug",
+                            f"Generated blog URL: {generated_blog_url}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"Generated blog URL: {generated_blog_url}\n"
                         )
                     except Exception as blog_url_exception:
                         error_message = f"Error generating blog URL for {blog_filepath}: {blog_url_exception}"
-                        sphinx_diagnostics.error(f"{error_message}")
-                        sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                        log_message("error", error_message, "general", "metadata")
+                        log_message(
+                            "debug",
+                            f"Traceback: {traceback.format_exc()}",
+                            "general",
+                            "metadata",
+                        )
                         metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                         metadata_log_file_handle.write(
                             f"Traceback: {traceback.format_exc()}\n"
                         )
                         generated_blog_url = "/blogs"
-                        sphinx_diagnostics.warning(
-                            f"Using fallback blog URL: {generated_blog_url}"
+                        log_message(
+                            "warning",
+                            f"Using fallback blog URL: {generated_blog_url}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(
                             f"WARNING: Using fallback blog URL: {generated_blog_url}\n"
@@ -1099,8 +1258,13 @@ myst:
                         total_blogs_warning += 1
                 except Exception as og_metadata_exception:
                     error_message = f"Error generating Open Graph metadata for {blog_filepath}: {og_metadata_exception}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -1132,8 +1296,11 @@ myst:
                         release_author=release_author,
                         market_vertical=market_vertical,
                     )
-                    sphinx_diagnostics.debug(
-                        f"Generated metadata content for {blog_filepath}"
+                    log_message(
+                        "debug",
+                        f"Generated metadata content for {blog_filepath}",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"Generated metadata content: {formatted_metadata_content}\n"
@@ -1143,8 +1310,13 @@ myst:
                     )
                 except Exception as format_exception:
                     error_message = f"Error formatting metadata content for {blog_filepath}: {format_exception}"
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -1162,17 +1334,27 @@ myst:
                     match = metadata_regex_pattern.search(blog_file_content)
                     if match:
                         # Use string slicing instead of regex substitution to avoid escape sequence issues
-                        blog_file_content = blog_file_content[:match.start()] + formatted_metadata_content + blog_file_content[match.end():]
-                        sphinx_diagnostics.debug(
-                            f"Replaced existing metadata in {blog_filepath}"
+                        blog_file_content = (
+                            blog_file_content[: match.start()]
+                            + formatted_metadata_content
+                            + blog_file_content[match.end() :]
+                        )
+                        log_message(
+                            "debug",
+                            f"Replaced existing metadata in {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(f"Replaced existing metadata\n")
                     else:
                         blog_file_content = (
                             formatted_metadata_content + blog_file_content
                         )
-                        sphinx_diagnostics.debug(
-                            f"Added new metadata to {blog_filepath}"
+                        log_message(
+                            "debug",
+                            f"Added new metadata to {blog_filepath}",
+                            "general",
+                            "metadata",
                         )
                         metadata_log_file_handle.write(f"Added new metadata\n")
                     blog_file_content = blog_file_content.strip() + "\n"
@@ -1180,8 +1362,11 @@ myst:
                         blog_filepath, "w", encoding="utf-8", errors="replace"
                     ) as blog_file_handle_write:
                         blog_file_handle_write.write(blog_file_content)
-                    sphinx_diagnostics.info(
-                        f"Metadata successfully added to {blog_filepath}"
+                    log_message(
+                        "info",
+                        "Metadata successfully added to {blog_filepath}",
+                        "general",
+                        "metadata",
                     )
                     metadata_log_file_handle.write(
                         f"Metadata successfully added to file\n"
@@ -1191,8 +1376,13 @@ myst:
                     error_message = (
                         f"Error writing metadata to {blog_filepath}: {write_exception}"
                     )
-                    sphinx_diagnostics.error(f"{error_message}")
-                    sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                    log_message("error", error_message, "general", "metadata")
+                    log_message(
+                        "debug",
+                        f"Traceback: {traceback.format_exc()}",
+                        "general",
+                        "metadata",
+                    )
                     metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                     metadata_log_file_handle.write(
                         f"Traceback: {traceback.format_exc()}\n"
@@ -1207,8 +1397,11 @@ myst:
                 current_blog_duration = (
                     current_blog_end_time - current_blog_start_time
                 ).total_seconds()
-                sphinx_diagnostics.debug(
-                    f"Processed {blog_identifier} in {current_blog_duration:.2f} seconds"
+                log_message(
+                    "debug",
+                    f"Processed {blog_identifier} in {current_blog_duration:.2f} seconds",
+                    "general",
+                    "metadata",
                 )
                 metadata_log_file_handle.write(
                     f"Processing completed in {current_blog_duration:.2f} seconds\n"
@@ -1216,8 +1409,13 @@ myst:
 
             except Exception as blog_processing_exception:
                 error_message = f"Unexpected error processing {blog_filepath}: {blog_processing_exception}"
-                sphinx_diagnostics.error(f"{error_message}")
-                sphinx_diagnostics.debug(f"Traceback: {traceback.format_exc()}")
+                log_message("error", error_message, "general", "metadata")
+                log_message(
+                    "debug",
+                    f"Traceback: {traceback.format_exc()}",
+                    "general",
+                    "metadata",
+                )
                 metadata_log_file_handle.write(f"ERROR: {error_message}\n")
                 metadata_log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
                 all_error_details.append(
@@ -1225,64 +1423,107 @@ myst:
                 )
                 total_blogs_error += 1
 
-        end_time = datetime.now()
-        total_generation_duration = (end_time - generation_start_time).total_seconds()
-
-        metadata_log_file_handle.write("\n" + "=" * 80 + "\n")
-        metadata_log_file_handle.write("METADATA GENERATION SUMMARY\n")
-        metadata_log_file_handle.write("-" * 80 + "\n")
-        metadata_log_file_handle.write(
-            f"Total README files found: {len(rocm_blogs_instance.blog_paths)}\n"
-        )
-        metadata_log_file_handle.write(
-            f"Files not marked as blogs (skipped): {total_non_blog_files}\n"
-        )
-        metadata_log_file_handle.write(
-            f"Total blogs processed: {total_blogs_processed}\n"
-        )
-        metadata_log_file_handle.write(f"Successful: {total_blogs_successful}\n")
-        metadata_log_file_handle.write(f"Errors: {total_blogs_error}\n")
-        metadata_log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
-        metadata_log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
-        metadata_log_file_handle.write(
-            f"Total time: {total_generation_duration:.2f} seconds\n"
-        )
-
-        if all_error_details:
-            metadata_log_file_handle.write("\nERROR DETAILS:\n")
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write("\n" + "=" * 80 + "\n")
+            metadata_log_file_handle.write("METADATA GENERATION SUMMARY\n")
             metadata_log_file_handle.write("-" * 80 + "\n")
-            for index, error_detail in enumerate(all_error_details):
-                metadata_log_file_handle.write(
-                    f"{index+1}. Blog: {error_detail['blog']}\n"
-                )
-                metadata_log_file_handle.write(f"   Error: {error_detail['error']}\n\n")
+            metadata_log_file_handle.write(
+                f"Total README files found: {len(rocm_blogs_instance.blog_paths)}\n"
+            )
+            metadata_log_file_handle.write(
+                f"Files not marked as blogs (skipped): {total_non_blog_files}\n"
+            )
+            metadata_log_file_handle.write(
+                f"Total blogs processed: {total_blogs_processed}\n"
+            )
+            metadata_log_file_handle.write(f"Successful: {total_blogs_successful}\n")
+            metadata_log_file_handle.write(f"Errors: {total_blogs_error}\n")
+            metadata_log_file_handle.write(f"Warnings: {total_blogs_warning}\n")
+            metadata_log_file_handle.write(f"Skipped: {total_blogs_skipped}\n")
 
-    sphinx_diagnostics.info("=" * 80)
-    sphinx_diagnostics.info("METADATA GENERATION SUMMARY")
-    sphinx_diagnostics.info("-" * 80)
-    sphinx_diagnostics.info(
-        f"Total README files found: {len(rocm_blogs_instance.blog_paths)}"
+            if all_error_details:
+                metadata_log_file_handle.write("\nERROR DETAILS:\n")
+                metadata_log_file_handle.write("-" * 80 + "\n")
+                for index, error_detail in enumerate(all_error_details):
+                    metadata_log_file_handle.write(
+                        f"{index+1}. Blog: {error_detail['blog']}\n"
+                    )
+                    metadata_log_file_handle.write(
+                        f"   Error: {error_detail['error']}\n\n"
+                    )
+
+    except Exception as general_error:
+        # Handle any unexpected errors during metadata generation
+        log_message(
+            "error",
+            f"Unexpected error during metadata generation: {general_error}",
+            "general",
+            "metadata",
+        )
+        log_message(
+            "debug", f"Traceback: {traceback.format_exc()}", "general", "metadata"
+        )
+        if metadata_log_file_handle:
+            metadata_log_file_handle.write(f"CRITICAL ERROR: {general_error}\n")
+            metadata_log_file_handle.write(f"Traceback: {traceback.format_exc()}\n")
+    finally:
+        # Close the log file handle if it was opened
+        if metadata_log_file_handle:
+            metadata_log_file_handle.close()
+
+    # Calculate total generation duration outside the try block to ensure it's always available
+    end_time = datetime.now()
+    total_generation_duration = (end_time - generation_start_time).total_seconds()
+
+    log_message("info", "=" * 80, "general", "metadata")
+    log_message("info", "METADATA GENERATION SUMMARY", "general", "metadata")
+    log_message("info", "-" * 80, "general", "metadata")
+    log_message(
+        "info",
+        f"Total README files found: {len(rocm_blogs_instance.blog_paths)}",
+        "general",
+        "metadata",
     )
-    sphinx_diagnostics.info(
-        f"Files not marked as blogs (skipped): {total_non_blog_files}"
+    log_message(
+        "info",
+        f"Files not marked as blogs (skipped): {total_non_blog_files}",
+        "general",
+        "metadata",
     )
-    sphinx_diagnostics.info(f"Total blogs processed: {total_blogs_processed}")
-    sphinx_diagnostics.info(f"Successful: {total_blogs_successful}")
-    sphinx_diagnostics.info(f"Errors: {total_blogs_error}")
-    sphinx_diagnostics.info(f"Warnings: {total_blogs_warning}")
-    sphinx_diagnostics.info(f"Skipped: {total_blogs_skipped}")
-    sphinx_diagnostics.info(f"Total time: {total_generation_duration:.2f} seconds")
+    log_message(
+        "info", f"Total blogs processed: {total_blogs_processed}", "general", "metadata"
+    )
+    log_message("info", f"Successful: {total_blogs_successful}", "general", "metadata")
+    log_message("info", f"Errors: {total_blogs_error}", "general", "metadata")
+    log_message("info", f"Warnings: {total_blogs_warning}", "general", "metadata")
+    log_message("info", "Skipped: {total_blogs_skipped}", "general", "metadata")
+    log_message(
+        "info",
+        "Total time: {total_generation_duration:.2f} seconds",
+        "general",
+        "metadata",
+    )
 
     if total_blogs_error > 0:
-        sphinx_diagnostics.error(
-            f"Encountered {total_blogs_error} errors during metadata generation"
+        log_message(
+            "error",
+            f"Encountered {total_blogs_error} errors during metadata generation",
+            "general",
+            "metadata",
         )
-        sphinx_diagnostics.error(
-            "See log file for details: " + str(metadata_log_filepath)
-        )
+        if is_logging_enabled_from_config():
+            log_message(
+                "error",
+                "See log file for details: " + str(metadata_log_filepath),
+                "general",
+                "metadata",
+            )
     else:
-        sphinx_diagnostics.info(
-            "Metadata generation completed successfully with no errors"
+        log_message(
+            "info",
+            "Metadata generation completed successfully with no errors",
+            "general",
+            "metadata",
         )
 
-    sphinx_diagnostics.info("=" * 80)
+    log_message("info", "=" * 80, "general", "metadata")
