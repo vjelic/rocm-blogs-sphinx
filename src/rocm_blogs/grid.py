@@ -48,12 +48,29 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
         html_meta = blog.myst.get("html_meta", {})
         if html_meta and "description lang=en" in html_meta:
             description = html_meta["description lang=en"]
-            log_message("info", "Using description from myst html_meta", "general", "grid", description=description)
+            log_message(
+                "info",
+                "Using description from myst html_meta",
+                "general",
+                "grid",
+                description=description,
+            )
     else:
-        log_message("info", "No myst metadata found, using default description", "general", "grid")
+        log_message(
+            "info",
+            "No myst metadata found, using default description",
+            "general",
+            "grid",
+        )
 
     authors_list = getattr(blog, "author", "").split(",")
-    log_message("info", f"Authors list for grid item: {authors_list}", "general", "grid", authors_list=authors_list)
+    log_message(
+        "info",
+        f"Authors list for grid item: {authors_list}",
+        "general",
+        "grid",
+        authors_list=authors_list,
+    )
 
     if hasattr(blog, "thumbnail") and blog.thumbnail:
         thumbnail_path = blog.thumbnail
@@ -88,7 +105,9 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             )
             blog.thumbnail = webp_thumbnail_path
 
-    log_message("info", f"Getting image for grid item: {title}", "general", "grid", title=title)
+    log_message(
+        "info", f"Getting image for grid item: {title}", "general", "grid", title=title
+    )
     image = blog.grab_image(ROCmBlogs)
 
     image_str = str(image)
@@ -99,7 +118,13 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
         image_str = image_str[2:]
     image_str = image_str.replace("\\", "/")
     image = image_str
-    log_message("info", f"Using image path for grid: {image_str}", "general", "grid", image_str=image_str)
+    log_message(
+        "info",
+        f"Using image path for grid: {image_str}",
+        "general",
+        "grid",
+        image_str=image_str,
+    )
 
     if "generic.jpg" in image_str.lower():
 
@@ -243,11 +268,23 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
 
     if authors_list:
         authors_html = blog.grab_authors(authors_list, ROCmBlogs)
-        log_message("info", f"Generated authors HTML: {authors_html}", "general", "grid", authors_html=authors_html)
+        log_message(
+            "info",
+            f"Generated authors HTML: {authors_html}",
+            "general",
+            "grid",
+            authors_html=authors_html,
+        )
 
     if authors_html:
         authors_html = f"by {authors_html}"
-        log_message("info", f"Final authors HTML with prefix: {authors_html}", "general", "grid", authors_html=authors_html)
+        log_message(
+            "info",
+            f"Final authors HTML with prefix: {authors_html}",
+            "general",
+            "grid",
+            authors_html=authors_html,
+        )
     else:
         log_message("debug", "No valid authors found for grid item", "general", "grid")
 
