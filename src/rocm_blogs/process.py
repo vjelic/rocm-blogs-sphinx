@@ -881,29 +881,21 @@ def process_single_blog(blog_entry, rocm_blogs):
         # OPTIMIZATION 2: Restore essential image processing functionality
         webp_versions = {}
 
-        # OPTIMIZATION 3: Essential image handling - grab images with proper processing
+        # Essential image handling with WebP conversion
         if hasattr(blog_entry, "thumbnail") and blog_entry.thumbnail:
             try:
                 blog_entry.grab_image(rocm_blogs)
 
-                # Process images properly but skip expensive WebP conversion for performance
                 if blog_entry.image_paths:
                     for i, image_path in enumerate(blog_entry.image_paths):
                         try:
                             # Validate image path exists
                             if not os.path.exists(image_path):
-                                # Try to find image in common locations
                                 image_filename = os.path.basename(image_path)
                                 possible_paths = [
                                     os.path.join(blog_directory, image_filename),
-                                    os.path.join(
-                                        blog_directory, "images", image_filename
-                                    ),
-                                    os.path.join(
-                                        rocm_blogs.blogs_directory,
-                                        "images",
-                                        image_filename,
-                                    ),
+                                    os.path.join(blog_directory, "images", image_filename),
+                                    os.path.join(rocm_blogs.blogs_directory, "images", image_filename),
                                 ]
 
                                 for possible_path in possible_paths:
@@ -912,48 +904,35 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         image_path = possible_path
                                         break
 
-                            # Skip WebP conversion for performance, but ensure image is accessible
                             if os.path.exists(image_path):
-                                # Copy image to _images directory if needed
+                                # Convert to WebP and copy to _images directory
                                 image_filename = os.path.basename(image_path)
-                                destination_path = os.path.join(
-                                    rocm_blogs.blogs_directory,
-                                    "_images",
-                                    image_filename,
-                                )
+                                name_without_ext = os.path.splitext(image_filename)[0]
+                                webp_filename = f"{name_without_ext}.webp"
+                                
+                                destination_path = os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename)
+                                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
 
-                                # Create _images directory if it doesn't exist
-                                os.makedirs(
-                                    os.path.dirname(destination_path), exist_ok=True
-                                )
-
-                                # Copy image if it doesn't exist in destination
+                                # Convert to WebP if not already exists
                                 if not os.path.exists(destination_path):
-                                    import shutil
+                                    try:
+                                        from .images import convert_to_webp
+                                        convert_to_webp(image_path, destination_path)
+                                    except Exception as webp_error:
+                                        # Fallback to copying original if WebP conversion fails
+                                        shutil.copy2(image_path, os.path.join(rocm_blogs.blogs_directory, "_images", image_filename))
+                                        blog_entry.image_paths[i] = os.path.join(rocm_blogs.blogs_directory, "_images", image_filename)
+                                        continue
 
-                                    shutil.copy2(image_path, destination_path)
-
-                                # Update the image path to point to the _images directory
+                                # Update the image path to point to the WebP version
                                 blog_entry.image_paths[i] = destination_path
 
                         except Exception as img_error:
-                            # Log image processing errors but continue
-                            log_message(
-                                "warning",
-                                f"Error processing image {image_path}: {img_error}",
-                                "general",
-                                "process",
-                            )
+                            log_message("warning", f"Error processing image {image_path}: {img_error}", "general", "process")
                             continue
 
             except Exception as grab_error:
-                # Log image grab errors but continue
-                log_message(
-                    "warning",
-                    f"Error grabbing images for blog {readme_file_path}: {grab_error}",
-                    "general",
-                    "process",
-                )
+                log_message("warning", f"Error grabbing images for blog {readme_file_path}: {grab_error}", "general", "process")
 
         # OPTIMIZATION 4: Reduce logging overhead - only log errors
         try:
