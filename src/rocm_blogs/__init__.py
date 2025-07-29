@@ -3304,7 +3304,7 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
                     debug_authentication_key, should_debug_authentication)
 
                 # Always debug authentication during build if key is provided
-                print("\n🔍 ROCm Blogs Authentication Debug")
+                print("\nROCm Blogs Authentication Debug")
                 print("-" * 50)
                 debug_info = debug_authentication_key(
                     auth_key, "sphinx_build", print_report=True
@@ -3312,17 +3312,17 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
 
                 # If authentication failed, provide clear guidance
                 if not debug_info.get("validation_result", False):
-                    print("\n⚠️  Authentication failed - logging will be disabled!")
+                    print("\nAuthentication failed - logging will be disabled!")
                     print("   See recommendations above for how to fix this.")
                 else:
-                    print("\n✅ Authentication successful - logging is enabled!")
+                    print("\nAuthentication successful - logging is enabled!")
 
             except ImportError:
                 print(
-                    "🔍 Authentication debugging not available (rocm_blogs_logging not found)"
+                    "Authentication debugging not available (rocm_blogs_logging not found)"
                 )
             except Exception as debug_error:
-                print(f"🔍 Authentication debug error: {debug_error}")
+                print(f"Authentication debug error: {debug_error}")
 
         # Override environment variables with Sphinx config
         if not debug_enabled:
