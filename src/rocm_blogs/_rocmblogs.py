@@ -84,7 +84,6 @@ class ROCmBlogs:
             "_rocmblogs",
         )
 
-        # (Optional)
         with open("candidates.txt", "w", encoding="utf-8") as f:
             for candidate in candidates:
                 f.write(str(candidate) + "\n")

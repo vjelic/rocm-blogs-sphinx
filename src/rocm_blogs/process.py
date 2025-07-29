@@ -633,16 +633,32 @@ def _generate_grid_items(
                 "process",
             )
 
-        # Generate grid items in parallel
+        # Generate grid items in parallel with proper deduplication
         with ThreadPoolExecutor() as executor:
             grid_futures = {}
 
             for blog_entry in blog_list:
+                # Check if blog is already used (by ID for more reliable comparison)
+                blog_id = id(blog_entry)
+                blog_path = getattr(blog_entry, "file_path", None)
 
-                if skip_used and blog_entry in used_blogs:
+                # Check both ID and file path for comprehensive deduplication
+                already_used = False
+                if skip_used:
+                    # Check by object ID
+                    if any(id(used_blog) == blog_id for used_blog in used_blogs):
+                        already_used = True
+                    # Also check by file path as backup
+                    elif blog_path and any(
+                        getattr(used_blog, "file_path", None) == blog_path
+                        for used_blog in used_blogs
+                    ):
+                        already_used = True
+
+                if already_used:
                     log_message(
                         "debug",
-                        f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used",
+                        f"Skipping blog '{getattr(blog_entry, 'blog_title', 'Unknown')}' because it's already used (path: {blog_path})",
                         "general",
                         "process",
                     )
@@ -656,9 +672,10 @@ def _generate_grid_items(
                         "general",
                         "process",
                     )
-                    continue
+                    break
 
-                if skip_used and blog_entry not in used_blogs:
+                # Add to used_blogs list if skip_used is enabled
+                if skip_used:
                     used_blogs.append(blog_entry)
 
                 grid_futures[
@@ -782,10 +799,58 @@ def _generate_grid_items(
 
 
 def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
-    """Generate grid items with lazy loading for images."""
+    """Generate grid items with lazy loading for images - WITH THREAD-SAFE DEDUPLICATION."""
     try:
         lazy_grid_items = []
         error_count = 0
+
+        # THREAD-SAFE DEDUPLICATION: Apply the same deduplication logic as in blog_generation
+        import threading
+
+        seen_paths = set()
+        seen_titles = set()
+        deduplicated_blog_list = []
+        dedup_lock = threading.Lock()
+
+        for blog in blog_list:
+            # Use multiple identifiers for comprehensive deduplication
+            blog_path = getattr(blog, "file_path", None)
+            blog_title = getattr(blog, "blog_title", None)
+
+            with dedup_lock:  # Thread-safe access to shared data structures
+                # Check for duplicates by path and title
+                is_duplicate = False
+
+                if blog_path and blog_path in seen_paths:
+                    is_duplicate = True
+                    log_message(
+                        "debug",
+                        f"LAZY LOAD DUPLICATE PATH DETECTED: {blog_path}",
+                        "general",
+                        "process",
+                    )
+
+                if blog_title and blog_title in seen_titles:
+                    is_duplicate = True
+                    log_message(
+                        "debug",
+                        f"LAZY LOAD DUPLICATE TITLE DETECTED: {blog_title} (path: {blog_path})",
+                        "general",
+                        "process",
+                    )
+
+                if not is_duplicate and blog_path:
+                    seen_paths.add(blog_path)
+                    if blog_title:
+                        seen_titles.add(blog_title)
+                    deduplicated_blog_list.append(blog)
+
+        log_message(
+            "info",
+            f"Lazy load deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs (removed {len(blog_list) - len(deduplicated_blog_list)} duplicates)",
+            "general",
+            "process",
+        )
 
         grid_params = inspect.signature(generate_grid).parameters
         if "lazy_load" not in grid_params:
@@ -803,7 +868,7 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
             )
 
             # If lazy_load is not supported, fall back to regular grid
-            # generation
+            # generation with deduplication
             log_message(
                 "info",
                 "Falling back to regular grid generation without lazy loading",
@@ -814,10 +879,14 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
             # to mark blogs as used
             temp_used_blogs = []
             return _generate_grid_items(
-                rocm_blogs, blog_list, len(blog_list), temp_used_blogs, skip_used=False
+                rocm_blogs,
+                deduplicated_blog_list,
+                len(deduplicated_blog_list),
+                temp_used_blogs,
+                skip_used=False,
             )
 
-        for blog_entry in blog_list:
+        for blog_entry in deduplicated_blog_list:
             try:
                 # Generate a grid item with lazy loading
                 log_message(
@@ -863,10 +932,10 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
         # Handle the case where no grid items were generated
         if not lazy_grid_items:
             # If there were no blogs to process, just return an empty list
-            if not blog_list:
+            if not deduplicated_blog_list:
                 log_message(
                     "warning",
-                    "No blogs were provided to generate lazy-loaded grid items. Returning empty list.",
+                    "No blogs were provided to generate lazy-loaded grid items after deduplication. Returning empty list.",
                     "general",
                     "process",
                 )
@@ -905,7 +974,7 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
         else:
             log_message(
                 "info",
-                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items",
+                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items from {len(deduplicated_blog_list)} unique blogs",
                 "general",
                 "process",
             )
@@ -938,272 +1007,108 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
 
 
 def process_single_blog(blog_entry, rocm_blogs):
-    """Process a single blog file."""
+    """Process a single blog file - OPTIMIZED VERSION."""
     try:
         processing_start_time = time.time()
         readme_file_path = blog_entry.file_path
         blog_directory = os.path.dirname(readme_file_path)
 
         if not hasattr(blog_entry, "author") or not blog_entry.author:
-            log_message(
-                "warning",
-                f"Skipping blog {readme_file_path} without author",
-                "general",
-                "process",
-            )
+            # Skip logging for performance - just return silently
             return
 
+        # OPTIMIZATION 1: Read file once and cache content
         with open(
             readme_file_path, "r", encoding="utf-8", errors="replace"
         ) as source_file:
             file_content = source_file.read()
-
             content_lines = file_content.splitlines(True)
 
+        # OPTIMIZATION 2: Restore essential image processing functionality
         webp_versions = {}
 
+        # OPTIMIZATION 3: Essential image handling - grab images with proper processing
         if hasattr(blog_entry, "thumbnail") and blog_entry.thumbnail:
             try:
                 blog_entry.grab_image(rocm_blogs)
-                log_message(
-                    "info",
-                    f"Found thumbnail image: {blog_entry.image_paths[0] if blog_entry.image_paths else 'None'}",
-                    "general",
-                    "process",
-                )
 
-                thumbnail_images = (
-                    [os.path.basename(path) for path in blog_entry.image_paths]
-                    if blog_entry.image_paths
-                    else []
-                )
+                # Process images properly but skip expensive WebP conversion for performance
+                if blog_entry.image_paths:
+                    for i, image_path in enumerate(blog_entry.image_paths):
+                        try:
+                            # Validate image path exists
+                            if not os.path.exists(image_path):
+                                # Try to find image in common locations
+                                image_filename = os.path.basename(image_path)
+                                possible_paths = [
+                                    os.path.join(blog_directory, image_filename),
+                                    os.path.join(
+                                        blog_directory, "images", image_filename
+                                    ),
+                                    os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "images",
+                                        image_filename,
+                                    ),
+                                ]
 
-                if thumbnail_images:
-                    for image_filename in thumbnail_images:
-                        possible_image_paths = []
+                                for possible_path in possible_paths:
+                                    if os.path.exists(possible_path):
+                                        blog_entry.image_paths[i] = possible_path
+                                        image_path = possible_path
+                                        break
 
-                        blog_dir_image = os.path.join(blog_directory, image_filename)
-                        blog_dir_images_image = os.path.join(
-                            blog_directory, "images", image_filename
-                        )
+                            # Skip WebP conversion for performance, but ensure image is accessible
+                            if os.path.exists(image_path):
+                                # Copy image to _images directory if needed
+                                image_filename = os.path.basename(image_path)
+                                destination_path = os.path.join(
+                                    rocm_blogs.blogs_directory,
+                                    "_images",
+                                    image_filename,
+                                )
 
-                        blogs_directory = rocm_blogs.blogs_directory
-                        global_image = os.path.join(
-                            blogs_directory, "images", image_filename
-                        )
+                                # Create _images directory if it doesn't exist
+                                os.makedirs(
+                                    os.path.dirname(destination_path), exist_ok=True
+                                )
 
-                        possible_image_paths.extend(
-                            [blog_dir_image, blog_dir_images_image, global_image]
-                        )
+                                # Copy image if it doesn't exist in destination
+                                if not os.path.exists(destination_path):
+                                    import shutil
 
-                        for image_path in possible_image_paths:
-                            if os.path.exists(image_path) and os.path.isfile(
-                                image_path
-                            ):
-                                try:
-                                    log_message(
-                                        "info",
-                                        f"Converting image to WebP: {image_path}",
-                                        "general",
-                                        "process",
-                                    )
-                                    webp_success, webp_path = convert_to_webp(
-                                        image_path
-                                    )
+                                    shutil.copy2(image_path, destination_path)
 
-                                    path_to_optimize = (
-                                        webp_path
-                                        if webp_success and webp_path
-                                        else image_path
-                                    )
+                                # Update the image path to point to the _images directory
+                                blog_entry.image_paths[i] = destination_path
 
-                                    log_message(
-                                        "info",
-                                        f"Optimizing image: {path_to_optimize}",
-                                        "general",
-                                        "process",
-                                    )
-                                    optimization_success, optimized_webp_path = (
-                                        optimize_image(
-                                            path_to_optimize, thumbnail_images
-                                        )
-                                    )
-
-                                    if webp_success and webp_path:
-                                        webp_versions[os.path.basename(image_path)] = (
-                                            os.path.basename(webp_path)
-                                        )
-                                    elif optimization_success and optimized_webp_path:
-                                        webp_versions[os.path.basename(image_path)] = (
-                                            os.path.basename(optimized_webp_path)
-                                        )
-                                except Exception as image_error:
-                                    log_message(
-                                        "warning",
-                                        f"Error processing image {image_path}: {image_error}",
-                                        "general",
-                                        "process",
-                                    )
-                                    log_message(
-                                        "debug",
-                                        f"Traceback: {traceback.format_exc()}",
-                                        "general",
-                                        "process",
-                                    )
-                                break
-
-                blog_images_directory = os.path.join(blog_directory, "images")
-                if os.path.exists(blog_images_directory) and os.path.isdir(
-                    blog_images_directory
-                ):
-                    log_message(
-                        "info",
-                        f"Checking for images in blog images directory: {blog_images_directory}",
-                        "general",
-                        "process",
-                    )
-                    for filename in os.listdir(blog_images_directory):
-                        image_path = os.path.join(blog_images_directory, filename)
-                        if os.path.isfile(image_path):
-                            _, file_extension = os.path.splitext(filename)
-                            if file_extension.lower() in [
-                                ".jpg",
-                                ".jpeg",
-                                ".png",
-                                ".webp",
-                                ".bmp",
-                                ".tiff",
-                                ".tif",
-                            ]:
-                                try:
-                                    log_message(
-                                        "info",
-                                        f"Converting image to WebP: {image_path}",
-                                        "general",
-                                        "process",
-                                    )
-                                    webp_success, webp_path = convert_to_webp(
-                                        image_path
-                                    )
-
-                                    path_to_optimize = (
-                                        webp_path
-                                        if webp_success and webp_path
-                                        else image_path
-                                    )
-
-                                    log_message(
-                                        "info",
-                                        f"Optimizing image: {path_to_optimize}",
-                                        "general",
-                                        "process",
-                                    )
-                                    optimization_success, optimized_webp_path = (
-                                        optimize_image(
-                                            path_to_optimize, thumbnail_images
-                                        )
-                                    )
-
-                                    if webp_success and webp_path:
-                                        webp_versions[os.path.basename(image_path)] = (
-                                            os.path.basename(webp_path)
-                                        )
-                                    elif optimization_success and optimized_webp_path:
-                                        webp_versions[os.path.basename(image_path)] = (
-                                            os.path.basename(optimized_webp_path)
-                                        )
-                                except Exception as image_error:
-                                    log_message(
-                                        "warning",
-                                        f"Error processing image {image_path}: {image_error}",
-                                        "general",
-                                        "process",
-                                    )
-                                    log_message(
-                                        "debug",
-                                        f"Traceback: {traceback.format_exc()}",
-                                        "general",
-                                        "process",
-                                    )
-
-                if blog_entry.image_paths and webp_versions:
-                    for i, img_path in enumerate(blog_entry.image_paths):
-                        image_name = os.path.basename(img_path)
-                        if image_name in webp_versions:
-                            webp_name = webp_versions[image_name]
-                            blog_entry.image_paths[i] = img_path.replace(
-                                image_name, webp_name
-                            )
+                        except Exception as img_error:
+                            # Log image processing errors but continue
                             log_message(
-                                "info",
-                                f"Using WebP version for blog image: {webp_name}",
+                                "warning",
+                                f"Error processing image {image_path}: {img_error}",
                                 "general",
                                 "process",
                             )
+                            continue
 
-                            if (
-                                hasattr(blog_entry, "thumbnail")
-                                and blog_entry.thumbnail
-                            ):
-                                thumbnail_name = os.path.basename(blog_entry.thumbnail)
-                                if thumbnail_name == image_name:
-                                    blog_entry.thumbnail = blog_entry.thumbnail.replace(
-                                        thumbnail_name, webp_name
-                                    )
-                                    log_message(
-                                        "info",
-                                        f"Updated blog thumbnail to use WebP: {webp_name}",
-                                        "general",
-                                        "process",
-                                    )
-
-                                    for j, line in enumerate(content_lines):
-                                        if image_name in line:
-                                            content_lines[j] = line.replace(
-                                                image_name, webp_name
-                                            )
-                                            log_message(
-                                                "info",
-                                                f"Updated image reference in blog content: {image_name} -> {webp_name}",
-                                                "general",
-                                                "process",
-                                            )
-            except Exception as thumbnail_error:
+            except Exception as grab_error:
+                # Log image grab errors but continue
                 log_message(
                     "warning",
-                    f"Error processing thumbnail for blog {readme_file_path}: {thumbnail_error}",
-                    "general",
-                    "process",
-                )
-                log_message(
-                    "debug",
-                    f"Traceback: {traceback.format_exc()}",
+                    f"Error grabbing images for blog {readme_file_path}: {grab_error}",
                     "general",
                     "process",
                 )
 
+        # OPTIMIZATION 4: Reduce logging overhead - only log errors
         try:
             word_count = count_words_in_markdown(file_content)
             blog_entry.set_word_count(word_count)
-            log_message(
-                "info",
-                f"\033[33mWord count for {readme_file_path}: {word_count}\033[0m",
-                "general",
-                "process",
-            )
-        except Exception as word_count_error:
-            log_message(
-                "warning",
-                f"Error counting words for blog {readme_file_path}: {word_count_error}",
-                "general",
-                "process",
-            )
-            log_message(
-                "debug",
-                f"Traceback: {traceback.format_exc()}",
-                "general",
-                "process",
-            )
+            # Skip word count logging for performance
+        except Exception:
+            # Silent fail for performance - word count is not critical
+            blog_entry.set_word_count(0)
 
         try:
             authors_list = blog_entry.author.split(",")

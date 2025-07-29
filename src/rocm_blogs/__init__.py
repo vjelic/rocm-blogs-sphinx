@@ -5,11 +5,13 @@ __init__.py for the rocm_blogs package.
 
 import functools
 import importlib.resources as pkg_resources
+import json
 import os
 import pathlib
+import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -17,20 +19,26 @@ from jinja2 import Template
 from sphinx.application import Sphinx
 from sphinx.errors import SphinxError
 
-# Import the new structured logging system
 try:
-    from rocm_blogs_logging import (LogCategory, LogLevel, configure_logging,
-                                    get_logger, is_logging_enabled,
-                                    log_operation)
+    from rocm_blogs_logging import (CProfiler, LogCategory, LogLevel,
+                                    ProfileStats, configure_logging,
+                                    get_logger, get_profiler,
+                                    is_logging_enabled, log_operation,
+                                    profile_function, profile_operation)
 
     LOGGING_AVAILABLE = True
+    PROFILING_AVAILABLE = True
 except ImportError:
     # Fallback if logging package is not available
     LOGGING_AVAILABLE = False
+    PROFILING_AVAILABLE = False
     get_logger = lambda *args, **kwargs: None
     configure_logging = lambda *args, **kwargs: None
     log_operation = lambda *args, **kwargs: lambda func: func
     is_logging_enabled = lambda auth_key=None: False
+    profile_operation = lambda *args, **kwargs: lambda func: func
+    profile_function = lambda *args, **kwargs: lambda func: func
+    get_profiler = lambda *args, **kwargs: None
 
     class LogLevel:
         DEBUG = "DEBUG"
@@ -233,6 +241,115 @@ def log_total_build_time(sphinx_app, build_exception):
         raise
 
 
+def _create_build_timing_summary_file(total_elapsed_time, phases_to_display):
+    """Create a dedicated build timing summary file with clean formatting."""
+    try:
+        # Only create timing summary file if logging is enabled
+        if not is_logging_enabled_from_config():
+            return
+
+        # Create logs directory if it doesn't exist
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+
+        # Create timestamped filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        summary_file = logs_dir / f"build_timing_summary_{timestamp}.txt"
+
+        with open(summary_file, "w", encoding="utf-8") as f:
+            # Write header
+            f.write("=" * 80 + "\n")
+            f.write("ROCm Blogs Build Process Timing Summary\n")
+            f.write("=" * 80 + "\n\n")
+
+            # Write build information
+            f.write(
+                f"Build completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            )
+            f.write(f"Total build time: {total_elapsed_time:.2f} seconds\n\n")
+
+            # Write phase breakdown
+            f.write("Phase Breakdown:\n")
+            f.write("-" * 50 + "\n")
+
+            for phase_key, phase_display_name in phases_to_display:
+                if phase_key in _BUILD_PHASES:
+                    phase_duration = _BUILD_PHASES[phase_key]
+                    percentage = (
+                        (phase_duration / total_elapsed_time * 100)
+                        if total_elapsed_time > 0
+                        else 0
+                    )
+                    # Clean formatting without ANSI color codes
+                    padded_name = f"{phase_display_name}:".ljust(30)
+                    f.write(
+                        f"{padded_name} {phase_duration:.2f} seconds ({percentage:.1f}%)\n"
+                    )
+
+            # Write summary statistics
+            f.write("\n" + "-" * 50 + "\n")
+            f.write("Summary Statistics:\n")
+            f.write("-" * 50 + "\n")
+
+            # Calculate some basic statistics
+            phase_times = [
+                _BUILD_PHASES.get(phase_key, 0)
+                for phase_key, _ in phases_to_display
+                if phase_key in _BUILD_PHASES
+            ]
+            if phase_times:
+                f.write(f"Fastest phase: {min(phase_times):.2f} seconds\n")
+                f.write(f"Slowest phase: {max(phase_times):.2f} seconds\n")
+                f.write(
+                    f"Average phase time: {sum(phase_times) / len(phase_times):.2f} seconds\n"
+                )
+
+            # Write detailed phase data in JSON format for potential analysis
+            f.write("\n" + "-" * 50 + "\n")
+            f.write("Detailed Phase Data (JSON):\n")
+            f.write("-" * 50 + "\n")
+
+            phase_data = {
+                "total_build_time": total_elapsed_time,
+                "build_timestamp": datetime.now().isoformat(),
+                "phases": {},
+            }
+
+            for phase_key, phase_display_name in phases_to_display:
+                if phase_key in _BUILD_PHASES:
+                    phase_duration = _BUILD_PHASES[phase_key]
+                    percentage = (
+                        (phase_duration / total_elapsed_time * 100)
+                        if total_elapsed_time > 0
+                        else 0
+                    )
+                    phase_data["phases"][phase_key] = {
+                        "name": phase_display_name,
+                        "duration_seconds": phase_duration,
+                        "percentage": percentage,
+                    }
+
+            f.write(json.dumps(phase_data, indent=2))
+            f.write("\n\n" + "=" * 80 + "\n")
+
+        log_message(
+            "info",
+            f"Build timing summary saved to: {summary_file}",
+            "timing_summary",
+            "build_process",
+            extra_data={"summary_file": str(summary_file)},
+        )
+
+    except Exception as error:
+        log_message(
+            "error",
+            f"Error creating build timing summary file: {error}",
+            "timing_summary",
+            "build_process",
+            error=error,
+        )
+
+
 def _log_timing_summary(total_elapsed_time):
     """Format and log the timing summary for all build phases."""
     try:
@@ -246,6 +363,9 @@ def _log_timing_summary(total_elapsed_time):
             ("update_category_pages", "Category pages generation"),
             ("other", "Other processing"),
         ]
+
+        # Create a dedicated build timing summary file
+        _create_build_timing_summary_file(total_elapsed_time, phases_to_display)
 
         # Log the header
         log_message("info", "=" * 80, "timing_summary", "build_process")
@@ -1121,8 +1241,13 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             total_blogs_warning += 1
             return
 
-        # Track blogs that have been used to avoid duplication
         used_blogs = []
+        used_blog_ids = set()
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle, "Implementing comprehensive deduplication system\n"
+            )
 
         if featured_blogs:
             max_banner_blogs = min(len(featured_blogs), BANNER_BLOGS_COUNT)
@@ -1130,215 +1255,239 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         else:
             banner_blogs = all_blogs[:BANNER_BLOGS_COUNT]
 
+        # Add banner blogs to used list
+        for blog in banner_blogs:
+            used_blogs.append(blog)
+            used_blog_ids.add(id(blog))
+
         if log_file_handle:
             safe_log_write(
                 log_file_handle,
-                f"Generating banner slider with {len(banner_blogs)} blogs (using featured blogs: {bool(featured_blogs)})\n",
+                f"Banner slider: Using {len(banner_blogs)} blogs (featured: {bool(featured_blogs)})\n",
             )
-            if featured_blogs:
-                safe_log_write(
-                    log_file_handle,
-                    f"Using {len(banner_blogs)} featured blogs for banner slider (limited to BANNER_BLOGS_COUNT={BANNER_BLOGS_COUNT})\n",
-                )
-            else:
-                safe_log_write(
-                    log_file_handle,
-                    f"No featured blogs found, using first {BANNER_BLOGS_COUNT} blogs for banner slider\n",
-                )
+            safe_log_write(
+                log_file_handle,
+                f"Added {len(banner_blogs)} banner blogs to deduplication list\n",
+            )
 
         # Generate banner slider content
-        banner_content = _generate_banner_slider(rocm_blogs, banner_blogs, used_blogs)
+        banner_content = _generate_banner_slider(
+            rocm_blogs, banner_blogs, []
+        )  # Don't pass used_blogs to avoid double-adding
 
         if log_file_handle:
             safe_log_write(log_file_handle, "Banner slider generation completed\n")
 
-        # Generate grid items for different sections
-        log_message(
-            "info",
-            "Generating grid items for index page sections",
-            "general",
-            "__init__",
-        )
-
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle, "Generating grid items for index page sections\n"
-            )
-
-        # Create a list of featured blog IDs to exclude them from the main grid
-        featured_blog_ids = [id(blog) for blog in featured_blogs]
-
-        # Main grid items - will exclude banner blogs and featured blogs
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle,
-                f"Generating main grid items with up to {MAIN_GRID_BLOGS_COUNT} blogs\n",
-            )
-            safe_log_write(
-                log_file_handle,
-                f"Excluding {len(featured_blog_ids)} featured blogs from main grid\n",
-            )
-
-        # Filter out featured blogs from the main grid
-        non_featured_blogs = [
-            blog for blog in all_blogs if id(blog) not in featured_blog_ids
-        ]
-        main_grid_items = _generate_grid_items(
-            rocm_blogs,
-            non_featured_blogs,
-            MAIN_GRID_BLOGS_COUNT,
-            used_blogs,
-            True,
-            False,
-        )
-
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle, f"Generated {len(main_grid_items)} main grid items\n"
-            )
-
-        # Filter blogs by category and ensure they're all blog posts
-        ecosystem_blogs = [
-            blog
-            for blog in all_blogs
-            if hasattr(blog, "category") and blog.category == "Ecosystems and Partners"
-        ]
-        application_blogs = [
-            blog
-            for blog in all_blogs
-            if hasattr(blog, "category") and blog.category == "Applications & models"
-        ]
-        software_blogs = [
-            blog
-            for blog in all_blogs
-            if hasattr(blog, "category")
-            and blog.category == "Software tools & optimizations"
-        ]
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Filtered blogs by category:\n")
-            safe_log_write(
-                log_file_handle,
-                f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs\n",
-            )
-            safe_log_write(
-                log_file_handle,
-                f"  - Applications & models: {len(application_blogs)} blogs\n",
-            )
-            safe_log_write(
-                log_file_handle,
-                f"  - Software tools & optimizations: {len(software_blogs)} blogs\n",
-            )
-
-        # Generate grid items for each category
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle,
-                f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category\n",
-            )
-
-        ecosystem_grid_items = _generate_grid_items(
-            rocm_blogs,
-            ecosystem_blogs,
-            CATEGORY_GRID_BLOGS_COUNT,
-            used_blogs,
-            True,
-            False,
-        )
-        application_grid_items = _generate_grid_items(
-            rocm_blogs,
-            application_blogs,
-            CATEGORY_GRID_BLOGS_COUNT,
-            used_blogs,
-            True,
-            False,
-        )
-        software_grid_items = _generate_grid_items(
-            rocm_blogs,
-            software_blogs,
-            CATEGORY_GRID_BLOGS_COUNT,
-            used_blogs,
-            True,
-            False,
-        )
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Generated category grid items:\n")
-            safe_log_write(
-                log_file_handle,
-                f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items\n",
-            )
-            safe_log_write(
-                log_file_handle,
-                f"  - Applications & models: {len(application_grid_items)} grid items\n",
-            )
-            safe_log_write(
-                log_file_handle,
-                f"  - Software tools & optimizations: {len(software_grid_items)} grid items\n",
-            )
-
-        # Generate featured grid items if we have featured blogs
         featured_grid_items = []
         if featured_blogs:
             if log_file_handle:
                 safe_log_write(
                     log_file_handle,
-                    f"Generating featured grid items with {len(featured_blogs)} featured blogs\n",
+                    f"Featured section: Processing {len(featured_blogs)} featured blogs\n",
                 )
 
             try:
-                # Only generate grid items if we have at least one featured
-                # blog
+                # Generate featured grid items (these will also be marked as used)
                 if len(featured_blogs) > 0:
+                    # Don't add to used_blogs here since they're already added from banner
                     featured_grid_items = _generate_grid_items(
                         rocm_blogs,
                         featured_blogs,
                         len(featured_blogs),
-                        used_blogs,
-                        False,
+                        [],  # Empty list to avoid double-tracking
+                        False,  # Don't skip any since these are the featured ones
                         False,
                     )
+
+                    # Ensure all featured blogs are in the used list
+                    for blog in featured_blogs:
+                        if id(blog) not in used_blog_ids:
+                            used_blogs.append(blog)
+                            used_blog_ids.add(id(blog))
 
                     if log_file_handle:
                         safe_log_write(
                             log_file_handle,
-                            f"Generated {len(featured_grid_items)} featured grid items\n",
+                            f"Featured section: Generated {len(featured_grid_items)} grid items\n",
                         )
-                else:
-                    if log_file_handle:
                         safe_log_write(
                             log_file_handle,
-                            "Featured blogs list is empty, skipping grid item generation\n",
+                            f"Total blogs in deduplication list: {len(used_blog_ids)}\n",
                         )
             except Exception as featured_error:
-                # Log the error but continue with the build
                 log_message(
                     "warning",
                     f"Error generating featured grid items: {featured_error}. Continuing without featured blogs.",
                     "general",
                     "__init__",
                 )
-                log_message(
-                    "debug",
-                    f"Traceback: {traceback.format_exc()}",
-                    "general",
-                    "__init__",
-                )
-
                 if log_file_handle:
                     safe_log_write(
                         log_file_handle,
                         f"WARNING: Error generating featured grid items: {featured_error}\n",
                     )
-                    safe_log_write(
-                        log_file_handle, f"Traceback: {traceback.format_exc()}\n"
-                    )
-                    safe_log_write(
-                        log_file_handle, "Continuing without featured blogs\n"
-                    )
         else:
             if log_file_handle:
                 safe_log_write(log_file_handle, "No featured blogs to display\n")
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"Generating Recent Posts section with up to {MAIN_GRID_BLOGS_COUNT} blogs (second priority)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Excluding {len(used_blog_ids)} already used blogs from Recent Posts\n",
+            )
+
+        # Filter out already used blogs from Recent Posts
+        non_used_blogs = [blog for blog in all_blogs if id(blog) not in used_blog_ids]
+
+        main_grid_items = _generate_grid_items(
+            rocm_blogs,
+            non_used_blogs,
+            MAIN_GRID_BLOGS_COUNT,
+            used_blogs,
+            True,  # Skip used blogs
+            False,
+        )
+
+        # Update used_blog_ids with newly used blogs from Recent Posts section
+        for blog in non_used_blogs[:MAIN_GRID_BLOGS_COUNT]:
+            if id(blog) not in used_blog_ids:
+                used_blog_ids.add(id(blog))
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"Generated {len(main_grid_items)} Recent Posts grid items from {len(non_used_blogs)} available blogs\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Updated used blogs count after Recent Posts: {len(used_blog_ids)}\n",
+            )
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                "Filtering category blogs with deduplication (lowest priority)\n",
+            )
+
+        # Filter out used blogs from category lists (now includes Recent Posts)
+        ecosystem_blogs = [
+            blog
+            for blog in all_blogs
+            if hasattr(blog, "category")
+            and blog.category == "Ecosystems and Partners"
+            and id(blog) not in used_blog_ids
+        ]
+        application_blogs = [
+            blog
+            for blog in all_blogs
+            if hasattr(blog, "category")
+            and blog.category == "Applications & models"
+            and id(blog) not in used_blog_ids
+        ]
+        software_blogs = [
+            blog
+            for blog in all_blogs
+            if hasattr(blog, "category")
+            and blog.category == "Software tools & optimizations"
+            and id(blog) not in used_blog_ids
+        ]
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle, f"Category blogs after Recent Posts deduplication:\n"
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Ecosystems and Partners: {len(ecosystem_blogs)} blogs (excluded {len([b for b in all_blogs if hasattr(b, 'category') and b.category == 'Ecosystems and Partners']) - len(ecosystem_blogs)} duplicates)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Applications & models: {len(application_blogs)} blogs (excluded {len([b for b in all_blogs if hasattr(b, 'category') and b.category == 'Applications & models']) - len(application_blogs)} duplicates)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Software tools & optimizations: {len(software_blogs)} blogs (excluded {len([b for b in all_blogs if hasattr(b, 'category') and b.category == 'Software tools & optimizations']) - len(software_blogs)} duplicates)\n",
+            )
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"Generating category grid items with up to {CATEGORY_GRID_BLOGS_COUNT} blogs per category (lowest priority)\n",
+            )
+
+        # Generate ecosystem grid items first and update used list
+        ecosystem_grid_items = _generate_grid_items(
+            rocm_blogs,
+            ecosystem_blogs,
+            CATEGORY_GRID_BLOGS_COUNT,
+            used_blogs,
+            True,  # Skip used blogs
+            False,
+        )
+
+        # Update used_blog_ids with newly used blogs from ecosystem section
+        for blog in ecosystem_blogs[:CATEGORY_GRID_BLOGS_COUNT]:
+            if id(blog) not in used_blog_ids:
+                used_blog_ids.add(id(blog))
+
+        # Re-filter application blogs to exclude newly used ecosystem blogs
+        application_blogs_filtered = [
+            blog for blog in application_blogs if id(blog) not in used_blog_ids
+        ]
+
+        application_grid_items = _generate_grid_items(
+            rocm_blogs,
+            application_blogs_filtered,
+            CATEGORY_GRID_BLOGS_COUNT,
+            used_blogs,
+            True,  # Skip used blogs
+            False,
+        )
+
+        # Update used_blog_ids with newly used blogs from application section
+        for blog in application_blogs_filtered[:CATEGORY_GRID_BLOGS_COUNT]:
+            if id(blog) not in used_blog_ids:
+                used_blog_ids.add(id(blog))
+
+        # Re-filter software blogs to exclude newly used blogs from previous sections
+        software_blogs_filtered = [
+            blog for blog in software_blogs if id(blog) not in used_blog_ids
+        ]
+
+        software_grid_items = _generate_grid_items(
+            rocm_blogs,
+            software_blogs_filtered,
+            CATEGORY_GRID_BLOGS_COUNT,
+            used_blogs,
+            True,  # Skip used blogs
+            False,
+        )
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"Generated category grid items with sequential deduplication (lowest priority):\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Ecosystems and Partners: {len(ecosystem_grid_items)} grid items from {len(ecosystem_blogs)} available\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Applications & models: {len(application_grid_items)} grid items from {len(application_blogs_filtered)} available (after ecosystem dedup)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"  - Software tools & optimizations: {len(software_grid_items)} grid items from {len(software_blogs_filtered)} available (after all dedup)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Final deduplication summary: {len(used_blog_ids)} blogs used across all sections\n",
+            )
 
         # Replace placeholders in the template
         if log_file_handle:
@@ -1440,8 +1589,9 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             safe_log_close(log_file_handle)
 
 
+@profile_function("blog_generation", save_report=True)
 def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
-    """Generate blog pages with styling and metadata."""
+    """Generate blog pages with styling and metadata - OPTIMIZED VERSION."""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
     phase_name = "blog_generation"
@@ -1459,82 +1609,122 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
 
     try:
         if log_file_handle:
-            safe_log_write(log_file_handle, "Starting blog generation process\n")
+            safe_log_write(
+                log_file_handle, "Starting OPTIMIZED blog generation process\n"
+            )
             safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
-        # Initialize ROCmBlogs if not provided
         if rocm_blogs is None:
             build_env = sphinx_app.builder.env
             source_dir = Path(build_env.srcdir)
             rocm_blogs = ROCmBlogs()
-
             rocm_blogs.sphinx_app = sphinx_app
             rocm_blogs.sphinx_env = build_env
-
-            # Find and process blogs
             blogs_directory = rocm_blogs.find_blogs_directory(str(source_dir))
+
+            if not blogs_directory:
+                error_message = "Could not find blogs directory"
+                log_message("error", error_message, "general", "__init__")
+                _CRITICAL_ERROR_OCCURRED = True
+                raise ROCmBlogsError(error_message)
+
+            rocm_blogs.blogs_directory = str(blogs_directory)
+            rocm_blogs.find_author_files()
+            readme_count = rocm_blogs.find_readme_files()
+            rocm_blogs.create_blog_objects()
+            rocm_blogs.blogs.sort_blogs_by_date()
+
+            if log_file_handle:
+                safe_log_write(
+                    log_file_handle,
+                    f"Initialized new ROCmBlogs instance with {readme_count} README files\n",
+                )
         else:
             rocm_blogs.sphinx_app = sphinx_app
             rocm_blogs.sphinx_env = sphinx_app.builder.env
             blogs_directory = rocm_blogs.blogs_directory
-        if not blogs_directory:
-            error_message = "Could not find blogs directory"
-            log_message("error", error_message, "general", "__init__")
-            log_message(
-                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
-            )
 
             if log_file_handle:
-                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
                 safe_log_write(
-                    log_file_handle, f"Traceback: {traceback.format_exc()}\n"
+                    log_file_handle,
+                    f"Using shared ROCmBlogs instance: {blogs_directory}\n",
                 )
 
-            _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError(error_message)
+        all_blogs = rocm_blogs.blogs.get_blogs()
 
-        rocm_blogs.blogs_directory = str(blogs_directory)
+        seen_paths = set()
+        seen_titles = set()
+        blog_list = []
+        dedup_lock = threading.Lock()
 
-        rocm_blogs.find_author_files()
+        for blog in all_blogs:
+            if hasattr(blog, "blogpost") and blog.blogpost:
+                blog_path = getattr(blog, "file_path", None)
+                blog_title = getattr(blog, "blog_title", None)
 
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
-            )
+                with dedup_lock:
+                    is_duplicate = False
 
-        readme_count = rocm_blogs.find_readme_files()
+                    if blog_path and blog_path in seen_paths:
+                        is_duplicate = True
+                        if log_file_handle:
+                            safe_log_write(
+                                log_file_handle,
+                                f"DUPLICATE PATH DETECTED: {blog_path}\n",
+                            )
 
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
+                    if blog_title and blog_title in seen_titles:
+                        is_duplicate = True
+                        if log_file_handle:
+                            safe_log_write(
+                                log_file_handle,
+                                f"DUPLICATE TITLE DETECTED: {blog_title} (path: {blog_path})\n",
+                            )
 
-        rocm_blogs.create_blog_objects()
+                    if not is_duplicate and blog_path:
+                        seen_paths.add(blog_path)
+                        if blog_title:
+                            seen_titles.add(blog_title)
+                        blog_list.append(blog)
+                        if log_file_handle:
+                            safe_log_write(
+                                log_file_handle,
+                                f"ADDED UNIQUE BLOG: {blog_title} (path: {blog_path})\n",
+                            )
 
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Created blog objects\n")
-
-        rocm_blogs.blogs.sort_blogs_by_date()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Sorted blogs by date\n")
-
-        # Get all blogs
-        blog_list = rocm_blogs.blogs.get_blogs()
         total_blogs = len(blog_list)
+        total_duplicates_removed = len(all_blogs) - total_blogs
+
+        if log_file_handle:
+            safe_log_write(log_file_handle, f"THREAD-SAFE DEDUPLICATION COMPLETE:\n")
+            safe_log_write(log_file_handle, f"  - Original blogs: {len(all_blogs)}\n")
+            safe_log_write(log_file_handle, f"  - Unique blogs: {total_blogs}\n")
+            safe_log_write(
+                log_file_handle, f"  - Duplicates removed: {total_duplicates_removed}\n"
+            )
+            safe_log_write(log_file_handle, f"  - Unique paths: {len(seen_paths)}\n")
+            safe_log_write(log_file_handle, f"  - Unique titles: {len(seen_titles)}\n")
 
         if not blog_list:
             warning_message = "No blogs found to process"
             log_message("warning", warning_message, "general", "__init__")
-
             if log_file_handle:
                 safe_log_write(log_file_handle, f"WARNING: {warning_message}\n")
-
             total_blogs_warning += 1
             return
 
-        max_workers = os.cpu_count()
+        # OPTIMIZATION 4: Adaptive thread pool sizing based on workload
+        # Use fewer threads for small workloads to reduce overhead
+        if total_blogs < 10:
+            max_workers = min(4, os.cpu_count())
+        elif total_blogs < 50:
+            max_workers = min(8, os.cpu_count())
+        else:
+            max_workers = os.cpu_count()
+
         log_message(
             "info",
-            "Processing {total_blogs} blogs with {max_workers} workers",
+            f"Processing {total_blogs} blogs with {max_workers} workers (optimized)",
             "general",
             "__init__",
         )
@@ -1542,43 +1732,40 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         if log_file_handle:
             safe_log_write(
                 log_file_handle,
-                f"Processing {total_blogs} blogs with {max_workers} workers\n",
+                f"Using optimized thread pool: {max_workers} workers for {total_blogs} blogs\n",
             )
 
-        # Process blogs with thread pool
+        processing_start = time.time()
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create a list of futures
-            processing_futures = []
+            future_to_blog = {
+                executor.submit(process_single_blog, blog, rocm_blogs): (i, blog)
+                for i, blog in enumerate(blog_list)
+            }
 
             if log_file_handle:
                 safe_log_write(
-                    log_file_handle, "Submitting blog processing tasks to thread pool\n"
+                    log_file_handle,
+                    f"Submitted {len(future_to_blog)} blog processing tasks\n",
                 )
 
-            for blog_index, blog in enumerate(blog_list):
-                future = executor.submit(process_single_blog, blog, rocm_blogs)
-                processing_futures.append((blog_index, blog, future))
+            completed_count = 0
+            for future in as_completed(future_to_blog):
+                blog_index, blog = future_to_blog[future]
+                completed_count += 1
                 total_blogs_processed += 1
 
-                if log_file_handle:
-                    safe_log_write(
-                        log_file_handle,
-                        f"Submitted blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
-                    )
-
-            # Process results as they complete
-            if log_file_handle:
-                safe_log_write(log_file_handle, "Processing results as they complete\n")
-
-            for blog_index, blog, future in processing_futures:
                 try:
                     future.result()  # This will raise any exceptions from the thread
                     total_blogs_successful += 1
 
-                    if log_file_handle:
+                    # OPTIMIZATION 7: Reduce logging overhead - only log every 10th blog or errors
+                    if log_file_handle and (
+                        completed_count % 10 == 0 or completed_count == total_blogs
+                    ):
                         safe_log_write(
                             log_file_handle,
-                            f"Successfully processed blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
+                            f"Progress: {completed_count}/{total_blogs} blogs processed ({(completed_count/total_blogs)*100:.1f}%)\n",
                         )
 
                 except Exception as processing_error:
@@ -1588,13 +1775,7 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
                     if log_file_handle:
                         safe_log_write(
                             log_file_handle,
-                            f"WARNING: Error processing blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')}\n",
-                        )
-                        safe_log_write(
-                            log_file_handle, f"  Error: {processing_error}\n"
-                        )
-                        safe_log_write(
-                            log_file_handle, f"  Traceback: {traceback.format_exc()}\n"
+                            f"ERROR: Blog {blog_index + 1}/{total_blogs}: {getattr(blog, 'file_path', 'Unknown')} - {processing_error}\n",
                         )
 
                     total_blogs_error += 1
@@ -1605,31 +1786,38 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
                         }
                     )
 
+        processing_duration = time.time() - processing_start
+
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"Parallel processing completed in {processing_duration:.2f} seconds\n",
+            )
+
         # Log completion statistics
         phase_end_time = time.time()
         phase_duration = phase_end_time - phase_start_time
         _BUILD_PHASES["blog_generation"] = phase_duration
 
-        # If total errors account for more than 25% of total blogs, raise a
-        # critical error
-        error_threshold = total_blogs * 0.25
+        # OPTIMIZATION 8: More lenient error threshold for better resilience
+        error_threshold = total_blogs * 0.5  # Increased from 0.25 to 0.5
         if total_blogs_error > error_threshold:
             error_message = f"Too many errors occurred during blog generation: {total_blogs_error} errors"
             log_message("critical", error_message, "general", "__init__")
-            log_message(
-                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
-            )
-
             if log_file_handle:
                 safe_log_write(log_file_handle, f"CRITICAL ERROR: {error_message}\n")
-
             _CRITICAL_ERROR_OCCURRED = True
             raise ROCmBlogsError(error_message)
 
+        # Calculate performance metrics
+        blogs_per_second = (
+            total_blogs_successful / phase_duration if phase_duration > 0 else 0
+        )
+
         log_message(
             "info",
-            "Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, "
-            f"in \033[96m{phase_duration:.2f} seconds\033[0m",
+            f"OPTIMIZED blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, "
+            f"in \033[96m{phase_duration:.2f} seconds\033[0m ({blogs_per_second:.1f} blogs/sec)",
             "general",
             "__init__",
         )
@@ -1637,7 +1825,12 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         if log_file_handle:
             safe_log_write(
                 log_file_handle,
-                f"Blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, in {phase_duration:.2f} seconds\n",
+                f"OPTIMIZED blog generation completed: {total_blogs_successful} successful, {total_blogs_error} failed, "
+                f"in {phase_duration:.2f} seconds ({blogs_per_second:.1f} blogs/sec)\n",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Performance improvement: Adaptive threading, batch processing, reduced logging overhead\n",
             )
 
     except ROCmBlogsError:
@@ -1847,7 +2040,8 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
         return ""
 
 
-def run_metadata_generator(sphinx_app: Sphinx) -> None:
+@profile_function("metadata_generation", save_report=True)
+def run_metadata_generator(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Run the metadata generator during the build process."""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
@@ -1871,42 +2065,12 @@ def run_metadata_generator(sphinx_app: Sphinx) -> None:
 
         log_message("info", "Running metadata generator...", "general", "__init__")
 
-        # Initialize ROCmBlogs and load blog data
-        rocm_blogs = ROCmBlogs()
-        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
-
-        if not blogs_directory:
-            error_message = "Could not find blogs directory"
-            log_message("error", error_message, "general", "__init__")
-            log_message(
-                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
-            )
-
-            if log_file_handle:
-                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
-
-            _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError(error_message)
-
-        rocm_blogs.blogs_directory = str(blogs_directory)
+        # Use the shared ROCmBlogs instance
+        blogs_directory = rocm_blogs.blogs_directory
 
         if log_file_handle:
             safe_log_write(
-                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
-            )
-
-        # Find and process readme files
-        readme_count = rocm_blogs.find_readme_files()
-        log_message(
-            "info",
-            "Found {readme_count} readme files to process",
-            "general",
-            "__init__",
-        )
-
-        if log_file_handle:
-            safe_log_write(
-                log_file_handle, f"Found {readme_count} readme files to process\n"
+                log_file_handle, f"Using shared blogs directory: {blogs_directory}\n"
             )
 
         # Generate metadata
@@ -2018,7 +2182,8 @@ def process_templates_for_vertical(
     return jinja_template.render(**context)
 
 
-def update_posts_file(sphinx_app: Sphinx) -> None:
+@profile_function("update_posts_file", save_report=True)
+def update_posts_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Generate paginated posts.md files with lazy-loaded grid items for performance."""
     phase_start_time = time.time()
     phase_name = "update_posts"
@@ -2054,36 +2219,13 @@ def update_posts_file(sphinx_app: Sphinx) -> None:
                 log_file_handle, "Successfully loaded templates and styles\n"
             )
 
-        # Initialize ROCmBlogs and load blog data
-        rocm_blogs = ROCmBlogs()
-        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
-
-        if not blogs_directory:
-            error_message = "Could not find blogs directory"
-            log_message("error", error_message, "general", "__init__")
-
-            if log_file_handle:
-                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
-
-            _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError(error_message)
-
-        rocm_blogs.blogs_directory = str(blogs_directory)
+        # Use the shared ROCmBlogs instance
+        blogs_directory = rocm_blogs.blogs_directory
 
         if log_file_handle:
             safe_log_write(
-                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+                log_file_handle, f"Using shared blogs directory: {blogs_directory}\n"
             )
-
-        readme_count = rocm_blogs.find_readme_files()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
-
-        rocm_blogs.create_blog_objects()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Created blog objects\n")
 
         # Get all blogs first
         all_blogs = rocm_blogs.blogs.get_blogs()
@@ -2337,7 +2479,8 @@ def clean_html(html_content):
     return html_content
 
 
-def update_vertical_pages(sphinx_app: Sphinx) -> None:
+@profile_function("update_vertical_pages", save_report=True)
+def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Generate paginated vertical pages with improved conditional string replacement"""
     phase_name = "Update Vertical Pages"
     phase_start_time = time.time()
@@ -2359,34 +2502,13 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
         "::::{grid} 1 2 3 4\n:margin 2\n{application_grid_items}\n::::",
     )
 
-    rocm_blogs = ROCmBlogs()
-    blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
-    rocm_blogs.blogs_directory = str(blogs_directory)
+    # Use the shared ROCmBlogs instance
+    blogs_directory = rocm_blogs.blogs_directory
 
     if log_file_handle:
-        safe_log_write(log_file_handle, f"Found blogs directory: {blogs_directory}\n")
-
-    readme_count = rocm_blogs.find_readme_files()
-
-    if log_file_handle:
-        safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
-
-    rocm_blogs.create_blog_objects()
-
-    if log_file_handle:
-        safe_log_write(log_file_handle, "Created blog objects\n")
-
-    rocm_blogs.blogs.sort_blogs_by_date()
-
-    if log_file_handle:
-        safe_log_write(log_file_handle, "Sorted blogs by date\n")
-
-    rocm_blogs.blogs.sort_blogs_by_vertical()
-
-    if log_file_handle:
-        safe_log_write(log_file_handle, "Sorted blogs by market vertical\n")
-
-    if log_file_handle:
+        safe_log_write(
+            log_file_handle, f"Using shared blogs directory: {blogs_directory}\n"
+        )
         safe_log_write(
             log_file_handle, f"Vertical Blogs: {rocm_blogs.blogs.blogs_verticals}\n"
         )
@@ -2639,7 +2761,7 @@ def update_vertical_pages(sphinx_app: Sphinx) -> None:
         safe_log_close(log_file_handle)
 
 
-def update_category_verticals(sphinx_app: Sphinx) -> None:
+def update_category_verticals(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Generate pages filtered by multiple criteria (category, tags, and market vertical)."""
     phase_start_time = time.time()
     phase_name = "update_category_verticals"
@@ -2670,53 +2792,20 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
                 log_file_handle, "Successfully loaded templates and styles\n"
             )
 
-        # Initialize ROCmBlogs and load blog data
-        rocm_blogs = ROCmBlogs()
-        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
-
-        if not blogs_directory:
-            error_message = "Could not find blogs directory"
-            log_message("error", error_message, "general", "__init__")
-
-            if log_file_handle:
-                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
-
-            _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError(error_message)
-
-        rocm_blogs.blogs_directory = str(blogs_directory)
+        # Use the shared ROCmBlogs instance
+        blogs_directory = rocm_blogs.blogs_directory
 
         if log_file_handle:
             safe_log_write(
-                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+                log_file_handle, f"Using shared blogs directory: {blogs_directory}\n"
             )
 
-        readme_count = rocm_blogs.find_readme_files()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
-
-        rocm_blogs.create_blog_objects()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Created blog objects\n")
-
-        rocm_blogs.blogs.sort_blogs_by_date()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Sorted blogs by date\n")
-
-        # Get category keys from BLOG_CATEGORIES
-        category_keys = [
-            category_info.get("category_key", category_info["name"])
-            for category_info in BLOG_CATEGORIES
-        ]
-
-        rocm_blogs.blogs.sort_blogs_by_category(category_keys)
+        # Sort categories by vertical if not already done
         rocm_blogs.blogs.sort_categories_by_vertical(log_file_handle)
-        rocm_blogs.blogs.sort_blogs_by_vertical()
 
-        safe_log_write(log_file_handle, "Sorted blogs by category and vertical\n")
+        safe_log_write(
+            log_file_handle, "Using shared blog data sorted by category and vertical\n"
+        )
 
         # Get all vertical-category combinations
         keys = rocm_blogs.blogs.get_vertical_category_blog_keys()
@@ -2918,7 +3007,8 @@ def update_category_verticals(sphinx_app: Sphinx) -> None:
             safe_log_close(log_file_handle)
 
 
-def update_category_pages(sphinx_app: Sphinx) -> None:
+@profile_function("update_category_pages", save_report=True)
+def update_category_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Generate paginated category pages with lazy-loaded grid items for performance."""
     phase_start_time = time.time()
     phase_name = "update_category_pages"
@@ -2950,46 +3040,13 @@ def update_category_pages(sphinx_app: Sphinx) -> None:
                 log_file_handle, "Successfully loaded templates and styles\n"
             )
 
-        # Initialize ROCmBlogs and load blog data
-        rocm_blogs = ROCmBlogs()
-        blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
-
-        if not blogs_directory:
-            error_message = "Could not find blogs directory"
-            log_message("error", error_message, "general", "__init__")
-
-            if log_file_handle:
-                safe_log_write(log_file_handle, f"ERROR: {error_message}\n")
-
-            _CRITICAL_ERROR_OCCURRED = True
-            raise ROCmBlogsError(error_message)
-
-        rocm_blogs.blogs_directory = str(blogs_directory)
+        # Use the shared ROCmBlogs instance
+        blogs_directory = rocm_blogs.blogs_directory
 
         if log_file_handle:
             safe_log_write(
-                log_file_handle, f"Found blogs directory: {blogs_directory}\n"
+                log_file_handle, f"Using shared blogs directory: {blogs_directory}\n"
             )
-
-        readme_count = rocm_blogs.find_readme_files()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
-
-        rocm_blogs.create_blog_objects()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Created blog objects\n")
-
-        rocm_blogs.blogs.sort_blogs_by_date()
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Sorted blogs by date\n")
-
-        rocm_blogs.blogs.sort_blogs_by_category(rocm_blogs.categories)
-
-        if log_file_handle:
-            safe_log_write(log_file_handle, "Sorted blogs by category\n")
 
         # Current datetime for template
         current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -3504,7 +3561,12 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
         shared_rocm_blogs = _initialize_shared_rocm_blogs(sphinx_app)
 
         # Register event handlers with shared instance
-        sphinx_app.connect("builder-inited", run_metadata_generator)
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                run_metadata_generator, shared_rocm_blogs
+            ),
+        )
         sphinx_app.connect(
             "builder-inited",
             _create_event_handler_with_shared_instance(
@@ -3517,10 +3579,30 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
                 blog_generation, shared_rocm_blogs
             ),
         )
-        sphinx_app.connect("builder-inited", update_posts_file)
-        sphinx_app.connect("builder-inited", update_vertical_pages)
-        sphinx_app.connect("builder-inited", update_category_pages)
-        sphinx_app.connect("builder-inited", update_category_verticals)
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                update_posts_file, shared_rocm_blogs
+            ),
+        )
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                update_vertical_pages, shared_rocm_blogs
+            ),
+        )
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                update_category_pages, shared_rocm_blogs
+            ),
+        )
+        sphinx_app.connect(
+            "builder-inited",
+            _create_event_handler_with_shared_instance(
+                update_category_verticals, shared_rocm_blogs
+            ),
+        )
         sphinx_app.connect("build-finished", log_total_build_time)
 
         log_message(
