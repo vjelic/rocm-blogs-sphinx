@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import time
+import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -20,15 +21,12 @@ from .images import *
 from .utils import *
 
 
-# Import log_message from the main module
 def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
     """Import log_message function from main module to avoid circular imports."""
     try:
         from . import log_message as main_log_message
-
         return main_log_message(level, message, operation, component, **kwargs)
     except ImportError:
-        # Fallback to print if import fails
         print(f"[{level.upper()}] {message}")
 
 
@@ -799,211 +797,67 @@ def _generate_grid_items(
 
 
 def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
-    """Generate grid items with lazy loading for images - WITH THREAD-SAFE DEDUPLICATION."""
+    """Generate grid items with lazy loading and thread-safe deduplication."""
     try:
         lazy_grid_items = []
         error_count = 0
-
-        # THREAD-SAFE DEDUPLICATION: Apply the same deduplication logic as in blog_generation
-        import threading
-
         seen_paths = set()
         seen_titles = set()
         deduplicated_blog_list = []
         dedup_lock = threading.Lock()
 
+        # Thread-safe deduplication
         for blog in blog_list:
-            # Use multiple identifiers for comprehensive deduplication
             blog_path = getattr(blog, "file_path", None)
             blog_title = getattr(blog, "blog_title", None)
 
-            with dedup_lock:  # Thread-safe access to shared data structures
-                # Check for duplicates by path and title
+            with dedup_lock:
                 is_duplicate = False
-
                 if blog_path and blog_path in seen_paths:
                     is_duplicate = True
-                    log_message(
-                        "debug",
-                        f"LAZY LOAD DUPLICATE PATH DETECTED: {blog_path}",
-                        "general",
-                        "process",
-                    )
-
                 if blog_title and blog_title in seen_titles:
                     is_duplicate = True
-                    log_message(
-                        "debug",
-                        f"LAZY LOAD DUPLICATE TITLE DETECTED: {blog_title} (path: {blog_path})",
-                        "general",
-                        "process",
-                    )
-
+                
                 if not is_duplicate and blog_path:
                     seen_paths.add(blog_path)
                     if blog_title:
                         seen_titles.add(blog_title)
                     deduplicated_blog_list.append(blog)
 
-        log_message(
-            "info",
-            f"Lazy load deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs (removed {len(blog_list) - len(deduplicated_blog_list)} duplicates)",
-            "general",
-            "process",
-        )
+        log_message("info", f"Deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs", "general", "process")
 
+        # Check if lazy_load parameter is supported
         grid_params = inspect.signature(generate_grid).parameters
         if "lazy_load" not in grid_params:
-            log_message(
-                "critical",
-                "generate_grid function does not support lazy_load parameter. Grid items may not be generated correctly.",
-                "general",
-                "process",
-            )
-            log_message(
-                "debug",
-                f"Available parameters: {list(grid_params.keys())}",
-                "general",
-                "process",
-            )
-
-            # If lazy_load is not supported, fall back to regular grid
-            # generation with deduplication
-            log_message(
-                "info",
-                "Falling back to regular grid generation without lazy loading",
-                "general",
-                "process",
-            )
-            # Create a temporary empty list for used_blogs since we don't want
-            # to mark blogs as used
+            log_message("warning", "Falling back to regular grid generation", "general", "process")
             temp_used_blogs = []
-            return _generate_grid_items(
-                rocm_blogs,
-                deduplicated_blog_list,
-                len(deduplicated_blog_list),
-                temp_used_blogs,
-                skip_used=False,
-            )
+            return _generate_grid_items(rocm_blogs, deduplicated_blog_list, len(deduplicated_blog_list), temp_used_blogs, skip_used=False)
 
+        # Generate grid items with lazy loading
         for blog_entry in deduplicated_blog_list:
             try:
-                # Generate a grid item with lazy loading
-                log_message(
-                    "debug",
-                    f"Generating lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
-                    "general",
-                    "process",
-                )
                 grid_html = generate_grid(rocm_blogs, blog_entry, lazy_load=True)
-
                 if not grid_html or not grid_html.strip():
-                    log_message(
-                        "warning",
-                        f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
-                        "general",
-                        "process",
-                    )
                     error_count += 1
                     continue
-
                 lazy_grid_items.append(grid_html)
-                log_message(
-                    "debug",
-                    f"Successfully generated lazy-loaded grid item for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
-                    "general",
-                    "process",
-                )
             except Exception as blog_error:
                 error_count += 1
-                log_message(
-                    "error",
-                    f"Error generating grid item for blog {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}",
-                    "general",
-                    "process",
-                )
-                log_message(
-                    "debug",
-                    f"Traceback: {traceback.format_exc()}",
-                    "general",
-                    "process",
-                )
+                log_message("error", f"Error generating grid item for {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}", "general", "process")
 
-        # Handle the case where no grid items were generated
         if not lazy_grid_items:
-            # If there were no blogs to process, just return an empty list
-            if not deduplicated_blog_list:
-                log_message(
-                    "warning",
-                    "No blogs were provided to generate lazy-loaded grid items after deduplication. Returning empty list.",
-                    "general",
-                    "process",
-                )
-                return []
-
-            # If we tried to process blogs but none succeeded, log a warning
-            # but don't raise an error
-            log_message(
-                "warning",
-                "No lazy-loaded grid items were generated despite having blogs to process. Check for errors in the generate_grid function.",
-                "general",
-                "process",
-            )
-            log_message(
-                "debug",
-                f"Traceback: {traceback.format_exc()}",
-                "general",
-                "process",
-            )
+            log_message("warning", "No grid items generated", "general", "process")
             return []
 
-        # Log errors and completion status
-        elif error_count > 0:
-            log_message(
-                "warning",
-                f"Generated {len(lazy_grid_items)} lazy-loaded grid items with {error_count} errors",
-                "general",
-                "process",
-            )
-            log_message(
-                "debug",
-                f"Traceback: {traceback.format_exc()}",
-                "general",
-                "process",
-            )
+        if error_count > 0:
+            log_message("warning", f"Generated {len(lazy_grid_items)} items with {error_count} errors", "general", "process")
         else:
-            log_message(
-                "info",
-                f"Successfully generated {len(lazy_grid_items)} lazy-loaded grid items from {len(deduplicated_blog_list)} unique blogs",
-                "general",
-                "process",
-            )
+            log_message("info", f"Generated {len(lazy_grid_items)} items from {len(deduplicated_blog_list)} blogs", "general", "process")
 
         return lazy_grid_items
-    except ROCmBlogsError:
-        log_message(
-            "debug",
-            f"Traceback: {traceback.format_exc()}",
-            "general",
-            "process",
-        )
-        raise
     except Exception as lazy_load_error:
-        log_message(
-            "error",
-            f"Error generating lazy-loaded grid items: {lazy_load_error}",
-            "general",
-            "process",
-        )
-        log_message(
-            "debug",
-            f"Traceback: {traceback.format_exc()}",
-            "general",
-            "process",
-        )
-        raise ROCmBlogsError(
-            f"Error generating lazy-loaded grid-items: {lazy_load_error}"
-        ) from lazy_load_error
+        log_message("error", f"Error generating lazy-loaded grid items: {lazy_load_error}", "general", "process")
+        raise ROCmBlogsError(f"Error generating lazy-loaded grid-items: {lazy_load_error}") from lazy_load_error
 
 
 def process_single_blog(blog_entry, rocm_blogs):
