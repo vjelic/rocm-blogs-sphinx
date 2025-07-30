@@ -905,26 +905,49 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         break
 
                             if os.path.exists(image_path):
-                                # Always convert to WebP format
+                                # Check if WebP version already exists (created by grid generation)
                                 image_filename = os.path.basename(image_path)
                                 name_without_ext = os.path.splitext(image_filename)[0]
                                 webp_filename = f"{name_without_ext}.webp"
                                 
-                                destination_path = os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename)
-                                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-
-                                # Convert to WebP if not already exists
-                                if not os.path.exists(destination_path):
+                                # Check multiple possible locations for WebP version
+                                webp_locations = [
+                                    os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename),
+                                    os.path.join(os.path.dirname(image_path), webp_filename),
+                                    os.path.join(os.path.dirname(image_path), "images", webp_filename)
+                                ]
+                                
+                                webp_found = False
+                                webp_destination = None
+                                
+                                for webp_location in webp_locations:
+                                    if os.path.exists(webp_location):
+                                        webp_found = True
+                                        webp_destination = webp_location
+                                        break
+                                
+                                if webp_found:
+                                    # Use existing WebP version
+                                    blog_entry.image_paths[i] = webp_destination
+                                    log_message("info", f"Using existing WebP version: {webp_destination}", "general", "process")
+                                else:
+                                    # WebP doesn't exist, create it for consistency with grid
+                                    webp_destination = os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename)
+                                    os.makedirs(os.path.dirname(webp_destination), exist_ok=True)
+                                    
                                     try:
                                         from .images import convert_to_webp
-                                        convert_to_webp(image_path, destination_path)
+                                        convert_to_webp(image_path, webp_destination)
+                                        blog_entry.image_paths[i] = webp_destination
+                                        log_message("info", f"Created WebP version for blog page: {webp_destination}", "general", "process")
                                     except Exception as webp_error:
-                                        log_message("error", f"Failed to convert {image_path} to WebP: {webp_error}", "general", "process")
-                                        # Create a placeholder WebP or skip this image
-                                        continue
-
-                                # Always use WebP extension - update the image path
-                                blog_entry.image_paths[i] = destination_path
+                                        log_message("warning", f"Failed to convert {image_path} to WebP, using original: {webp_error}", "general", "process")
+                                        # Fall back to copying original file
+                                        original_destination = os.path.join(rocm_blogs.blogs_directory, "_images", image_filename)
+                                        os.makedirs(os.path.dirname(original_destination), exist_ok=True)
+                                        if not os.path.exists(original_destination):
+                                            shutil.copy2(image_path, original_destination)
+                                        blog_entry.image_paths[i] = original_destination
 
                         except Exception as img_error:
                             log_message("warning", f"Error processing image {image_path}: {img_error}", "general", "process")
