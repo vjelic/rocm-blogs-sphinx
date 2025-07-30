@@ -905,7 +905,7 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         break
 
                             if os.path.exists(image_path):
-                                # Convert to WebP and copy to _images directory
+                                # Always convert to WebP format
                                 image_filename = os.path.basename(image_path)
                                 name_without_ext = os.path.splitext(image_filename)[0]
                                 webp_filename = f"{name_without_ext}.webp"
@@ -919,12 +919,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                                         from .images import convert_to_webp
                                         convert_to_webp(image_path, destination_path)
                                     except Exception as webp_error:
-                                        # Fallback to copying original if WebP conversion fails
-                                        shutil.copy2(image_path, os.path.join(rocm_blogs.blogs_directory, "_images", image_filename))
-                                        blog_entry.image_paths[i] = os.path.join(rocm_blogs.blogs_directory, "_images", image_filename)
+                                        log_message("error", f"Failed to convert {image_path} to WebP: {webp_error}", "general", "process")
+                                        # Create a placeholder WebP or skip this image
                                         continue
 
-                                # Update the image path to point to the WebP version
+                                # Always use WebP extension - update the image path
                                 blog_entry.image_paths[i] = destination_path
 
                         except Exception as img_error:
@@ -951,20 +950,41 @@ def process_single_blog(blog_entry, rocm_blogs):
             blog_language = getattr(blog_entry, "language", "en")
             blog_category = getattr(blog_entry, "category", "blog")
             blog_tags = getattr(blog_entry, "tags", "")
-            market_verticals = (
-                blog_entry.metadata.get("myst")
-                .get("html_meta", {})
-                .get("vertical", "")
-                .split(", ")
-                if hasattr(blog_entry, "metadata") and blog_entry.metadata
-                else []
-            )
+            # Extract market verticals from metadata or auto-assign from tags
+            market_verticals = []
+            if hasattr(blog_entry, "metadata") and blog_entry.metadata:
+                try:
+                    myst_data = blog_entry.metadata.get("myst", {})
+                    html_meta = myst_data.get("html_meta", {})
+                    vertical_str = html_meta.get("vertical", "")
+                    
+                    if vertical_str:
+                        market_verticals = [v.strip() for v in vertical_str.split(",") if v.strip()]
+                except (AttributeError, KeyError):
+                    pass
 
-            # sanitize and format market verticals
-            # output_filename = vertical.replace(" ", "-").lower()
-            # output_filename = re.sub(r'[^a-z0-9-]', '', output_filename)
+            # If no market verticals found in metadata, try automatic assignment from tags
+            if not market_verticals or market_verticals == [""]:
+                if blog_tags:
+                    try:
+                        # Import the classification function from metadata.py
+                        from .metadata import classify_blog_tags
+                        
+                        # Get automatic vertical classification
+                        classification_result = classify_blog_tags(blog_tags)
+                        
+                        if classification_result and classification_result.get("vertical_counts"):
+                            vertical_counts = classification_result["vertical_counts"]
+                            # Get all verticals with non-zero scores
+                            auto_verticals = [v for v, score in vertical_counts.items() if score > 0]
+                            if auto_verticals:
+                                market_verticals = auto_verticals
+                                log_message("info", f"Auto-assigned market verticals {auto_verticals} for blog {readme_file_path} based on tags: {blog_tags}", "general", "process")
+                    except Exception as auto_assign_error:
+                        log_message("warning", f"Error auto-assigning market verticals for {readme_file_path}: {auto_assign_error}", "general", "process")
 
-            if not market_verticals:
+            # Format market verticals for display
+            if not market_verticals or market_verticals == [""]:
                 market_vertical = "No Market Vertical"
             else:
                 market_vertical = ", ".join(

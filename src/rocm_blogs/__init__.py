@@ -73,11 +73,9 @@ __all__ = [
 ]
 
 
-# Initialize the structured logger
 structured_logger = None
 if LOGGING_AVAILABLE and is_logging_enabled():
     try:
-        # Configure structured logging
         log_file_path = Path("logs/rocm_blogs.log")
         structured_logger = configure_logging(
             level=LogLevel.INFO,
@@ -104,10 +102,7 @@ def log_message(
     component: str = "rocm_blogs",
     **kwargs,
 ):
-    """
-    Unified logging function that uses structured logging when available,
-    falls back to print when not available.
-    """
+    """ Unified logging system """
     if not is_logging_enabled_from_config():
         return
 
@@ -116,21 +111,18 @@ def log_message(
             log_level = getattr(LogLevel, level.upper(), LogLevel.INFO)
             structured_logger.log(log_level, message, operation, component, **kwargs)
         except Exception as e:
-            # Fallback to print if structured logging fails
             print(f"[{level.upper()}] {message}")
     else:
-        # Fallback when structured logging is not available
         print(f"[{level.upper()}] {message}")
 
 
 def create_step_log_file(step_name):
-    """Create a log file for a specific build step - only creates step logs when logging is enabled."""
-    # Check if logging is enabled before creating any log files
+    """Create a log file"""
+
     if not is_logging_enabled_from_config():
         return None, None
 
     try:
-        # Create logs directory and step log files only when logging is enabled
         logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
 
@@ -144,8 +136,12 @@ def create_step_log_file(step_name):
             f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
         )
         log_file_handle.write("=" * 80 + "\n\n")
+        log_file_handle.write(
+            f"Step Name: {step_name}\n"
+            f"Log File Created At: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Log File Path: {log_filepath}\n\n"
+        )
 
-        # Log to structured logging if available, but don't fail if it's not
         log_message(
             "info",
             f"Detailed logs for {step_name} will be written to: {log_filepath}",
@@ -155,7 +151,6 @@ def create_step_log_file(step_name):
 
         return log_filepath, log_file_handle
     except Exception as error:
-        # Log error if structured logging is available, but don't fail
         log_message(
             "error",
             f"Error creating log file for {step_name}: {error}",
@@ -163,28 +158,25 @@ def create_step_log_file(step_name):
             "log_management",
             error=error,
         )
-        # Still return None, None if we can't create the log file
         return None, None
 
 
 def safe_log_write(log_file_handle, message):
-    """Safely write to log file handle, checking if it exists and is valid."""
+    """Thread safe log write function."""
     if log_file_handle is not None:
         try:
             log_file_handle.write(message)
-            log_file_handle.flush()  # Ensure immediate write
+            log_file_handle.flush()
         except Exception as write_error:
-            # If writing fails, just continue silently
             pass
 
 
 def safe_log_close(log_file_handle):
-    """Safely close log file handle, checking if it exists and is valid."""
+    """Thread safe log close function."""
     if log_file_handle is not None:
         try:
             log_file_handle.close()
         except Exception as close_error:
-            # If closing fails, just continue silently
             pass
 
 
@@ -242,33 +234,27 @@ def log_total_build_time(sphinx_app, build_exception):
 
 
 def _create_build_timing_summary_file(total_elapsed_time, phases_to_display):
-    """Create a dedicated build timing summary file with clean formatting."""
+    """Create a detailed build timing summary file."""
     try:
-        # Only create timing summary file if logging is enabled
         if not is_logging_enabled_from_config():
             return
 
-        # Create logs directory if it doesn't exist
         logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
 
-        # Create timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         summary_file = logs_dir / f"build_timing_summary_{timestamp}.txt"
 
         with open(summary_file, "w", encoding="utf-8") as f:
-            # Write header
             f.write("=" * 80 + "\n")
             f.write("ROCm Blogs Build Process Timing Summary\n")
             f.write("=" * 80 + "\n\n")
 
-            # Write build information
             f.write(
                 f"Build completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             )
             f.write(f"Total build time: {total_elapsed_time:.2f} seconds\n\n")
 
-            # Write phase breakdown
             f.write("Phase Breakdown:\n")
             f.write("-" * 50 + "\n")
 
@@ -280,7 +266,6 @@ def _create_build_timing_summary_file(total_elapsed_time, phases_to_display):
                         if total_elapsed_time > 0
                         else 0
                     )
-                    # Clean formatting without ANSI color codes
                     padded_name = f"{phase_display_name}:".ljust(30)
                     f.write(
                         f"{padded_name} {phase_duration:.2f} seconds ({percentage:.1f}%)\n"
@@ -364,17 +349,14 @@ def _log_timing_summary(total_elapsed_time):
             ("other", "Other processing"),
         ]
 
-        # Create a dedicated build timing summary file
         _create_build_timing_summary_file(total_elapsed_time, phases_to_display)
 
-        # Log the header
         log_message("info", "=" * 80, "timing_summary", "build_process")
         log_message(
             "info", "BUILD PROCESS TIMING SUMMARY:", "timing_summary", "build_process"
         )
         log_message("info", "-" * 80, "timing_summary", "build_process")
 
-        # Log each phase
         for phase_key, phase_display_name in phases_to_display:
             if phase_key in _BUILD_PHASES:
                 phase_duration = _BUILD_PHASES[phase_key]
@@ -383,7 +365,6 @@ def _log_timing_summary(total_elapsed_time):
                     if total_elapsed_time > 0
                     else 0
                 )
-                # Format the phase name to align all timing values
                 padded_name = f"{phase_display_name}:".ljust(30)
                 log_message(
                     "info",
@@ -392,7 +373,6 @@ def _log_timing_summary(total_elapsed_time):
                     "build_process",
                 )
 
-        # Log the footer and total time
         log_message("info", "-" * 80, "timing_summary", "build_process")
         log_message(
             "info",
@@ -680,8 +660,19 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             safe_log_write(log_file_handle, "Generating author statistics\n")
 
         for author, blogs in rocm_blogs.blogs.blogs_authors.items():
-            # Include all authors, even those with no blogs
-            # Sort blogs by date
+            if not blogs:
+                log_message(
+                    "warning",
+                    f"No blogs found for author: {author}",
+                    "general",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: No blogs found for author: {author}\n",
+                    )
+                continue
             sorted_blogs = sorted(
                 blogs, key=lambda b: b.date if b.date else datetime.min, reverse=True
             )
@@ -764,15 +755,10 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             else:
                 author_cell = f'<td class="author">{author_name["name"]}</td>'
 
-            # Create blog count cell
             blog_count_cell = f'<td class="blog-count">{blog_count}</td>'
 
-            # Create latest blog cell with link (with blog-title class for
-            # webkit-clamp)
             latest_blog_cell = f'<td class="date"><a href="{latest_blog["href"]}" class="blog-title">{latest_blog["title"]}</a><br><span class="date-text">{latest_blog["date"]}</span></td>'
 
-            # Create first blog cell with link (with blog-title class for
-            # webkit-clamp)
             first_blog_cell = f'<td class="date"><a href="{first_blog["href"]}" class="blog-title">{first_blog["title"]}</a><br><span class="date-text">{first_blog["date"]}</span></td>'
 
             # Combine cells into a row
@@ -1031,8 +1017,9 @@ myst:
             safe_log_close(log_file_handle)
 
 
+@profile_function("update_index_file", save_report=True)
 def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
-    """Update the index file with new blog posts."""
+    """Update the index file with new blog posts - WITH EXTREME PROFILING."""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
     phase_name = "update_index"
@@ -1048,15 +1035,34 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
     total_blogs_skipped = 0
     all_error_details = []
 
+    # Enhanced timing tracking for each major operation
+    operation_timings = {}
+    
+    def track_operation_time(operation_name, start_time):
+        """Track timing for individual operations within update_index_file."""
+        duration = time.time() - start_time
+        operation_timings[operation_name] = duration
+        log_message(
+            "info",
+            f"INDEX OPERATION: {operation_name} completed in {duration:.4f} seconds",
+            "update_index_timing",
+            "update_index_file"
+        )
+        if log_file_handle:
+            safe_log_write(log_file_handle, f"TIMING: {operation_name} = {duration:.4f}s\n")
+        return duration
+
     try:
         if log_file_handle:
             safe_log_write(log_file_handle, "Starting index file update process\n")
             safe_log_write(log_file_handle, "-" * 80 + "\n\n")
 
         # Load templates and styles
+        operation_start = time.time()
         template_html = import_file("rocm_blogs.templates", "index.html")
         css_content = import_file("rocm_blogs.static.css", "index.css")
         banner_css_content = import_file("rocm_blogs.static.css", "banner-slider.css")
+        track_operation_time("load_templates_and_styles", operation_start)
 
         if log_file_handle:
             safe_log_write(
@@ -1068,7 +1074,8 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             CSS=css_content, BANNER_CSS=banner_css_content, HTML=template_html
         )
 
-        # Initialize ROCmBlogs if not provided
+        # Initialize ROCmBlogs instance if not provided
+        operation_start = time.time()
         if rocm_blogs is None:
             rocm_blogs = ROCmBlogs()
             blogs_directory = rocm_blogs.find_blogs_directory(sphinx_app.srcdir)
@@ -1092,26 +1099,39 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             raise ROCmBlogsError(error_message)
 
         rocm_blogs.blogs_directory = str(blogs_directory)
+        track_operation_time("initialize_rocm_blogs_instance", operation_start)
 
         if log_file_handle:
             safe_log_write(
                 log_file_handle, f"Found blogs directory: {blogs_directory}\n"
             )
 
+        operation_start = time.time()
         readme_count = rocm_blogs.find_readme_files()
+        track_operation_time("find_readme_files", operation_start)
 
         if log_file_handle:
             safe_log_write(log_file_handle, f"Found {readme_count} README files\n")
 
+        operation_start = time.time()
         rocm_blogs.create_blog_objects()
+        track_operation_time("create_blog_objects", operation_start)
 
+        operation_start = time.time()
         rocm_blogs.blogs.write_to_file()
+        track_operation_time("write_blogs_to_file", operation_start)
 
+        operation_start = time.time()
         rocm_blogs.find_author_files()
+        track_operation_time("find_author_files", operation_start)
 
+        operation_start = time.time()
         update_author_files(sphinx_app, rocm_blogs)
+        track_operation_time("update_author_files", operation_start)
 
+        operation_start = time.time()
         blog_statistics(sphinx_app, rocm_blogs)
+        track_operation_time("blog_statistics", operation_start)
 
         if log_file_handle:
             safe_log_write(log_file_handle, f"Created blog objects\n")
@@ -1151,13 +1171,11 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
                     f"featured-blogs.csv file not found at {features_csv_path}, no featured blogs will be displayed\n",
                 )
 
-        # Sort the blogs (this happens on all blogs before filtering)
         rocm_blogs.blogs.sort_blogs_by_date()
 
         if log_file_handle:
             safe_log_write(log_file_handle, "Sorted blogs by date\n")
 
-        # Extract category keys from BLOG_CATEGORIES to use for sorting
         category_keys = [
             category_info.get("category_key", category_info["name"])
             for category_info in BLOG_CATEGORIES
@@ -1190,8 +1208,6 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         skipped_count = 0
 
         for blog in all_blogs:
-            # Check if this is a genuine blog post (has the blogpost flag set
-            # to true)
             if hasattr(blog, "blogpost") and blog.blogpost:
                 filtered_blogs.append(blog)
                 total_blogs_processed += 1
@@ -1289,17 +1305,15 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             try:
                 # Generate featured grid items (these will also be marked as used)
                 if len(featured_blogs) > 0:
-                    # Don't add to used_blogs here since they're already added from banner
                     featured_grid_items = _generate_grid_items(
                         rocm_blogs,
                         featured_blogs,
                         len(featured_blogs),
-                        [],  # Empty list to avoid double-tracking
-                        False,  # Don't skip any since these are the featured ones
+                        [],
+                        False,
                         False,
                     )
 
-                    # Ensure all featured blogs are in the used list
                     for blog in featured_blogs:
                         if id(blog) not in used_blog_ids:
                             used_blogs.append(blog)
@@ -1713,8 +1727,6 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             total_blogs_warning += 1
             return
 
-        # OPTIMIZATION 4: Adaptive thread pool sizing based on workload
-        # Use fewer threads for small workloads to reduce overhead
         if total_blogs < 10:
             max_workers = min(4, os.cpu_count())
         elif total_blogs < 50:
@@ -1759,7 +1771,6 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
                     future.result()  # This will raise any exceptions from the thread
                     total_blogs_successful += 1
 
-                    # OPTIMIZATION 7: Reduce logging overhead - only log every 10th blog or errors
                     if log_file_handle and (
                         completed_count % 10 == 0 or completed_count == total_blogs
                     ):
@@ -1799,7 +1810,6 @@ def blog_generation(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         phase_duration = phase_end_time - phase_start_time
         _BUILD_PHASES["blog_generation"] = phase_duration
 
-        # OPTIMIZATION 8: More lenient error threshold for better resilience
         error_threshold = total_blogs * 0.5  # Increased from 0.25 to 0.5
         if total_blogs_error > error_threshold:
             error_message = f"Too many errors occurred during blog generation: {total_blogs_error} errors"
@@ -1894,9 +1904,6 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
     try:
         banner_start_time = time.time()
         log_message("info", "Generating banner slider content", "general", "__init__")
-
-        # Generate banner slides and navigation items directly without parameter checking
-        # The functions are already defined with the correct parameters
 
         banner_slides = []
         banner_navigation = []
@@ -2233,12 +2240,9 @@ def update_posts_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
         if log_file_handle:
             safe_log_write(log_file_handle, f"Retrieved {len(all_blogs)} total blogs\n")
 
-        # Filter blogs to only include real blog posts
         filtered_blogs = []
         skipped_count = 0
         for blog in all_blogs:
-            # Check if this is a genuine blog post (has the blogpost flag set
-            # to true)
             if hasattr(blog, "blogpost") and blog.blogpost:
                 filtered_blogs.append(blog)
                 total_blogs_processed += 1
@@ -2304,7 +2308,6 @@ def update_posts_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 f"Generating {total_pages} paginated posts pages with {BLOGS_PER_PAGE} blogs per page\n",
             )
 
-        # Generate all grid items in parallel with lazy loading
         if log_file_handle:
             safe_log_write(
                 log_file_handle, "Generating lazy-loaded grid items for all blogs\n"
@@ -2517,13 +2520,11 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     try:
         posts_template_html = import_file("rocm_blogs.templates", "posts.html")
 
-        # Get all blogs and filter to only include real blog posts
         all_blogs = rocm_blogs.blogs.get_blogs()
         filtered_blogs = [
             blog for blog in all_blogs if hasattr(blog, "blogpost") and blog.blogpost
         ]
 
-        # Sort blogs by date (newest first)
         sorted_blogs = sorted(
             filtered_blogs,
             key=lambda blog: getattr(blog, "date", datetime.now()),
@@ -2575,7 +2576,6 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
             current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
-            # Format vertical name for filename
             formatted_vertical = vertical.replace(" ", "-").replace("&", "and").lower()
             formatted_vertical = re.sub(r"[^a-z0-9-]", "", formatted_vertical)
             formatted_vertical = re.sub(r"-+", "-", formatted_vertical)
@@ -2586,7 +2586,6 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 page_grid_items = all_grid_items[start_index:end_index]
                 grid_content = "\n".join(page_grid_items)
 
-                # Create pagination controls
                 pagination_controls = _create_pagination_controls(
                     pagination_template,
                     page_num,
@@ -3097,8 +3096,7 @@ def update_category_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 )
 
                 total_categories_successful += 1
-                # This is a simplification, each category might have multiple
-                # pages
+
                 total_pages_created += 1
 
                 if log_file_handle:
@@ -3406,10 +3404,14 @@ def is_logging_enabled_from_config():
         if not debug_enabled:
             return False
 
-        # If debug is enabled, check the logging_enabled setting and authentication
-        if logging_enabled and auth_key:
-            # Use the authentication-aware is_logging_enabled function with the key
-            return is_logging_enabled(auth_key)
+        # If debug is enabled, check if logging is enabled
+        if logging_enabled:
+            # If auth key is provided, use authentication-aware check
+            if auth_key:
+                return is_logging_enabled(auth_key)
+            else:
+                # If no auth key but logging is explicitly enabled, allow it
+                return True
         else:
             return False
 
