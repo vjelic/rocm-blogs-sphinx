@@ -90,25 +90,86 @@ class Blog:
         return self.metadata
 
     def grab_og_image(self) -> str:
-        return (
-            self.metadata.get("myst")
-            .get("html_meta")
-            .get("property=og:image", "https://rocm.blogs.amd.com/_images/generic.jpg")
-        )
+        """Get OpenGraph image, falling back to regular image if not available."""
+        try:
+            myst_data = self.metadata.get("myst", {})
+            html_meta = myst_data.get("html_meta", {})
+            og_image = html_meta.get("property=og:image")
+
+            if og_image:
+                return og_image
+        except (AttributeError, TypeError):
+            pass
+
+        # Fallback: use the regular image path logic
+        # Convert the relative path from grab_image to absolute URL
+        try:
+            # Create a temporary ROCmBlogs-like object for grab_image
+            class TempROCmBlogs:
+                def __init__(self):
+                    self.blogs_directory = (
+                        os.path.dirname(self.file_path)
+                        if hasattr(self, "file_path")
+                        else ""
+                    )
+
+            temp_rocmblogs = TempROCmBlogs()
+            image_path = self.grab_image(temp_rocmblogs)
+
+            # Convert relative path to absolute URL
+            if str(image_path).startswith("./"):
+                image_url = f"https://rocm.blogs.amd.com/{str(image_path)[2:]}"
+            else:
+                image_url = f"https://rocm.blogs.amd.com/_images/{os.path.basename(str(image_path))}"
+
+            return image_url
+        except Exception:
+            return "https://rocm.blogs.amd.com/_images/generic.jpg"
 
     def grab_og_description(self) -> str:
-        return (
-            self.metadata.get("myst")
-            .get("html_meta")
-            .get("property=og:description", "No description available.")
-        )
+        """Get OpenGraph description, falling back to a default if not available."""
+        try:
+            myst_data = self.metadata.get("myst", {})
+            html_meta = myst_data.get("html_meta", {})
+            og_description = html_meta.get("property=og:description")
+
+            if og_description:
+                return og_description
+
+            # Try alternative description fields
+            description = html_meta.get("description lang=en")
+            if description:
+                return description
+
+        except (AttributeError, TypeError):
+            pass
+
+        return "No description available."
 
     def grab_og_href(self) -> str:
-        return (
-            self.metadata.get("myst")
-            .get("html_meta")
-            .get("property=og:url", "https://rocm.blogs.amd.com/")
-        )
+        """Get OpenGraph URL, falling back to regular href if not available."""
+        try:
+            myst_data = self.metadata.get("myst", {})
+            html_meta = myst_data.get("html_meta", {})
+            og_url = html_meta.get("property=og:url")
+
+            if og_url:
+                return og_url
+        except (AttributeError, TypeError):
+            pass
+
+        # Fallback: use the regular href logic
+        try:
+            href = self.grab_href()
+            # Convert relative path to absolute URL
+            if href.startswith("./"):
+                return f"https://rocm.blogs.amd.com{href[1:]}"
+            elif href.startswith("/"):
+                return f"https://rocm.blogs.amd.com{href}"
+            else:
+                return f"https://rocm.blogs.amd.com/{href}"
+        except Exception:
+            return "https://rocm.blogs.amd.com/"
 
     def load_image_to_memory(self, image_path: str, format: str = "PNG") -> None:
         """Load an image into memory."""

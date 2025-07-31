@@ -4,8 +4,8 @@ import json
 import os
 import re
 import shutil
-import time
 import threading
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -25,6 +25,7 @@ def log_message(level, message, operation="general", component="rocmblogs", **kw
     """Import log_message function from main module to avoid circular imports."""
     try:
         from . import log_message as main_log_message
+
         return main_log_message(level, message, operation, component, **kwargs)
     except ImportError:
         print(f"[{level.upper()}] {message}")
@@ -817,21 +818,37 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                     is_duplicate = True
                 if blog_title and blog_title in seen_titles:
                     is_duplicate = True
-                
+
                 if not is_duplicate and blog_path:
                     seen_paths.add(blog_path)
                     if blog_title:
                         seen_titles.add(blog_title)
                     deduplicated_blog_list.append(blog)
 
-        log_message("info", f"Deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs", "general", "process")
+        log_message(
+            "info",
+            f"Deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs",
+            "general",
+            "process",
+        )
 
         # Check if lazy_load parameter is supported
         grid_params = inspect.signature(generate_grid).parameters
         if "lazy_load" not in grid_params:
-            log_message("warning", "Falling back to regular grid generation", "general", "process")
+            log_message(
+                "warning",
+                "Falling back to regular grid generation",
+                "general",
+                "process",
+            )
             temp_used_blogs = []
-            return _generate_grid_items(rocm_blogs, deduplicated_blog_list, len(deduplicated_blog_list), temp_used_blogs, skip_used=False)
+            return _generate_grid_items(
+                rocm_blogs,
+                deduplicated_blog_list,
+                len(deduplicated_blog_list),
+                temp_used_blogs,
+                skip_used=False,
+            )
 
         # Generate grid items with lazy loading
         for blog_entry in deduplicated_blog_list:
@@ -843,21 +860,43 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                 lazy_grid_items.append(grid_html)
             except Exception as blog_error:
                 error_count += 1
-                log_message("error", f"Error generating grid item for {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}", "general", "process")
+                log_message(
+                    "error",
+                    f"Error generating grid item for {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}",
+                    "general",
+                    "process",
+                )
 
         if not lazy_grid_items:
             log_message("warning", "No grid items generated", "general", "process")
             return []
 
         if error_count > 0:
-            log_message("warning", f"Generated {len(lazy_grid_items)} items with {error_count} errors", "general", "process")
+            log_message(
+                "warning",
+                f"Generated {len(lazy_grid_items)} items with {error_count} errors",
+                "general",
+                "process",
+            )
         else:
-            log_message("info", f"Generated {len(lazy_grid_items)} items from {len(deduplicated_blog_list)} blogs", "general", "process")
+            log_message(
+                "info",
+                f"Generated {len(lazy_grid_items)} items from {len(deduplicated_blog_list)} blogs",
+                "general",
+                "process",
+            )
 
         return lazy_grid_items
     except Exception as lazy_load_error:
-        log_message("error", f"Error generating lazy-loaded grid items: {lazy_load_error}", "general", "process")
-        raise ROCmBlogsError(f"Error generating lazy-loaded grid-items: {lazy_load_error}") from lazy_load_error
+        log_message(
+            "error",
+            f"Error generating lazy-loaded grid items: {lazy_load_error}",
+            "general",
+            "process",
+        )
+        raise ROCmBlogsError(
+            f"Error generating lazy-loaded grid-items: {lazy_load_error}"
+        ) from lazy_load_error
 
 
 def process_single_blog(blog_entry, rocm_blogs):
@@ -894,8 +933,14 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 image_filename = os.path.basename(image_path)
                                 possible_paths = [
                                     os.path.join(blog_directory, image_filename),
-                                    os.path.join(blog_directory, "images", image_filename),
-                                    os.path.join(rocm_blogs.blogs_directory, "images", image_filename),
+                                    os.path.join(
+                                        blog_directory, "images", image_filename
+                                    ),
+                                    os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "images",
+                                        image_filename,
+                                    ),
                                 ]
 
                                 for possible_path in possible_paths:
@@ -909,52 +954,103 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 image_filename = os.path.basename(image_path)
                                 name_without_ext = os.path.splitext(image_filename)[0]
                                 webp_filename = f"{name_without_ext}.webp"
-                                
+
                                 # Check multiple possible locations for WebP version
                                 webp_locations = [
-                                    os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename),
-                                    os.path.join(os.path.dirname(image_path), webp_filename),
-                                    os.path.join(os.path.dirname(image_path), "images", webp_filename)
+                                    os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "_images",
+                                        webp_filename,
+                                    ),
+                                    os.path.join(
+                                        os.path.dirname(image_path), webp_filename
+                                    ),
+                                    os.path.join(
+                                        os.path.dirname(image_path),
+                                        "images",
+                                        webp_filename,
+                                    ),
                                 ]
-                                
+
                                 webp_found = False
                                 webp_destination = None
-                                
+
                                 for webp_location in webp_locations:
                                     if os.path.exists(webp_location):
                                         webp_found = True
                                         webp_destination = webp_location
                                         break
-                                
+
                                 if webp_found:
                                     # Use existing WebP version
                                     blog_entry.image_paths[i] = webp_destination
-                                    log_message("info", f"Using existing WebP version: {webp_destination}", "general", "process")
+                                    log_message(
+                                        "info",
+                                        f"Using existing WebP version: {webp_destination}",
+                                        "general",
+                                        "process",
+                                    )
                                 else:
                                     # WebP doesn't exist, create it for consistency with grid
-                                    webp_destination = os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename)
-                                    os.makedirs(os.path.dirname(webp_destination), exist_ok=True)
-                                    
+                                    webp_destination = os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "_images",
+                                        webp_filename,
+                                    )
+                                    os.makedirs(
+                                        os.path.dirname(webp_destination), exist_ok=True
+                                    )
+
                                     try:
                                         from .images import convert_to_webp
+
                                         convert_to_webp(image_path, webp_destination)
                                         blog_entry.image_paths[i] = webp_destination
-                                        log_message("info", f"Created WebP version for blog page: {webp_destination}", "general", "process")
+                                        log_message(
+                                            "info",
+                                            f"Created WebP version for blog page: {webp_destination}",
+                                            "general",
+                                            "process",
+                                        )
                                     except Exception as webp_error:
-                                        log_message("warning", f"Failed to convert {image_path} to WebP, using original: {webp_error}", "general", "process")
+                                        log_message(
+                                            "warning",
+                                            f"Failed to convert {image_path} to WebP, using original: {webp_error}",
+                                            "general",
+                                            "process",
+                                        )
                                         # Fall back to copying original file
-                                        original_destination = os.path.join(rocm_blogs.blogs_directory, "_images", image_filename)
-                                        os.makedirs(os.path.dirname(original_destination), exist_ok=True)
+                                        original_destination = os.path.join(
+                                            rocm_blogs.blogs_directory,
+                                            "_images",
+                                            image_filename,
+                                        )
+                                        os.makedirs(
+                                            os.path.dirname(original_destination),
+                                            exist_ok=True,
+                                        )
                                         if not os.path.exists(original_destination):
-                                            shutil.copy2(image_path, original_destination)
+                                            shutil.copy2(
+                                                image_path, original_destination
+                                            )
                                         blog_entry.image_paths[i] = original_destination
 
                         except Exception as img_error:
-                            log_message("warning", f"Error processing image {image_path}: {img_error}", "general", "process")
+                            log_message(
+                                "warning",
+                                f"Error processing image {image_path}: {img_error}",
+                                "general",
+                                "process",
+                            )
                             continue
 
             except Exception as grab_error:
-                log_message("warning", f"Error grabbing images for blog {readme_file_path}: {grab_error}", "general", "process")
+                log_message(
+                    "warning",
+                    f"Error grabbing images for blog {readme_file_path}: {grab_error}",
+                    "general",
+                    "process",
+                )
 
         # OPTIMIZATION 4: Reduce logging overhead - only log errors
         try:
@@ -980,9 +1076,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                     myst_data = blog_entry.metadata.get("myst", {})
                     html_meta = myst_data.get("html_meta", {})
                     vertical_str = html_meta.get("vertical", "")
-                    
+
                     if vertical_str:
-                        market_verticals = [v.strip() for v in vertical_str.split(",") if v.strip()]
+                        market_verticals = [
+                            v.strip() for v in vertical_str.split(",") if v.strip()
+                        ]
                 except (AttributeError, KeyError):
                     pass
 
@@ -992,19 +1090,33 @@ def process_single_blog(blog_entry, rocm_blogs):
                     try:
                         # Import the classification function from metadata.py
                         from .metadata import classify_blog_tags
-                        
+
                         # Get automatic vertical classification
                         classification_result = classify_blog_tags(blog_tags)
-                        
-                        if classification_result and classification_result.get("vertical_counts"):
+
+                        if classification_result and classification_result.get(
+                            "vertical_counts"
+                        ):
                             vertical_counts = classification_result["vertical_counts"]
                             # Get all verticals with non-zero scores
-                            auto_verticals = [v for v, score in vertical_counts.items() if score > 0]
+                            auto_verticals = [
+                                v for v, score in vertical_counts.items() if score > 0
+                            ]
                             if auto_verticals:
                                 market_verticals = auto_verticals
-                                log_message("info", f"Auto-assigned market verticals {auto_verticals} for blog {readme_file_path} based on tags: {blog_tags}", "general", "process")
+                                log_message(
+                                    "info",
+                                    f"Auto-assigned market verticals {auto_verticals} for blog {readme_file_path} based on tags: {blog_tags}",
+                                    "general",
+                                    "process",
+                                )
                     except Exception as auto_assign_error:
-                        log_message("warning", f"Error auto-assigning market verticals for {readme_file_path}: {auto_assign_error}", "general", "process")
+                        log_message(
+                            "warning",
+                            f"Error auto-assigning market verticals for {readme_file_path}: {auto_assign_error}",
+                            "general",
+                            "process",
+                        )
 
             # Format market verticals for display
             if not market_verticals or market_verticals == [""]:
