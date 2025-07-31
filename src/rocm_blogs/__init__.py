@@ -102,7 +102,7 @@ def log_message(
     component: str = "rocm_blogs",
     **kwargs,
 ):
-    """ Unified logging system """
+    """Unified logging system"""
     if not is_logging_enabled_from_config():
         return
 
@@ -1037,7 +1037,7 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
 
     # Enhanced timing tracking for each major operation
     operation_timings = {}
-    
+
     def track_operation_time(operation_name, start_time):
         """Track timing for individual operations within update_index_file."""
         duration = time.time() - start_time
@@ -1046,10 +1046,12 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
             "info",
             f"INDEX OPERATION: {operation_name} completed in {duration:.4f} seconds",
             "update_index_timing",
-            "update_index_file"
+            "update_index_file",
         )
         if log_file_handle:
-            safe_log_write(log_file_handle, f"TIMING: {operation_name} = {duration:.4f}s\n")
+            safe_log_write(
+                log_file_handle, f"TIMING: {operation_name} = {duration:.4f}s\n"
+            )
         return duration
 
     try:
