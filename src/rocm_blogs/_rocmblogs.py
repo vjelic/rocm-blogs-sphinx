@@ -27,7 +27,6 @@ class ROCmBlogs:
         self.tags = []
         self.yaml_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
-    # performance improvement
     def find_readme_files_cache(self) -> None:
         """Cache README files in blogs directory."""
         cache_file = Path("readme_files_cache.txt")

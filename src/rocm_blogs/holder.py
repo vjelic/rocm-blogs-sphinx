@@ -43,11 +43,9 @@ class BlogHolder:
             log_message("error", f"Expected Blog instance but got {type(blog)}")
             raise TypeError("The blog must be an instance of the 'Blog' class.")
 
-        # Extract title with comprehensive fallback strategy
         if hasattr(blog, "blog_title") and blog.blog_title:
             title = blog.blog_title
         else:
-            # Generate title from file path when blog title is unavailable
             if hasattr(blog, "file_path"):
                 filename = os.path.basename(blog.file_path)
                 title = (
@@ -67,7 +65,6 @@ class BlogHolder:
                     "Blog has no title or file path, using default 'Untitled Blog'",
                 )
 
-        # Construct unique key using title and file path combination
         if hasattr(blog, "file_path"):
             key = f"{title}-{blog.file_path}"
         else:
@@ -86,7 +83,6 @@ class BlogHolder:
         self.blogs[key] = blog
         log_message("info", f"Added blog: '{key}'", "general", "holder")
 
-        # Process author-based indexing when author information is available
         if hasattr(blog, "author"):
             log_message("debug", f"Adding blog '{key}' to author '{blog.author}'")
             for author in blog.grab_authors_list():
@@ -94,7 +90,6 @@ class BlogHolder:
                     self.blogs_authors[author] = []
                     log_message("debug", f"Initialized author list for: {author}")
 
-                # Implement duplicate detection based on title and path comparison
                 is_duplicate = False
                 blog_title = getattr(blog, "blog_title", "")
                 blog_path = getattr(blog, "file_path", "")
@@ -103,7 +98,6 @@ class BlogHolder:
                     existing_title = getattr(existing_blog, "blog_title", "")
                     existing_path = getattr(existing_blog, "file_path", "")
 
-                    # Determine duplication through title and path matching
                     if (
                         blog_title and existing_title and blog_title == existing_title
                     ) or (blog_path and existing_path and blog_path == existing_path):
@@ -114,7 +108,6 @@ class BlogHolder:
                         )
                         break
 
-                # Add blog to author index only when not duplicate
                 if not is_duplicate:
                     log_message("debug", f"Adding blog '{key}' to author '{author}'")
                     self.blogs_authors[author].append(blog)
@@ -143,7 +136,7 @@ class BlogHolder:
         try:
             with open(filename, "w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
-                # Write header row
+
                 writer.writerow(
                     [
                         "title",
