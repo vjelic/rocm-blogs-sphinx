@@ -44,8 +44,6 @@ def truncate_string(input_string: str) -> str:
         if not input_string:
             return ""
 
-        # Remove special characters and replace whitespace with hyphens in one
-        # pass
         cleaned_string = SPECIAL_CHARS_PATTERN.sub("", input_string)
         slug = WHITESPACE_PATTERN_FOR_SLUGS.sub("-", cleaned_string).lower()
 
@@ -95,12 +93,9 @@ def count_words_in_markdown(content: str) -> int:
         if not content:
             return 0
 
-        # Remove YAML front matter if present
         if content.startswith("---"):
             content = MARKDOWN_PATTERNS["yaml_front_matter"].sub("", content)
 
-        # Apply regex replacements to remove markdown elements
-        # Order matters - remove code blocks first, then other elements
         for pattern_name in [
             "fenced_code_blocks",
             "indented_code_blocks",
@@ -116,7 +111,6 @@ def count_words_in_markdown(content: str) -> int:
         ]:
             content = MARKDOWN_PATTERNS[pattern_name].sub("", content)
 
-        # Split by whitespace and count non-empty words
         words = [
             word
             for word in MARKDOWN_PATTERNS["whitespace"].split(content)

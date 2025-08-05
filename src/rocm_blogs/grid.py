@@ -12,7 +12,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
     """Takes a blog and creates a sphinx grid item with WebP image support."""
     grid_start_time = time.time()
 
-    # Create/append to grid generation log file
     log_file_handle = None
     if is_logging_enabled_from_config():
         try:
@@ -54,14 +53,12 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
 :::
 """
 
-    # Extract basic blog information
     title = blog_title
     safe_log_write(log_file_handle, f"Grid item title: '{title}'\n")
 
     date = blog.date.strftime("%B %d, %Y") if blog.date else "No Date"
     safe_log_write(log_file_handle, f"Grid item date: '{date}'\n")
 
-    # Extract description with detailed logging
     description = "No Description"
     if hasattr(blog, "myst") and blog.myst:
         html_meta = blog.myst.get("html_meta", {})
@@ -85,7 +82,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             f"No myst metadata found, using default description. has_myst: {has_myst}, myst_value: {myst_value}\n",
         )
 
-    # Extract authors with detailed logging
     authors_list = getattr(blog, "author", "").split(",")
     safe_log_write(
         log_file_handle,
@@ -102,7 +98,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             f"AUTHOR PAGE: Blog path: '{blog_file_path}', use_og: {use_og}\n",
         )
 
-        # Get OpenGraph image
         try:
             og_image = blog.grab_og_image()
             safe_log_write(
@@ -110,13 +105,11 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                 f"AUTHOR PAGE: Retrieved OpenGraph image: '{og_image}' for blog: '{title}'\n",
             )
 
-            # If no OpenGraph image found, fall back to regular image processing
             if og_image is None:
                 safe_log_write(
                     log_file_handle,
                     f"AUTHOR PAGE: No OpenGraph image found for '{title}', falling back to regular image processing\n",
                 )
-                # Fall back to regular image processing
                 try:
                     regular_image = blog.grab_image(ROCmBlogs)
                     image_str = str(regular_image)
@@ -124,10 +117,8 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                         image_str = image_str[2:]
                     image_str = image_str.replace("\\", "/")
 
-                    # Convert image filename to WebP format for consistency
                     image_filename = os.path.basename(image_str)
                     if image_filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                        # Convert to WebP filename
                         base_name = os.path.splitext(image_filename)[0]
                         image_filename = f"{base_name}.webp"
                         safe_log_write(
@@ -155,7 +146,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             )
             image = "https://rocm.blogs.amd.com/_images/generic.webp"
 
-        # Get OpenGraph href
         try:
             og_href = blog.grab_og_href()
             safe_log_write(
@@ -163,13 +153,11 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                 f"AUTHOR PAGE: Retrieved OpenGraph href: '{og_href}' for blog: '{title}'\n",
             )
 
-            # If no OpenGraph href found, fall back to regular href processing
             if og_href is None:
                 safe_log_write(
                     log_file_handle,
                     f"AUTHOR PAGE: No OpenGraph href found for '{title}', falling back to regular href processing\n",
                 )
-                # Fall back to regular href processing
                 try:
                     raw_href = blog.grab_href()
                     if hasattr(raw_href, "split"):
@@ -177,14 +165,11 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                     else:
                         href = str(raw_href).replace(".md", ".html").replace("\\", "/")
 
-                    # Convert to full URL with proper path construction
                     if not href.startswith("http"):
-                        # Extract the path after /blogs/ and construct proper URL
                         if "/blogs/" in href:
                             blog_path = href.split("/blogs/")[-1]
                             href = f"https://rocm.blogs.amd.com/{blog_path}"
                         else:
-                            # Remove leading ./ if present
                             if href.startswith("./"):
                                 href = href[2:]
                             href = f"https://rocm.blogs.amd.com/{href}"
@@ -214,13 +199,11 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
         )
 
     else:
-        # Regular image processing logic
         safe_log_write(
             log_file_handle,
             f"REGULAR MODE: Processing regular image for grid item: '{title}'\n",
         )
 
-        # Check for thumbnail and WebP conversion
         if hasattr(blog, "thumbnail") and blog.thumbnail:
             thumbnail_path = blog.thumbnail
             webp_thumbnail_path = os.path.splitext(thumbnail_path)[0] + ".webp"
@@ -262,7 +245,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                     f"REGULAR MODE: No WebP version found for thumbnail: '{thumbnail_path}'\n",
                 )
 
-        # Get image using regular processing
         safe_log_write(
             log_file_handle, f"REGULAR MODE: Calling blog.grab_image() for: '{title}'\n"
         )
@@ -282,7 +264,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             )
             image_str = "generic.webp"
 
-        # Process image path for grid items
         if image_str.startswith("./"):
             image_str = image_str[2:]
             safe_log_write(
@@ -298,7 +279,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             f"REGULAR MODE: Final processed image path: '{image_str}'\n",
         )
 
-        # Handle generic image WebP conversion
         if "generic.jpg" in image_str.lower():
             generic_webp_path = os.path.join(
                 os.path.dirname(os.path.dirname(__file__)),
@@ -324,7 +304,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                     f"REGULAR MODE: Using WebP version for generic image: '{image}'\n",
                 )
 
-        # Handle other image format WebP conversion
         elif any(
             image_str.lower().endswith(ext)
             for ext in (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
@@ -374,7 +353,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                     f"REGULAR MODE: No WebP version found for '{image_str}', attempting conversion\n",
                 )
 
-                # Attempt WebP conversion
                 original_image_path = None
                 search_locations = []
 
@@ -432,7 +410,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                                     f"REGULAR MODE: Converted image mode from {img.mode} to RGB\n",
                                 )
 
-                            # Resize if too large
                             if original_width > 1280 or original_height > 720:
                                 scaling_factor = min(
                                     1280 / original_width, 720 / original_height
@@ -448,7 +425,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                                     f"REGULAR MODE: Resized image from {original_width}x{original_height} to {new_width}x{new_height} (factor: {scaling_factor:.3f})\n",
                                 )
 
-                            # Save WebP version
                             webp_path = (
                                 os.path.splitext(original_image_path)[0] + ".webp"
                             )
@@ -476,7 +452,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             log_file_handle, f"REGULAR MODE: Final image for grid item: '{image}'\n"
         )
 
-        # Generate href for regular processing
         try:
             raw_href = blog.grab_href()
             if hasattr(raw_href, "split"):
@@ -495,7 +470,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             )
             href = "#"
 
-    # Generate authors HTML (common for both use_og and regular processing)
     authors_html = ""
     if authors_list:
         try:
@@ -521,7 +495,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             f"No valid authors found for grid item, authors_list: {authors_list}\n",
         )
 
-    # Generate final grid content
     try:
         grid_content = grid_template.format(
             title=title,
@@ -543,13 +516,11 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
             log_file_handle, f"Grid content length: {len(grid_content)} characters\n"
         )
 
-        # Log the actual grid content
         safe_log_write(
             log_file_handle,
             f"Generated grid content for '{title}':\n{'-' * 40}\n{grid_content}\n{'-' * 40}\n",
         )
 
-        # Log a summary of what was used
         if use_og:
             safe_log_write(
                 log_file_handle,
@@ -561,7 +532,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                 f"REGULAR SUMMARY: '{title}' -> Image: '{image}', Href: '{href}', Mode: Regular\n",
             )
 
-        # Final validation: ensure grid content meets minimum requirements
         if not grid_content or len(grid_content.strip()) < 50:
             safe_log_write(
                 log_file_handle,
@@ -574,7 +544,6 @@ def generate_grid(ROCmBlogs, blog, lazy_load=False, use_og=False) -> str:
                     pass
             return ""
 
-        # Close the log file handle
         if log_file_handle:
             try:
                 log_file_handle.close()

@@ -740,13 +740,6 @@ class BlogHolder:
 
     def sort_blogs_by_vertical(self) -> list[Blog]:
         """Sort blogs by market vertical."""
-        # Import the logging check function from __init__.py
-        try:
-            from . import is_logging_enabled_from_config
-        except ImportError:
-            # Fallback if import fails
-            def is_logging_enabled_from_config():
-                return False
 
         self.blogs_verticals = {}
 
