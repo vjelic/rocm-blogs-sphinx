@@ -96,15 +96,6 @@ if LOGGING_AVAILABLE and is_logging_enabled():
         structured_logger = None
 
 
-def safe_log_close(log_file_handle):
-    """Thread safe log close function."""
-    if log_file_handle is not None:
-        try:
-            log_file_handle.close()
-        except Exception as close_error:
-            pass
-
-
 _CRITICAL_ERROR_OCCURRED = False
 
 _BUILD_START_TIME = time.time()
