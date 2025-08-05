@@ -165,7 +165,7 @@ WEBP_CONSERVATIVE_METHOD = 6  # Improved quality for conservative mode
 # Category definitions
 BLOG_CATEGORIES = [
     {
-        "name": "Applications & models",
+        "name": "Applications & Models",
         "template": "applications-models.html",
         "output_base": "applications-models",
         "category_key": "Applications & models",
@@ -174,9 +174,9 @@ BLOG_CATEGORIES = [
         "keywords": "applications, models, AI, machine learning",
     },
     {
-        "name": "Software tools & optimizations",
+        "name": "Software Tools & Optimizations",
         "template": "software-tools.html",
-        "output_base": "software-tools",
+        "output_base": "software-tools-optimizations",
         "category_key": "Software tools & optimizations",
         "title": "Software Tools and Optimizations",
         "description": "AMD ROCm™ blogs about tools and optimizations",
@@ -185,7 +185,7 @@ BLOG_CATEGORIES = [
     {
         "name": "Ecosystems and Partners",
         "template": "ecosystem-partners.html",
-        "output_base": "ecosystem-partners",
+        "output_base": "ecosystems-and-partners",
         "category_key": "Ecosystems and Partners",
         "title": "Ecosystem and Partners",
         "description": "AMD ROCm™ blogs about ecosystem and partners",
@@ -194,7 +194,7 @@ BLOG_CATEGORIES = [
     {
         "name": "AI Applications",
         "template": "applications-models.html",
-        "output_base": "ai-applications",
+        "output_base": "ai-applications-category",
         "category_key": "ai-applications",
         "title": "AI Applications",
         "description": "AMD ROCm™ blogs about AI applications",
@@ -204,7 +204,7 @@ BLOG_CATEGORIES = [
     {
         "name": "HPC Software Tools",
         "template": "software-tools.html",
-        "output_base": "hpc-software-tools",
+        "output_base": "hpc-software-tools-category",
         "category_key": "hpc-software-tools",
         "title": "HPC Software Tools",
         "description": "AMD ROCm™ blogs about HPC software tools",

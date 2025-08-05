@@ -12,13 +12,13 @@ from .blog import Blog
 from .holder import BlogHolder
 
 
-# Import log_message from the main module
+# Direct implementation to avoid circular imports
 def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
+    """Log message function to avoid circular imports."""
     try:
-        from . import log_message as main_log_message
+        from .logger.logger import log_message as logger_log_message
 
-        return main_log_message(level, message, operation, component, **kwargs)
+        return logger_log_message(level, message, operation, component, **kwargs)
     except ImportError:
         # Fallback to print if import fails
         print(f"[{level.upper()}] {message}")
@@ -26,7 +26,7 @@ def log_message(level, message, operation="general", component="rocmblogs", **kw
 
 class ROCmBlogs:
     def __init__(self) -> None:
-        """Initialize the ROCmBlogs class."""
+        """Initialize ROCmBlogs class."""
 
         self.blogs_directory = ""
         self.sphinx_app = None
@@ -40,7 +40,7 @@ class ROCmBlogs:
 
     # performance improvement
     def find_readme_files_cache(self) -> None:
-        """Cache the README files in the 'blogs' directory."""
+        """Cache README files in blogs directory."""
         cache_file = Path("readme_files_cache.txt")
         root = Path(self.blogs_directory)
         log_message(
@@ -114,7 +114,7 @@ class ROCmBlogs:
         )
 
     def find_readme_files(self) -> None:
-        """Find all 'readme.md' files in the blogs directory."""
+        """Find all README.md files in blogs directory."""
 
         root = Path(self.blogs_directory)
 
@@ -137,7 +137,7 @@ class ROCmBlogs:
         )
 
         def process_path(path: Path) -> str | None:
-            """Check if the path is a file and return the path if it is."""
+            """Check if path is file and return path."""
 
             if path.is_file():
                 return str(path.resolve())
@@ -162,14 +162,14 @@ class ROCmBlogs:
         self.blog_paths = readme_files
 
     def process_path(self, path: Path) -> str | None:
-        """Check if the path is a file and return the path if it is."""
+        """Check if path is file and return path."""
 
         if path.is_file():
             return str(path.resolve())
         return None
 
     def find_author_files(self) -> None:
-        """Find all author files in the blogs directory."""
+        """Find all author files in blogs directory."""
 
         root = Path(self.blogs_directory)
 
@@ -225,7 +225,7 @@ class ROCmBlogs:
         self.author_paths = author_files
 
     def find_blogs_directory(self, working_directory: str) -> Path:
-        """Find the 'blogs' directory starting from the given working directory."""
+        """Find blogs directory from working directory."""
 
         if not os.path.exists(working_directory):
             log_message(
@@ -273,7 +273,7 @@ class ROCmBlogs:
             current_dir = current_dir.parent
 
     def extract_metadata(self) -> dict:
-        """Extract metadata from the blog files."""
+        """Extract metadata from blog files."""
         if not self.blog_paths:
             log_message("warning", "No blog paths available to extract metadata from")
             return {}
@@ -327,59 +327,72 @@ class ROCmBlogs:
             return {}
 
     def extract_metadata_from_file(self, file_path: str) -> dict:
-        """Extract metadata from a blog file."""
+        """Extract metadata from blog file."""
 
         log_message(
             "debug", f"Extracting metadata from {file_path}", "general", "_rocmblogs"
         )
 
-        with open(file_path, "r", encoding="utf-8", errors="replace") as file:
-            content = file.read()
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as file:
+                content = file.read()
 
-        match = self.yaml_pattern.match(content)
+            match = self.yaml_pattern.match(content)
 
-        if match:
-            yaml_content = match.group(1)
+            if match:
+                yaml_content = match.group(1)
+                try:
+                    metadata = yaml.safe_load(yaml_content)
+                    if not isinstance(metadata, dict):
+                        log_message(
+                            "warning",
+                            f"YAML front matter in {file_path} is not a dictionary. Treating as empty metadata.",
+                            "general",
+                            "_rocmblogs",
+                        )
+                        return {}
 
-            try:
-                metadata = yaml.safe_load(yaml_content)
+                    category = metadata.get("category", "")
+                    tags = metadata.get("tags", "")
 
-                category = metadata.get("category", "")
-                tags = metadata.get("tags", "")
+                    self.categories.append(category)
+                    self.tags.append(tags)
 
-                self.categories.append(category)
-                self.tags.append(tags)
+                    log_message(
+                        "debug",
+                        f"Extracted metadata from {os.path.basename(file_path)} - Category: {category}, Tags: {tags}",
+                        "general",
+                        "_rocmblogs",
+                    )
 
+                    return metadata
+                except yaml.YAMLError as error:
+                    log_message(
+                        "error",
+                        f"Error parsing YAML in {file_path}: {error}",
+                        "general",
+                        "_rocmblogs",
+                    )
+                    return {}
+            else:
                 log_message(
-                    "debug",
-                    f"Extracted metadata from {os.path.basename(file_path)} - Category: {category}, Tags: {tags}",
+                    "warning",
+                    f"No YAML front matter found in {file_path}. Look at the guidelines for creating a blog.",
                     "general",
                     "_rocmblogs",
                 )
-
-                return metadata
-            except yaml.YAMLError as error:
-                log_message(
-                    "error",
-                    f"Error parsing YAML in {file_path}: {error}",
-                    "general",
-                    "_rocmblogs",
-                )
-                raise ValueError(
-                    f"Error parsing YAML: {error}. Look at the metadata section in the Markdown file."
-                )
-        else:
+                return {}
+        except Exception as e:
             log_message(
-                "warning",
-                f"No YAML front matter found in {file_path}. Look at the guidelines for creating a blog.",
+                "error",
+                f"Could not read or process file {file_path}: {e}",
                 "general",
                 "_rocmblogs",
             )
-
             return {}
 
     def process_blog(self, file_path) -> Blog | None:
-        """Create Blog objects from the blog files."""
+        """Create Blog objects from blog files."""
 
         try:
             metadata = self.extract_metadata_from_file(file_path)
@@ -450,7 +463,7 @@ class ROCmBlogs:
                     )
                     log_message(
                         "info",
-                        "Using parent directory as blog category: {blog.category}",
+                        f"Using parent directory as blog category: {blog.category}",
                         "general",
                         "_rocmblogs",
                     )
@@ -465,7 +478,7 @@ class ROCmBlogs:
                         )
                         log_message(
                             "info",
-                            "Using grandparent directory as blog category: {blog.category}",
+                            f"Using grandparent directory as blog category: {blog.category}",
                             "general",
                             "_rocmblogs",
                         )
@@ -474,7 +487,7 @@ class ROCmBlogs:
                         blog.category = "ROCm Blog"
                         log_message(
                             "info",
-                            "Using default category for blog: {blog.category}",
+                            f"Using default category for blog: {blog.category}",
                             "general",
                             "_rocmblogs",
                         )
@@ -521,7 +534,24 @@ class ROCmBlogs:
 
         with self._blog_lock:
             added_count = 0
+            skipped_count = 0
+            seen_titles = set()
+
             for blog in valid_blogs:
+                blog_title = getattr(blog, "blog_title", None)
+                if blog_title and blog_title in seen_titles:
+                    log_message(
+                        "warning",
+                        f"Skipping duplicate blog with title: '{blog_title}' from path: {blog.file_path}",
+                        "general",
+                        "_rocmblogs",
+                    )
+                    skipped_count += 1
+                    continue
+
+                if blog_title:
+                    seen_titles.add(blog_title)
+
                 try:
                     self.blogs.add_blog(blog)
                     added_count += 1
@@ -535,7 +565,7 @@ class ROCmBlogs:
 
             log_message(
                 "info",
-                "Successfully added {added_count} blogs to the blog holder",
+                f"Successfully added {added_count} blogs to the blog holder. Skipped {skipped_count} duplicates.",
                 "general",
                 "_rocmblogs",
             )

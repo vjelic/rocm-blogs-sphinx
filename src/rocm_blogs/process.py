@@ -4,8 +4,8 @@ import json
 import os
 import re
 import shutil
-import time
 import threading
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -18,16 +18,8 @@ from ._rocmblogs import *
 from .constants import *
 from .grid import *
 from .images import *
+from .logger.logger import *
 from .utils import *
-
-
-def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
-    try:
-        from . import log_message as main_log_message
-        return main_log_message(level, message, operation, component, **kwargs)
-    except ImportError:
-        print(f"[{level.upper()}] {message}")
 
 
 def quickshare(blog_entry) -> str:
@@ -479,6 +471,20 @@ def _process_category(
         end_index = min(start_index + CATEGORY_BLOGS_PER_PAGE, len(all_grid_items))
         page_grid_items = all_grid_items[start_index:end_index]
 
+        # Validate grid content before creating page
+        if not page_grid_items:
+            log_message(
+                "warning",
+                f"No grid items for category {category_name} page {page_num}/{total_pages}. Skipping page creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: No grid items for category {category_name} page {page_num}/{total_pages}. Skipping page creation.\n"
+                )
+            continue
+
         fixed_grid_items = []
         for grid_item in page_grid_items:
             grid_item = grid_item.replace(":img-top: ./", ":img-top: /")
@@ -491,6 +497,20 @@ def _process_category(
             fixed_grid_items.append(grid_item)
 
         grid_content = "\n".join(fixed_grid_items)
+
+        # Additional validation: ensure grid content is meaningful
+        if not grid_content or not grid_content.strip():
+            log_message(
+                "warning",
+                f"Empty grid content for category {category_name} page {page_num}/{total_pages}. Skipping page creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: Empty grid content for category {category_name} page {page_num}/{total_pages}. Skipping page creation.\n"
+                )
+            continue
 
         pagination_controls = _create_pagination_controls(
             pagination_template, page_num, total_pages, output_base
@@ -519,6 +539,20 @@ def _process_category(
             page_description_suffix=page_description_suffix,
             current_page=page_num,
         )
+
+        # Final validation: ensure page content is not empty
+        if not final_content or len(final_content.strip()) < 100:
+            log_message(
+                "warning",
+                f"Generated page content is too small or empty for category {category_name} page {page_num}/{total_pages}. Skipping file creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: Page content too small for category {category_name} page {page_num}/{total_pages}. Skipping file creation.\n"
+                )
+            continue
 
         output_filename = (
             f"{output_base}.md" if page_num == 1 else f"{output_base}-page{page_num}.md"
@@ -606,6 +640,26 @@ def _generate_grid_items(
     """Generate grid items in parallel using thread pool."""
 
     try:
+        # Debug: Log the parameters received by this function
+        log_message(
+            "debug",
+            f"_generate_grid_items called with: max_items={max_items}, skip_used={skip_used}, use_og={use_og}, blog_count={len(blog_list)}",
+            "general",
+            "process",
+        )
+
+        # Debug: Log the first few blog titles to identify which set of blogs this is
+        if blog_list:
+            first_few_titles = [
+                getattr(blog, "blog_title", "Unknown") for blog in blog_list[:3]
+            ]
+            log_message(
+                "debug",
+                f"_generate_grid_items processing blogs starting with: {first_few_titles}",
+                "general",
+                "process",
+            )
+
         grid_items = []
         item_count = 0
         error_count = 0
@@ -689,18 +743,25 @@ def _generate_grid_items(
                     if not grid_result or not grid_result.strip():
                         blog_entry = grid_futures[future]
                         log_message(
-                            "warning",
-                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                            "debug",
+                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} - likely skipped due to missing OpenGraph metadata",
                             "general",
                             "process",
                         )
+                        # Don't count as error - this is expected behavior for blogs without OpenGraph metadata
+                        continue
+
+                    # Validate that grid result contains meaningful content
+                    if (
+                        len(grid_result.strip()) < 50
+                    ):  # Minimum meaningful grid content size
+                        blog_entry = grid_futures[future]
                         log_message(
                             "debug",
-                            f"Traceback: {traceback.format_exc()}",
+                            f"Grid HTML too small for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} (length: {len(grid_result.strip())})",
                             "general",
                             "process",
                         )
-                        error_count += 1
                         continue
 
                     grid_items.append(grid_result)
@@ -817,21 +878,37 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                     is_duplicate = True
                 if blog_title and blog_title in seen_titles:
                     is_duplicate = True
-                
+
                 if not is_duplicate and blog_path:
                     seen_paths.add(blog_path)
                     if blog_title:
                         seen_titles.add(blog_title)
                     deduplicated_blog_list.append(blog)
 
-        log_message("info", f"Deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs", "general", "process")
+        log_message(
+            "info",
+            f"Deduplication: {len(blog_list)} -> {len(deduplicated_blog_list)} blogs",
+            "general",
+            "process",
+        )
 
         # Check if lazy_load parameter is supported
         grid_params = inspect.signature(generate_grid).parameters
         if "lazy_load" not in grid_params:
-            log_message("warning", "Falling back to regular grid generation", "general", "process")
+            log_message(
+                "warning",
+                "Falling back to regular grid generation",
+                "general",
+                "process",
+            )
             temp_used_blogs = []
-            return _generate_grid_items(rocm_blogs, deduplicated_blog_list, len(deduplicated_blog_list), temp_used_blogs, skip_used=False)
+            return _generate_grid_items(
+                rocm_blogs,
+                deduplicated_blog_list,
+                len(deduplicated_blog_list),
+                temp_used_blogs,
+                skip_used=False,
+            )
 
         # Generate grid items with lazy loading
         for blog_entry in deduplicated_blog_list:
@@ -839,25 +916,65 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                 grid_html = generate_grid(rocm_blogs, blog_entry, lazy_load=True)
                 if not grid_html or not grid_html.strip():
                     error_count += 1
+                    log_message(
+                        "debug",
+                        f"Empty grid HTML for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                        "general",
+                        "process",
+                    )
                     continue
+
+                # Validate that grid result contains meaningful content
+                if len(grid_html.strip()) < 50:  # Minimum meaningful grid content size
+                    error_count += 1
+                    log_message(
+                        "debug",
+                        f"Grid HTML too small for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} (length: {len(grid_html.strip())})",
+                        "general",
+                        "process",
+                    )
+                    continue
+
                 lazy_grid_items.append(grid_html)
             except Exception as blog_error:
                 error_count += 1
-                log_message("error", f"Error generating grid item for {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}", "general", "process")
+                log_message(
+                    "error",
+                    f"Error generating grid item for {getattr(blog_entry, 'blog_title', 'Unknown')}: {blog_error}",
+                    "general",
+                    "process",
+                )
 
         if not lazy_grid_items:
             log_message("warning", "No grid items generated", "general", "process")
             return []
 
         if error_count > 0:
-            log_message("warning", f"Generated {len(lazy_grid_items)} items with {error_count} errors", "general", "process")
+            log_message(
+                "warning",
+                f"Generated {len(lazy_grid_items)} items with {error_count} errors",
+                "general",
+                "process",
+            )
         else:
-            log_message("info", f"Generated {len(lazy_grid_items)} items from {len(deduplicated_blog_list)} blogs", "general", "process")
+            log_message(
+                "info",
+                f"Generated {len(lazy_grid_items)} items from {len(deduplicated_blog_list)} blogs",
+                "general",
+                "process",
+            )
 
         return lazy_grid_items
     except Exception as lazy_load_error:
-        log_message("error", f"Error generating lazy-loaded grid items: {lazy_load_error}", "general", "process")
-        raise ROCmBlogsError(f"Error generating lazy-loaded grid-items: {lazy_load_error}") from lazy_load_error
+        log_message(
+            "error",
+            f"Error generating lazy-loaded grid items: {lazy_load_error}",
+            "general",
+            "process",
+        )
+        raise ROCmBlogsError(
+            f"Error generating lazy-loaded grid-items: {lazy_load_error}"
+        ) from lazy_load_error
 
 
 def process_single_blog(blog_entry, rocm_blogs):
@@ -894,8 +1011,14 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 image_filename = os.path.basename(image_path)
                                 possible_paths = [
                                     os.path.join(blog_directory, image_filename),
-                                    os.path.join(blog_directory, "images", image_filename),
-                                    os.path.join(rocm_blogs.blogs_directory, "images", image_filename),
+                                    os.path.join(
+                                        blog_directory, "images", image_filename
+                                    ),
+                                    os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "images",
+                                        image_filename,
+                                    ),
                                 ]
 
                                 for possible_path in possible_paths:
@@ -909,52 +1032,103 @@ def process_single_blog(blog_entry, rocm_blogs):
                                 image_filename = os.path.basename(image_path)
                                 name_without_ext = os.path.splitext(image_filename)[0]
                                 webp_filename = f"{name_without_ext}.webp"
-                                
+
                                 # Check multiple possible locations for WebP version
                                 webp_locations = [
-                                    os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename),
-                                    os.path.join(os.path.dirname(image_path), webp_filename),
-                                    os.path.join(os.path.dirname(image_path), "images", webp_filename)
+                                    os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "_images",
+                                        webp_filename,
+                                    ),
+                                    os.path.join(
+                                        os.path.dirname(image_path), webp_filename
+                                    ),
+                                    os.path.join(
+                                        os.path.dirname(image_path),
+                                        "images",
+                                        webp_filename,
+                                    ),
                                 ]
-                                
+
                                 webp_found = False
                                 webp_destination = None
-                                
+
                                 for webp_location in webp_locations:
                                     if os.path.exists(webp_location):
                                         webp_found = True
                                         webp_destination = webp_location
                                         break
-                                
+
                                 if webp_found:
                                     # Use existing WebP version
                                     blog_entry.image_paths[i] = webp_destination
-                                    log_message("info", f"Using existing WebP version: {webp_destination}", "general", "process")
+                                    log_message(
+                                        "info",
+                                        f"Using existing WebP version: {webp_destination}",
+                                        "general",
+                                        "process",
+                                    )
                                 else:
                                     # WebP doesn't exist, create it for consistency with grid
-                                    webp_destination = os.path.join(rocm_blogs.blogs_directory, "_images", webp_filename)
-                                    os.makedirs(os.path.dirname(webp_destination), exist_ok=True)
-                                    
+                                    webp_destination = os.path.join(
+                                        rocm_blogs.blogs_directory,
+                                        "_images",
+                                        webp_filename,
+                                    )
+                                    os.makedirs(
+                                        os.path.dirname(webp_destination), exist_ok=True
+                                    )
+
                                     try:
                                         from .images import convert_to_webp
+
                                         convert_to_webp(image_path, webp_destination)
                                         blog_entry.image_paths[i] = webp_destination
-                                        log_message("info", f"Created WebP version for blog page: {webp_destination}", "general", "process")
+                                        log_message(
+                                            "info",
+                                            f"Created WebP version for blog page: {webp_destination}",
+                                            "general",
+                                            "process",
+                                        )
                                     except Exception as webp_error:
-                                        log_message("warning", f"Failed to convert {image_path} to WebP, using original: {webp_error}", "general", "process")
+                                        log_message(
+                                            "warning",
+                                            f"Failed to convert {image_path} to WebP, using original: {webp_error}",
+                                            "general",
+                                            "process",
+                                        )
                                         # Fall back to copying original file
-                                        original_destination = os.path.join(rocm_blogs.blogs_directory, "_images", image_filename)
-                                        os.makedirs(os.path.dirname(original_destination), exist_ok=True)
+                                        original_destination = os.path.join(
+                                            rocm_blogs.blogs_directory,
+                                            "_images",
+                                            image_filename,
+                                        )
+                                        os.makedirs(
+                                            os.path.dirname(original_destination),
+                                            exist_ok=True,
+                                        )
                                         if not os.path.exists(original_destination):
-                                            shutil.copy2(image_path, original_destination)
+                                            shutil.copy2(
+                                                image_path, original_destination
+                                            )
                                         blog_entry.image_paths[i] = original_destination
 
                         except Exception as img_error:
-                            log_message("warning", f"Error processing image {image_path}: {img_error}", "general", "process")
+                            log_message(
+                                "warning",
+                                f"Error processing image {image_path}: {img_error}",
+                                "general",
+                                "process",
+                            )
                             continue
 
             except Exception as grab_error:
-                log_message("warning", f"Error grabbing images for blog {readme_file_path}: {grab_error}", "general", "process")
+                log_message(
+                    "warning",
+                    f"Error grabbing images for blog {readme_file_path}: {grab_error}",
+                    "general",
+                    "process",
+                )
 
         # OPTIMIZATION 4: Reduce logging overhead - only log errors
         try:
@@ -980,9 +1154,11 @@ def process_single_blog(blog_entry, rocm_blogs):
                     myst_data = blog_entry.metadata.get("myst", {})
                     html_meta = myst_data.get("html_meta", {})
                     vertical_str = html_meta.get("vertical", "")
-                    
+
                     if vertical_str:
-                        market_verticals = [v.strip() for v in vertical_str.split(",") if v.strip()]
+                        market_verticals = [
+                            v.strip() for v in vertical_str.split(",") if v.strip()
+                        ]
                 except (AttributeError, KeyError):
                     pass
 
@@ -992,19 +1168,33 @@ def process_single_blog(blog_entry, rocm_blogs):
                     try:
                         # Import the classification function from metadata.py
                         from .metadata import classify_blog_tags
-                        
+
                         # Get automatic vertical classification
                         classification_result = classify_blog_tags(blog_tags)
-                        
-                        if classification_result and classification_result.get("vertical_counts"):
+
+                        if classification_result and classification_result.get(
+                            "vertical_counts"
+                        ):
                             vertical_counts = classification_result["vertical_counts"]
                             # Get all verticals with non-zero scores
-                            auto_verticals = [v for v, score in vertical_counts.items() if score > 0]
+                            auto_verticals = [
+                                v for v, score in vertical_counts.items() if score > 0
+                            ]
                             if auto_verticals:
                                 market_verticals = auto_verticals
-                                log_message("info", f"Auto-assigned market verticals {auto_verticals} for blog {readme_file_path} based on tags: {blog_tags}", "general", "process")
+                                log_message(
+                                    "info",
+                                    f"Auto-assigned market verticals {auto_verticals} for blog {readme_file_path} based on tags: {blog_tags}",
+                                    "general",
+                                    "process",
+                                )
                     except Exception as auto_assign_error:
-                        log_message("warning", f"Error auto-assigning market verticals for {readme_file_path}: {auto_assign_error}", "general", "process")
+                        log_message(
+                            "warning",
+                            f"Error auto-assigning market verticals for {readme_file_path}: {auto_assign_error}",
+                            "general",
+                            "process",
+                        )
 
             # Format market verticals for display
             if not market_verticals or market_verticals == [""]:

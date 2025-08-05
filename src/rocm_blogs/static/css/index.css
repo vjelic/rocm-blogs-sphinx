@@ -154,7 +154,6 @@ html[data-theme="dark"] .container {
     margin-left: 0;
     margin-top: 10px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    
     will-change: transform; 
     transform: translateZ(0); 
 }
@@ -174,7 +173,6 @@ html[data-theme="dark"] .container {
     margin-left: 0;
     margin-top: 10px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    
     will-change: transform; 
     transform: translateZ(0); 
 }

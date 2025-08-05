@@ -9,18 +9,7 @@ from sphinx.util import logging as sphinx_logging
 
 from ._rocmblogs import *
 from .constants import *
-
-
-# Import log_message from the main module
-def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
-    try:
-        from . import log_message as main_log_message
-
-        return main_log_message(level, message, operation, component, **kwargs)
-    except ImportError:
-        # Fallback to print if import fails
-        print(f"[{level.upper()}] {message}")
+from .logger.logger import *
 
 
 class ROCmBlogsError(SphinxError):
