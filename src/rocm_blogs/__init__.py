@@ -95,7 +95,7 @@ if LOGGING_AVAILABLE and is_logging_enabled():
         print(f"Failed to initialize structured logging: {logging_error}")
         structured_logger = None
 
-
+        
 _CRITICAL_ERROR_OCCURRED = False
 
 _BUILD_START_TIME = time.time()
