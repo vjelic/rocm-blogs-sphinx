@@ -23,7 +23,6 @@ def log_message(
 ) -> None:
     """Log message with level, operation, and component."""
     try:
-        # Get the structured logger from the main module
         current_module = sys.modules.get("rocm_blogs") or sys.modules.get(
             "src.rocm_blogs"
         )
@@ -48,37 +47,36 @@ def log_message(
                 log_method(message, operation, component, **kwargs)
                 return
 
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
-        rocm_blogs_log = logs_dir / "rocm_blogs.log"
+        if is_logging_enabled_from_config():
+            logs_dir = Path("logs")
+            logs_dir.mkdir(exist_ok=True)
+            rocm_blogs_log = logs_dir / "rocm_blogs.log"
 
-        from datetime import datetime
+            from datetime import datetime
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted_message = (
-            f"[{timestamp}] [{level.upper()}] [{component}:{operation}] {message}\n"
-        )
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            formatted_message = (
+                f"[{timestamp}] [{level.upper()}] [{component}:{operation}] {message}\n"
+            )
 
-        with open(rocm_blogs_log, "a", encoding="utf-8") as f:
-            f.write(formatted_message)
+            with open(rocm_blogs_log, "a", encoding="utf-8") as f:
+                f.write(formatted_message)
 
     except Exception:
-        try:
-            log_simple_message(level, f"[{component}:{operation}] {message}", operation)
-        except ImportError:
-            formatted_message = f"[{level.upper()}] [{component}:{operation}] {message}"
-            print(
-                formatted_message,
-                file=(
-                    sys.stderr if level.lower() in ["error", "critical"] else sys.stdout
-                ),
-            )
+        if level.lower() in ["error", "critical"]:
+            try:
+                log_simple_message(level, f"[{component}:{operation}] {message}", operation)
+            except ImportError:
+                formatted_message = f"[{level.upper()}] [{component}:{operation}] {message}"
+                print(formatted_message, file=sys.stderr)
 
 
 def create_step_log_file(step_name: str) -> tuple[Optional[str], Optional[Any]]:
-    """Create log file for processing step."""
+    """Create log file for processing step only if logging is enabled."""
     try:
-
+        if not is_logging_enabled_from_config():
+            return None, None
+        
         logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
 

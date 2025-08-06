@@ -9,7 +9,7 @@ import os
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 
 from sphinx.util import logging as sphinx_logging
 
@@ -36,15 +36,54 @@ class BlogHolder:
             "Developers",
             "Robotics",
         ]
+        self._seen_paths: Set[str] = set()
+        self._seen_titles: Set[str] = set()
+        self._duplicate_count = 0
+
+    def _normalize_title(self, title: str) -> str:
+        """Normalize title for consistent comparison."""
+        if not title:
+            return ""
+        
+        title = title.replace("\u202f", " ")
+        title = title.replace("\u00a0", " ")
+        title = title.replace("\u2009", " ")
+        title = title.replace("\u200b", "")
+        title = title.replace("\u2013", "-")
+        title = title.replace("\u2014", "-")
+        
+        title = title.replace("\u2018", "'")
+        title = title.replace("\u2019", "'")
+        title = title.replace("\u201c", '"')
+        title = title.replace("\u201d", '"')
+        
+        title = " ".join(title.split())
+        
+        title = title.lower()
+        
+        return title
+    
+    def _normalize_path(self, path: str) -> str:
+        """Normalize file path for consistent comparison."""
+        if not path:
+            return ""
+        
+        try:
+            path_obj = Path(path).resolve()
+            normalized = str(path_obj).replace("\\", "/")
+            return normalized.lower()
+        except Exception as e:
+            log_message("warning", f"Failed to normalize path {path}: {e}")
+            return path.replace("\\", "/").lower()
 
     def _generate_blog_key(self, blog: Blog) -> str:
-        """Generate unique identifier key for blog post."""
+        """Generate unique identifier key for blog post with better deduplication."""
         if not isinstance(blog, Blog):
             log_message("error", f"Expected Blog instance but got {type(blog)}")
             raise TypeError("The blog must be an instance of the 'Blog' class.")
 
         if hasattr(blog, "blog_title") and blog.blog_title:
-            title = blog.blog_title
+            title = self._normalize_title(blog.blog_title)
         else:
             if hasattr(blog, "file_path"):
                 filename = os.path.basename(blog.file_path)
@@ -52,33 +91,70 @@ class BlogHolder:
                     os.path.splitext(filename)[0]
                     .replace("-", " ")
                     .replace("_", " ")
-                    .title()
                 )
+                title = self._normalize_title(title)
                 log_message(
                     "warning",
                     f"Blog missing blog_title attribute, using filename: {title}",
                 )
             else:
-                title = "Untitled Blog"
+                title = "untitled_blog"
                 log_message(
                     "warning",
-                    "Blog has no title or file path, using default 'Untitled Blog'",
+                    "Blog has no title or file path, using default 'untitled_blog'",
                 )
 
-        if hasattr(blog, "file_path"):
-            key = f"{title}-{blog.file_path}"
+        if hasattr(blog, "file_path") and blog.file_path:
+            normalized_path = self._normalize_path(blog.file_path)
+            path_parts = normalized_path.split("/")
+            if len(path_parts) >= 3:
+                relevant_path = "/".join(path_parts[-3:])
+            else:
+                relevant_path = normalized_path
+            key = f"{title}||{relevant_path}"
         else:
-            key = title
+            import time
+            key = f"{title}||no_path_{time.time()}"
 
-        log_message("debug", f"Created key for blog: {key}")
+        log_message("debug", f"Created normalized key for blog: {key}")
         return key
 
     def add_blog(self, blog: Blog) -> None:
-        """Add blog to collection with indexing and duplicate detection."""
+        """Add blog to collection with enhanced duplicate detection."""
+        if hasattr(blog, "file_path") and blog.file_path:
+            normalized_path = self._normalize_path(blog.file_path)
+            if normalized_path in self._seen_paths:
+                self._duplicate_count += 1
+                log_message(
+                    "warning", 
+                    f"Duplicate blog path detected (count: {self._duplicate_count}): '{normalized_path}'",
+                    "general",
+                    "holder"
+                )
+                raise KeyError(f"Blog with path '{normalized_path}' already exists.")
+            self._seen_paths.add(normalized_path)
+        
+        if hasattr(blog, "blog_title") and blog.blog_title:
+            normalized_title = self._normalize_title(blog.blog_title)
+            if normalized_title in self._seen_titles:
+                log_message(
+                    "warning",
+                    f"Blog with similar title already exists: '{blog.blog_title}'",
+                    "general",
+                    "holder"
+                )
+            self._seen_titles.add(normalized_title)
+        
         key = self._generate_blog_key(blog)
         if key in self.blogs:
-            log_message("warning", f"Duplicate blog detected: '{key}'")
-            raise KeyError(f"Blog with title '{key}' already exists.")
+            self._duplicate_count += 1
+            log_message(
+                "warning", 
+                f"Duplicate blog key detected (count: {self._duplicate_count}): '{key}'",
+                "general",
+                "holder"
+            )
+            return
 
         self.blogs[key] = blog
         log_message("info", f"Added blog: '{key}'", "general", "holder")
@@ -149,18 +225,15 @@ class BlogHolder:
                     ]
                 )
 
-                # Write data rows
                 for blog in self.blogs.values():
-                    # Clean Unicode characters that might cause encoding issues
                     title = (
                         blog.blog_title if hasattr(blog, "blog_title") else "Untitled"
                     )
                     if title:
-                        # Replace problematic Unicode characters
-                        title = title.replace("\u202f", " ")  # narrow no-break space
-                        title = title.replace("\u00a0", " ")  # non-breaking space
-                        title = title.replace("\u2009", " ")  # thin space
-                        title = title.replace("\u200b", "")  # zero-width space
+                        title = title.replace("\u202f", " ")
+                        title = title.replace("\u00a0", " ")
+                        title = title.replace("\u2009", " ")
+                        title = title.replace("\u200b", "")
 
                     date = (
                         blog.date.strftime("%Y-%m-%d")
@@ -169,19 +242,16 @@ class BlogHolder:
                     )
                     author = blog.author if hasattr(blog, "author") else ""
                     if author:
-                        # Clean author field
                         author = author.replace("\u202f", " ").replace("\u00a0", " ")
 
                     category = blog.category if hasattr(blog, "category") else ""
                     if category:
-                        # Clean category field
                         category = category.replace("\u202f", " ").replace(
                             "\u00a0", " "
                         )
 
                     tags = blog.tags if hasattr(blog, "tags") else ""
                     if tags:
-                        # Clean tags field
                         tags = tags.replace("\u202f", " ").replace("\u00a0", " ")
 
                     thumbnail = blog.thumbnail if hasattr(blog, "thumbnail") else ""
@@ -231,7 +301,6 @@ class BlogHolder:
                 "holder",
             )
 
-            # Read and parse CSV file
             with open(filename, "r", newline="", encoding="utf-8") as file:
                 reader = csv.reader(file)
                 raw_rows = list(reader)
@@ -245,15 +314,13 @@ class BlogHolder:
                     "debug", f"Raw CSV content: {raw_rows}", "featured_blogs", "holder"
                 )
 
-                # Filter out empty rows and extract titles
                 featured_titles = []
                 for i, row in enumerate(raw_rows):
                     if (
                         row and row[0].strip()
-                    ):  # Check if row exists and first column is not empty
+                    ):
                         title = row[0].strip()
 
-                        # Skip invalid entries like "No newline at end of file"
                         if title.lower() in ["no newline at end of file", "eof", ""]:
                             log_message(
                                 "debug",
@@ -285,7 +352,6 @@ class BlogHolder:
                 "holder",
             )
 
-            # Log all available blog titles for comparison
             available_blogs = [
                 blog
                 for blog in self.blogs.values()
@@ -306,7 +372,6 @@ class BlogHolder:
                 "holder",
             )
 
-            # Log detailed information about each featured title
             log_message(
                 "info",
                 "========== PROCESSING FEATURED TITLES ==========",
@@ -321,7 +386,6 @@ class BlogHolder:
                     "holder",
                 )
 
-                # Log Unicode analysis
                 title_bytes = title.encode("utf-8")
                 log_message(
                     "debug",
@@ -330,7 +394,6 @@ class BlogHolder:
                     "holder",
                 )
 
-            # Find blogs with matching titles
             log_message(
                 "info",
                 "========== BLOG MATCHING PROCESS ==========",
@@ -345,7 +408,6 @@ class BlogHolder:
                     "holder",
                 )
 
-                # Clean and normalize title for better matching
                 original_title = title
                 clean_title = title.strip()
                 log_message(
@@ -361,14 +423,13 @@ class BlogHolder:
                     "holder",
                 )
 
-                # Normalize common Unicode issues
                 before_normalization = clean_title
-                clean_title = clean_title.replace("™", "™")  # Fix trademark symbol
+                clean_title = clean_title.replace("™", "™")
                 clean_title = clean_title.replace(
                     "\u202f", " "
-                )  # narrow no-break space
-                clean_title = clean_title.replace("\u00a0", " ")  # non-breaking space
-                clean_title = clean_title.replace("\u2009", " ")  # thin space
+                )
+                clean_title = clean_title.replace("\u00a0", " ")
+                clean_title = clean_title.replace("\u2009", " ")
 
                 if before_normalization != clean_title:
                     log_message(
@@ -385,7 +446,6 @@ class BlogHolder:
                         "holder",
                     )
 
-                # Try exact match with cleaned title first
                 log_message(
                     "debug",
                     f"Attempting exact match with cleaned title: '{clean_title}'",
@@ -395,7 +455,6 @@ class BlogHolder:
                 blog = self.get_blog_by_title(clean_title)
 
                 if not blog:
-                    # Try with original title if clean version failed
                     log_message(
                         "debug",
                         f"Cleaned title failed, trying original: '{original_title}'",
@@ -435,7 +494,6 @@ class BlogHolder:
                         "holder",
                     )
 
-                    # Try fuzzy matching
                     log_message(
                         "debug",
                         "Attempting fuzzy matching...",
@@ -444,7 +502,6 @@ class BlogHolder:
                     )
                     close_matches = []
                     for available_title in available_blog_titles:
-                        # Check if either title contains the other (case-insensitive)
                         if (
                             original_title.lower() in available_title.lower()
                             or available_title.lower() in original_title.lower()
@@ -465,7 +522,6 @@ class BlogHolder:
                             "holder",
                         )
 
-                        # Use the first close match
                         best_match = close_matches[0]
                         log_message(
                             "info",
@@ -526,7 +582,6 @@ class BlogHolder:
                 "holder",
             )
 
-            # Log details of successfully matched blogs
             if featured_blogs:
                 log_message(
                     "info",
@@ -549,7 +604,6 @@ class BlogHolder:
                     "holder",
                 )
 
-            # Store the featured blogs
             self.blogs_featured["featured"] = featured_blogs
             log_message(
                 "info",
@@ -741,7 +795,6 @@ class BlogHolder:
 
             log_message("debug", f"Initialized vertical: {vertical}")
 
-        # Only create log files if logging is enabled
         if is_logging_enabled_from_config():
             logs_directory = Path("logs")
             logs_directory.mkdir(exist_ok=True)
@@ -763,7 +816,6 @@ class BlogHolder:
                         log_file_handle.write("Blog has no metadata\n")
                     continue
                 else:
-                    # Safely access nested metadata structure
                     myst_section = blog.metadata.get("myst", {})
                     html_meta = myst_section.get("html_meta", {})
                     blog_vertical_str = html_meta.get("vertical")
@@ -825,7 +877,6 @@ class BlogHolder:
                         log_message("warning", f"Vertical '{vertical}' has no blogs")
 
         finally:
-            # Close the log file handle if it was opened
             if log_file_handle:
                 log_file_handle.close()
 
@@ -839,15 +890,12 @@ class BlogHolder:
             "holder",
         )
 
-        # Clear existing category lists
         self.blogs_categories = {}
 
-        # Initialize category lists
         for category in categories:
             self.blogs_categories[category] = []
             log_message("debug", f"Initialized category: {category}")
 
-        # Sort blogs into categories
         category_counts = {}
         for blog in self.blogs.values():
             if blog.category in categories:
@@ -856,13 +904,11 @@ class BlogHolder:
                     category_counts.get(blog.category, 0) + 1
                 )
 
-        # Log category counts
         for category, count in category_counts.items():
             log_message(
                 "info", "Category '{category}' has {count} blogs", "general", "holder"
             )
 
-        # Log categories with no blogs
         for category in categories:
             if category not in category_counts:
                 log_message("warning", f"Category '{category}' has no blogs")
@@ -886,7 +932,6 @@ class BlogHolder:
             "holder",
         )
 
-        # First try exact match
         log_message(
             "debug",
             f"Step 1: Attempting exact match for: '{title}'",
@@ -909,7 +954,6 @@ class BlogHolder:
             "debug", f"Exact matches found: {exact_matches}", "blog_search", "holder"
         )
 
-        # Try case-insensitive match
         log_message(
             "debug",
             f"Step 2: Attempting case-insensitive match for: '{title}'",
@@ -943,16 +987,12 @@ class BlogHolder:
             log_message("debug", f"Normalizing title: '{t}'", "blog_search", "holder")
             original = t
 
-            # Normalize Unicode characters first
-            t = t.replace("™", "™")  # Fix trademark symbol
-            t = t.replace("\u202f", " ")  # narrow no-break space
-            t = t.replace("\u00a0", " ")  # non-breaking space
-            t = t.replace("\u2009", " ")  # thin space
+            t = t.replace("™", "™")
+            t = t.replace("\u202f", " ")
+            t = t.replace("\u00a0", " ")
+            t = t.replace("\u2009", " ")
 
-            # Normalize whitespace
             t = " ".join(t.split())
-
-            # Remove punctuation
             for char in [
                 ",",
                 ".",
@@ -990,7 +1030,6 @@ class BlogHolder:
 
             return result
 
-        # Try normalized match
         log_message(
             "debug",
             f"Step 3: Attempting normalized match for: '{title}'",
@@ -1027,15 +1066,13 @@ class BlogHolder:
             "holder",
         )
 
-        # Log summary of search attempts
         log_message(
             "warning",
-            f"[FAILED] NO BLOG FOUND for title: '{title}' (Exact: {exact_matches}, Case-insensitive: {case_insensitive_matches}, Normalized: {normalized_matches})"
+            f"[FAILED] NO BLOG FOUND for title: '{title}' (Exact: {exact_matches}, Case-insensitive: {case_insensitive_matches}, Normalized: {normalized_matches})",
             "blog_search",
             "holder",
         )
 
-        # Log available blog titles for debugging
         available_titles = [
             blog.blog_title
             for blog in self.blogs.values()
@@ -1070,6 +1107,64 @@ class BlogHolder:
         """Return the number of blogs."""
 
         return len(self.blogs)
+
+    def get_duplicate_statistics(self) -> Dict[str, int]:
+        """Get statistics about duplicate detection."""
+        stats = {
+            "total_blogs": len(self.blogs),
+            "duplicate_attempts": self._duplicate_count,
+            "unique_paths": len(self._seen_paths),
+            "unique_titles": len(self._seen_titles),
+        }
+        
+        log_message(
+            "info",
+            f"Duplicate Statistics - Total: {stats['total_blogs']}, Duplicates rejected: {stats['duplicate_attempts']}",
+            "general",
+            "holder"
+        )
+        
+        return stats
+    
+    def find_potential_duplicates(self) -> List[Tuple[str, str, Blog, Blog]]:
+        """Find blogs that might be duplicates based on similar titles or paths."""
+        potential_duplicates = []
+        blogs_list = list(self.blogs.values())
+        
+        for i, blog1 in enumerate(blogs_list):
+            for blog2 in blogs_list[i+1:]:
+                if hasattr(blog1, "blog_title") and hasattr(blog2, "blog_title"):
+                    title1 = self._normalize_title(blog1.blog_title)
+                    title2 = self._normalize_title(blog2.blog_title)
+                    
+                    if title1 == title2:
+                        potential_duplicates.append(
+                            ("title_match", f"Title: {blog1.blog_title}", blog1, blog2)
+                        )
+                    elif title1 and title2:
+                        if title1 in title2 or title2 in title1:
+                            potential_duplicates.append(
+                                ("title_similar", f"Titles: {blog1.blog_title} vs {blog2.blog_title}", blog1, blog2)
+                            )
+                
+                if hasattr(blog1, "file_path") and hasattr(blog2, "file_path"):
+                    file1 = os.path.basename(blog1.file_path).lower()
+                    file2 = os.path.basename(blog2.file_path).lower()
+                    
+                    if file1 == file2 and blog1.file_path != blog2.file_path:
+                        potential_duplicates.append(
+                            ("filename_match", f"Files: {blog1.file_path} vs {blog2.file_path}", blog1, blog2)
+                        )
+        
+        if potential_duplicates:
+            log_message(
+                "warning",
+                f"Found {len(potential_duplicates)} potential duplicate pairs",
+                "general",
+                "holder"
+            )
+        
+        return potential_duplicates
 
     def __repr__(self) -> str:
         """Return a string representation of the class."""
