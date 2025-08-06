@@ -726,21 +726,27 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             safe_log_write(log_file_handle, "Generating author statistics\n")
 
         for author, blogs in rocm_blogs.blogs.blogs_authors.items():
-            if not blogs:
+            # Filter to only include genuine blog posts with blogpost flag
+            genuine_blogs = [
+                blog for blog in blogs 
+                if hasattr(blog, "blogpost") and blog.blogpost
+            ]
+            
+            if not genuine_blogs:
                 log_message(
-                    "warning",
-                    f"No blogs found for author: {author}",
+                    "info",
+                    f"No genuine blog posts found for author: {author} (had {len(blogs)} non-blog READMEs)",
                     "general",
                     "__init__",
                 )
                 if log_file_handle:
                     safe_log_write(
                         log_file_handle,
-                        f"WARNING: No blogs found for author: {author}\n",
+                        f"INFO: No genuine blog posts found for author: {author} (had {len(blogs)} non-blog READMEs)\n",
                     )
                 continue
             sorted_blogs = sorted(
-                blogs, key=lambda b: b.date if b.date else datetime.min, reverse=True
+                genuine_blogs, key=lambda b: b.date if b.date else datetime.min, reverse=True
             )
 
             # Get latest and first blog
@@ -770,7 +776,7 @@ def blog_statistics(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                     "name": author,
                     "href": author_link.format(author=author.replace(" ", "-").lower()),
                 },
-                "blog_count": len(blogs),
+                "blog_count": len(genuine_blogs),
                 "latest_blog": {
                     "title": latest_blog.blog_title if latest_blog else "N/A",
                     "date": (
@@ -1184,6 +1190,48 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         operation_start = time.time()
         rocm_blogs.create_blog_objects()
         track_operation_time("create_blog_objects", operation_start)
+        
+        # Report duplicate statistics
+        duplicate_stats = rocm_blogs.blogs.get_duplicate_statistics()
+        log_message(
+            "info",
+            f"Blog collection statistics - Total blogs: {duplicate_stats['total_blogs']}, "
+            f"Duplicate attempts blocked: {duplicate_stats['duplicate_attempts']}, "
+            f"Unique paths: {duplicate_stats['unique_paths']}, "
+            f"Unique titles: {duplicate_stats['unique_titles']}",
+            "general",
+            "__init__"
+        )
+        
+        if log_file_handle:
+            safe_log_write(
+                log_file_handle,
+                f"\nDuplicate Detection Report:\n"
+                f"  - Total blogs in collection: {duplicate_stats['total_blogs']}\n"
+                f"  - Duplicate attempts blocked: {duplicate_stats['duplicate_attempts']}\n"
+                f"  - Unique file paths: {duplicate_stats['unique_paths']}\n"
+                f"  - Unique blog titles: {duplicate_stats['unique_titles']}\n\n"
+            )
+        
+        # Check for potential duplicates that might have slipped through
+        potential_duplicates = rocm_blogs.blogs.find_potential_duplicates()
+        if potential_duplicates:
+            log_message(
+                "warning",
+                f"Found {len(potential_duplicates)} potential duplicate pairs that may need investigation",
+                "general",
+                "__init__"
+            )
+            if log_file_handle:
+                safe_log_write(
+                    log_file_handle,
+                    f"Potential duplicates found ({len(potential_duplicates)} pairs):\n"
+                )
+                for dup_type, description, blog1, blog2 in potential_duplicates[:10]:  # Show first 10
+                    safe_log_write(
+                        log_file_handle,
+                        f"  - {dup_type}: {description}\n"
+                    )
 
         operation_start = time.time()
         rocm_blogs.blogs.write_to_file()
@@ -4285,21 +4333,11 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
             sphinx_app.config, "rocm_blogs_enable_performance_tracking", False
         )
 
-        # Enable logging if rocm_blogs_debug = True
-        if debug_enabled and LOGGING_AVAILABLE:
-            print("\nROCm Blogs Debug Mode Enabled")
-            print("-" * 40)
-            print("[SUCCESS] Logging enabled via rocm_blogs_debug = True")
-            print("[SUCCESS] Simple configuration - no complex setup needed")
-
-        # Override environment variables with Sphinx config
         if debug_enabled:
-            # If debug is enabled, enable logging
             os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "false"
             os.environ["ROCM_BLOGS_ENABLE_LOGGING"] = "true"
             os.environ["ROCM_BLOGS_DEBUG"] = "true"
         else:
-            # If debug is disabled in config, disable all logging
             os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "true"
             os.environ["ROCM_BLOGS_DEBUG"] = "false"
 

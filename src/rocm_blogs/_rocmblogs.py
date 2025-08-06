@@ -541,12 +541,24 @@ class ROCmBlogs:
                     seen_titles.add(blog_title)
 
                 try:
+                    initial_count = len(self.blogs.blogs)
                     self.blogs.add_blog(blog)
-                    added_count += 1
+                    # Check if blog was actually added (not a duplicate)
+                    if len(self.blogs.blogs) > initial_count:
+                        added_count += 1
+                    else:
+                        skipped_count += 1
+                        log_message(
+                            "info",
+                            f"Skipped duplicate blog: {getattr(blog, 'blog_title', 'Unknown')}",
+                            "general",
+                            "_rocmblogs",
+                        )
                 except KeyError as error:
+                    skipped_count += 1
                     log_message(
                         "warning",
-                        f"Error adding blog {getattr(blog, 'blog_title', 'Unknown')}: {error}",
+                        f"Duplicate blog rejected: {getattr(blog, 'blog_title', 'Unknown')}: {error}",
                         "general",
                         "_rocmblogs",
                     )
