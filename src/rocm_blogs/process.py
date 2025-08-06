@@ -18,17 +18,8 @@ from ._rocmblogs import *
 from .constants import *
 from .grid import *
 from .images import *
+from .logger.logger import *
 from .utils import *
-
-
-def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
-    try:
-        from . import log_message as main_log_message
-
-        return main_log_message(level, message, operation, component, **kwargs)
-    except ImportError:
-        print(f"[{level.upper()}] {message}")
 
 
 def quickshare(blog_entry) -> str:
@@ -480,6 +471,20 @@ def _process_category(
         end_index = min(start_index + CATEGORY_BLOGS_PER_PAGE, len(all_grid_items))
         page_grid_items = all_grid_items[start_index:end_index]
 
+        # Validate grid content before creating page
+        if not page_grid_items:
+            log_message(
+                "warning",
+                f"No grid items for category {category_name} page {page_num}/{total_pages}. Skipping page creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: No grid items for category {category_name} page {page_num}/{total_pages}. Skipping page creation.\n"
+                )
+            continue
+
         fixed_grid_items = []
         for grid_item in page_grid_items:
             grid_item = grid_item.replace(":img-top: ./", ":img-top: /")
@@ -492,6 +497,20 @@ def _process_category(
             fixed_grid_items.append(grid_item)
 
         grid_content = "\n".join(fixed_grid_items)
+
+        # Additional validation: ensure grid content is meaningful
+        if not grid_content or not grid_content.strip():
+            log_message(
+                "warning",
+                f"Empty grid content for category {category_name} page {page_num}/{total_pages}. Skipping page creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: Empty grid content for category {category_name} page {page_num}/{total_pages}. Skipping page creation.\n"
+                )
+            continue
 
         pagination_controls = _create_pagination_controls(
             pagination_template, page_num, total_pages, output_base
@@ -520,6 +539,20 @@ def _process_category(
             page_description_suffix=page_description_suffix,
             current_page=page_num,
         )
+
+        # Final validation: ensure page content is not empty
+        if not final_content or len(final_content.strip()) < 100:
+            log_message(
+                "warning",
+                f"Generated page content is too small or empty for category {category_name} page {page_num}/{total_pages}. Skipping file creation.",
+                "general",
+                "process",
+            )
+            if log_file_handle:
+                log_file_handle.write(
+                    f"WARNING: Page content too small for category {category_name} page {page_num}/{total_pages}. Skipping file creation.\n"
+                )
+            continue
 
         output_filename = (
             f"{output_base}.md" if page_num == 1 else f"{output_base}-page{page_num}.md"
@@ -607,6 +640,26 @@ def _generate_grid_items(
     """Generate grid items in parallel using thread pool."""
 
     try:
+        # Debug: Log the parameters received by this function
+        log_message(
+            "debug",
+            f"_generate_grid_items called with: max_items={max_items}, skip_used={skip_used}, use_og={use_og}, blog_count={len(blog_list)}",
+            "general",
+            "process",
+        )
+
+        # Debug: Log the first few blog titles to identify which set of blogs this is
+        if blog_list:
+            first_few_titles = [
+                getattr(blog, "blog_title", "Unknown") for blog in blog_list[:3]
+            ]
+            log_message(
+                "debug",
+                f"_generate_grid_items processing blogs starting with: {first_few_titles}",
+                "general",
+                "process",
+            )
+
         grid_items = []
         item_count = 0
         error_count = 0
@@ -690,18 +743,25 @@ def _generate_grid_items(
                     if not grid_result or not grid_result.strip():
                         blog_entry = grid_futures[future]
                         log_message(
-                            "warning",
-                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                            "debug",
+                            f"Empty grid HTML generated for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} - likely skipped due to missing OpenGraph metadata",
                             "general",
                             "process",
                         )
+                        # Don't count as error - this is expected behavior for blogs without OpenGraph metadata
+                        continue
+
+                    # Validate that grid result contains meaningful content
+                    if (
+                        len(grid_result.strip()) < 50
+                    ):  # Minimum meaningful grid content size
+                        blog_entry = grid_futures[future]
                         log_message(
                             "debug",
-                            f"Traceback: {traceback.format_exc()}",
+                            f"Grid HTML too small for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} (length: {len(grid_result.strip())})",
                             "general",
                             "process",
                         )
-                        error_count += 1
                         continue
 
                     grid_items.append(grid_result)
@@ -856,7 +916,25 @@ def _generate_lazy_loaded_grid_items(rocm_blogs, blog_list):
                 grid_html = generate_grid(rocm_blogs, blog_entry, lazy_load=True)
                 if not grid_html or not grid_html.strip():
                     error_count += 1
+                    log_message(
+                        "debug",
+                        f"Empty grid HTML for blog: {getattr(blog_entry, 'blog_title', 'Unknown')}",
+                        "general",
+                        "process",
+                    )
                     continue
+
+                # Validate that grid result contains meaningful content
+                if len(grid_html.strip()) < 50:  # Minimum meaningful grid content size
+                    error_count += 1
+                    log_message(
+                        "debug",
+                        f"Grid HTML too small for blog: {getattr(blog_entry, 'blog_title', 'Unknown')} (length: {len(grid_html.strip())})",
+                        "general",
+                        "process",
+                    )
+                    continue
+
                 lazy_grid_items.append(grid_html)
             except Exception as blog_error:
                 error_count += 1

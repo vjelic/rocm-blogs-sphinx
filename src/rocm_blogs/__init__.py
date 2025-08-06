@@ -18,13 +18,12 @@ from pathlib import Path
 from jinja2 import Template
 from sphinx.application import Sphinx
 from sphinx.errors import SphinxError
+from sphinx.util import logging as sphinx_logging
+
+sphinx_diagnostics = sphinx_logging.getLogger(__name__)
 
 try:
-    from rocm_blogs_logging import (CProfiler, LogCategory, LogLevel,
-                                    ProfileStats, configure_logging,
-                                    get_logger, get_profiler,
-                                    is_logging_enabled, log_operation,
-                                    profile_function, profile_operation)
+    from rocm_blogs_logging import *
 
     LOGGING_AVAILABLE = True
     PROFILING_AVAILABLE = True
@@ -35,7 +34,7 @@ except ImportError:
     get_logger = lambda *args, **kwargs: None
     configure_logging = lambda *args, **kwargs: None
     log_operation = lambda *args, **kwargs: lambda func: func
-    is_logging_enabled = lambda auth_key=None: False
+    is_logging_enabled = lambda: False
     profile_operation = lambda *args, **kwargs: lambda func: func
     profile_function = lambda *args, **kwargs: lambda func: func
     get_profiler = lambda *args, **kwargs: None
@@ -57,10 +56,12 @@ from ._version import __version__
 from .banner import *
 from .constants import *
 from .images import *
+from .logger.logger import *
 from .metadata import *
 from .process import (_create_pagination_controls, _generate_grid_items,
                       _generate_lazy_loaded_grid_items, _process_category,
                       process_single_blog)
+from .project.project_info import append_to_universal_log, log_project_info
 from .utils import *
 
 __all__ = [
@@ -94,92 +95,7 @@ if LOGGING_AVAILABLE and is_logging_enabled():
         print(f"Failed to initialize structured logging: {logging_error}")
         structured_logger = None
 
-
-def log_message(
-    level: str,
-    message: str,
-    operation: str = "general",
-    component: str = "rocm_blogs",
-    **kwargs,
-):
-    """Unified logging system"""
-    if not is_logging_enabled_from_config():
-        return
-
-    if structured_logger:
-        try:
-            log_level = getattr(LogLevel, level.upper(), LogLevel.INFO)
-            structured_logger.log(log_level, message, operation, component, **kwargs)
-        except Exception as e:
-            print(f"[{level.upper()}] {message}")
-    else:
-        print(f"[{level.upper()}] {message}")
-
-
-def create_step_log_file(step_name):
-    """Create a log file"""
-
-    if not is_logging_enabled_from_config():
-        return None, None
-
-    try:
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
-
-        # Create a log file for this step
-        log_filepath = logs_dir / f"{step_name}.log"
-        log_file_handle = open(log_filepath, "w", encoding="utf-8")
-
-        # Write header to the log file
-        current_time = datetime.now()
-        log_file_handle.write(
-            f"ROCm Blogs {step_name.replace('_', ' ').title()} Log - {current_time.isoformat()}\n"
-        )
-        log_file_handle.write("=" * 80 + "\n\n")
-        log_file_handle.write(
-            f"Step Name: {step_name}\n"
-            f"Log File Created At: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Log File Path: {log_filepath}\n\n"
-        )
-
-        log_message(
-            "info",
-            f"Detailed logs for {step_name} will be written to: {log_filepath}",
-            "step_logging",
-            "log_management",
-        )
-
-        return log_filepath, log_file_handle
-    except Exception as error:
-        log_message(
-            "error",
-            f"Error creating log file for {step_name}: {error}",
-            "step_logging",
-            "log_management",
-            error=error,
-        )
-        return None, None
-
-
-def safe_log_write(log_file_handle, message):
-    """Thread safe log write function."""
-    if log_file_handle is not None:
-        try:
-            log_file_handle.write(message)
-            log_file_handle.flush()
-        except Exception as write_error:
-            pass
-
-
-def safe_log_close(log_file_handle):
-    """Thread safe log close function."""
-    if log_file_handle is not None:
-        try:
-            log_file_handle.close()
-        except Exception as close_error:
-            pass
-
-
+        
 _CRITICAL_ERROR_OCCURRED = False
 
 _BUILD_START_TIME = time.time()
@@ -455,7 +371,14 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     )
 
     for author in rocm_blogs.blogs.blogs_authors:
-        log_message("info", "Processing author: {author}", "general", "__init__")
+        log_message("info", f"Processing author: {author}", "general", "__init__")
+
+        # COMPREHENSIVE AUTHOR DEBUGGING - START
+        safe_log_write(log_file_handle, f"\n" + "=" * 80 + "\n")
+        safe_log_write(
+            log_file_handle, f"Preparing grid generation for author [{author}]\n"
+        )
+        safe_log_write(log_file_handle, f"=" * 80 + "\n")
 
         name = "-".join(author.split(" ")).lower()
 
@@ -468,6 +391,9 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 "general",
                 "__init__",
             )
+            safe_log_write(
+                log_file_handle, f"WARNING: Author file not found: {author_file_path}\n"
+            )
         else:
             log_message(
                 "info",
@@ -475,13 +401,153 @@ def update_author_files(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 "general",
                 "__init__",
             )
+            safe_log_write(
+                log_file_handle, f"Updating author file: {author_file_path}\n"
+            )
 
             with author_file_path.open("r", encoding="utf-8") as author_file:
                 author_content = author_file.read()
 
-            author_blogs = rocm_blogs.blogs.get_blogs_by_author(author)
+            # Get all blogs by author and filter to only include actual blog posts
+            all_author_blogs = rocm_blogs.blogs.get_blogs_by_author(author)
+            author_blogs = []
+            skipped_count = 0
+
+            for blog in all_author_blogs:
+                # Check if this is a genuine blog post (has the blogpost flag set to true)
+                if hasattr(blog, "blogpost") and blog.blogpost:
+                    author_blogs.append(blog)
+                    safe_log_write(
+                        log_file_handle,
+                        f"Including blog for author [{author}]: {getattr(blog, 'file_path', 'Unknown')}\n",
+                    )
+                else:
+                    skipped_count += 1
+                    safe_log_write(
+                        log_file_handle,
+                        f"Skipping non-blog README file for author [{author}]: {getattr(blog, 'file_path', 'Unknown')}\n",
+                    )
+
+            log_message(
+                "info",
+                f"Filtered out {skipped_count} non-blog README files for author [{author}], kept {len(author_blogs)} genuine blog posts",
+                "general",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Filtered out {skipped_count} non-blog README files for author [{author}], kept {len(author_blogs)} genuine blog posts\n",
+            )
+
+            # Log the blogs for this author
+            blog_titles = [
+                getattr(blog, "blog_title", "Unknown Title") for blog in author_blogs
+            ]
+            safe_log_write(
+                log_file_handle, f"[{author}] has these blogs: {blog_titles}\n"
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Total blog count for [{author}]: {len(author_blogs)}\n\n",
+            )
 
             author_blogs.sort(key=lambda x: x.date, reverse=True)
+
+            # DETAILED BLOG OBJECT INSPECTION
+            safe_log_write(
+                log_file_handle, f"DETAILED BLOG INSPECTION FOR AUTHOR [{author}]:\n"
+            )
+            safe_log_write(log_file_handle, f"-" * 80 + "\n")
+
+            for i, blog in enumerate(author_blogs):
+                safe_log_write(log_file_handle, f"\nBLOG #{i+1} DETAILED INSPECTION:\n")
+                safe_log_write(
+                    log_file_handle,
+                    f"Blog Title: {getattr(blog, 'blog_title', 'NO TITLE')}\n",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"File Path: {getattr(blog, 'file_path', 'NO FILE PATH')}\n",
+                )
+
+                # Print ALL attributes of the blog object
+                safe_log_write(log_file_handle, f"\nALL BLOG ATTRIBUTES:\n")
+                for attr_name in dir(blog):
+                    if not attr_name.startswith("_"):  # Skip private attributes
+                        try:
+                            attr_value = getattr(blog, attr_name)
+                            if not callable(attr_value):  # Skip methods
+                                safe_log_write(
+                                    log_file_handle,
+                                    f"  {attr_name}: {repr(attr_value)}\n",
+                                )
+                        except Exception as attr_error:
+                            safe_log_write(
+                                log_file_handle,
+                                f"  {attr_name}: ERROR - {attr_error}\n",
+                            )
+
+                # Print the complete metadata structure
+                safe_log_write(log_file_handle, f"\nCOMPLETE METADATA STRUCTURE:\n")
+                if hasattr(blog, "metadata") and blog.metadata:
+                    try:
+                        import json
+
+                        metadata_json = json.dumps(blog.metadata, indent=4, default=str)
+                        safe_log_write(log_file_handle, f"{metadata_json}\n")
+                    except Exception as json_error:
+                        safe_log_write(
+                            log_file_handle,
+                            f"ERROR serializing metadata: {json_error}\n",
+                        )
+                        safe_log_write(
+                            log_file_handle, f"Raw metadata: {repr(blog.metadata)}\n"
+                        )
+                else:
+                    safe_log_write(log_file_handle, f"NO METADATA FOUND\n")
+
+                # Test the OpenGraph functions directly
+                safe_log_write(log_file_handle, f"\nTESTING OPENGRAPH FUNCTIONS:\n")
+                try:
+                    og_image = blog.grab_og_image()
+                    safe_log_write(
+                        log_file_handle, f"grab_og_image() returned: {og_image}\n"
+                    )
+                except Exception as og_image_error:
+                    safe_log_write(
+                        log_file_handle, f"grab_og_image() ERROR: {og_image_error}\n"
+                    )
+
+                try:
+                    og_href = blog.grab_og_href()
+                    safe_log_write(
+                        log_file_handle, f"grab_og_href() returned: {og_href}\n"
+                    )
+                except Exception as og_href_error:
+                    safe_log_write(
+                        log_file_handle, f"grab_og_href() ERROR: {og_href_error}\n"
+                    )
+
+                try:
+                    og_description = blog.grab_og_description()
+                    safe_log_write(
+                        log_file_handle,
+                        f"grab_og_description() returned: {og_description[:100]}...\n",
+                    )
+                except Exception as og_desc_error:
+                    safe_log_write(
+                        log_file_handle,
+                        f"grab_og_description() ERROR: {og_desc_error}\n",
+                    )
+
+                safe_log_write(log_file_handle, f"\n" + "-" * 60 + "\n")
+
+            safe_log_write(
+                log_file_handle,
+                f"\nCalling _generate_grid_items with use_og=True for author [{author}]\n",
+            )
+            safe_log_write(log_file_handle, f"=" * 80 + "\n\n")
+            # COMPREHENSIVE AUTHOR DEBUGGING - END
 
             author_grid_items = _generate_grid_items(
                 rocm_blogs, author_blogs, 999, [], False, True
@@ -1019,7 +1085,7 @@ myst:
 
 @profile_function("update_index_file", save_report=True)
 def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
-    """Update the index file with new blog posts - WITH EXTREME PROFILING."""
+    """Update the index file with new blog posts"""
     global _CRITICAL_ERROR_OCCURRED
     phase_start_time = time.time()
     phase_name = "update_index"
@@ -1151,21 +1217,74 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
         featured_blogs = []
 
         if features_csv_path.exists():
+            log_message(
+                "info",
+                f"Found featured-blogs.csv file at {features_csv_path}",
+                "featured_blogs",
+                "__init__",
+            )
             if log_file_handle:
                 safe_log_write(
                     log_file_handle,
                     f"Found featured-blogs.csv file at {features_csv_path}\n",
                 )
 
+            log_message(
+                "info",
+                "========== LOADING FEATURED BLOGS FROM CSV ==========",
+                "featured_blogs",
+                "__init__",
+            )
             featured_blogs = rocm_blogs.blogs.load_featured_blogs_from_csv(
                 str(features_csv_path)
             )
 
+            log_message(
+                "info",
+                f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}",
+                "featured_blogs",
+                "__init__",
+            )
             if log_file_handle:
                 safe_log_write(
                     log_file_handle,
                     f"Loaded {len(featured_blogs)} featured blogs from {features_csv_path}\n",
                 )
+
+            # Log details of loaded featured blogs
+            if featured_blogs:
+                log_message(
+                    "info",
+                    "Successfully loaded featured blogs:",
+                    "featured_blogs",
+                    "__init__",
+                )
+                for i, blog in enumerate(featured_blogs):
+                    blog_title = getattr(blog, "blog_title", "No Title")
+                    blog_path = getattr(blog, "file_path", "No Path")
+                    log_message(
+                        "info",
+                        f"  {i+1}. '{blog_title}' (Path: {blog_path})",
+                        "featured_blogs",
+                        "__init__",
+                    )
+                    if log_file_handle:
+                        safe_log_write(
+                            log_file_handle,
+                            f"  {i+1}. '{blog_title}' (Path: {blog_path})\n",
+                        )
+            else:
+                log_message(
+                    "error",
+                    "[WARNING] No featured blogs were successfully loaded from CSV!",
+                    "featured_blogs",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        "[WARNING] No featured blogs were successfully loaded from CSV!\n",
+                    )
         else:
             if log_file_handle:
                 safe_log_write(
@@ -1201,6 +1320,66 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
 
         # Get all blogs
         all_blogs = rocm_blogs.blogs.get_blogs()
+
+        log_message(
+            "info",
+            f"========== BLOG INVENTORY CHECK ==========",
+            "blog_loading",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Total blogs retrieved from BlogHolder: {len(all_blogs)}",
+            "blog_loading",
+            "__init__",
+        )
+
+        if len(all_blogs) == 0:
+            log_message(
+                "critical",
+                "[WARNING] NO BLOGS LOADED IN SYSTEM! This will prevent banner slider generation.",
+                "blog_loading",
+                "__init__",
+            )
+            log_message(
+                "info",
+                "Checking BlogHolder internal state...",
+                "blog_loading",
+                "__init__",
+            )
+
+            # Debug the BlogHolder state
+            blog_keys = list(rocm_blogs.blogs.blogs.keys())
+            log_message(
+                "info",
+                f"BlogHolder internal blog keys count: {len(blog_keys)}",
+                "blog_loading",
+                "__init__",
+            )
+            if blog_keys:
+                log_message(
+                    "info",
+                    f"Sample blog keys: {blog_keys[:5]}",
+                    "blog_loading",
+                    "__init__",
+                )
+        else:
+            log_message(
+                "info",
+                "[SUCCESS] Blogs successfully loaded in system",
+                "blog_loading",
+                "__init__",
+            )
+            # Log sample blog titles
+            sample_titles = [
+                getattr(blog, "blog_title", "No Title") for blog in all_blogs[:5]
+            ]
+            log_message(
+                "info",
+                f"Sample blog titles: {sample_titles}",
+                "blog_loading",
+                "__init__",
+            )
 
         if log_file_handle:
             safe_log_write(log_file_handle, f"Retrieved {len(all_blogs)} total blogs\n")
@@ -1267,11 +1446,313 @@ def update_index_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs = None) -> None:
                 log_file_handle, "Implementing comprehensive deduplication system\n"
             )
 
+        log_message(
+            "info",
+            "========== BANNER BLOGS SELECTION AND FALLBACK LOGIC ==========",
+            "banner_blogs",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"BANNER_BLOGS_COUNT constant: {BANNER_BLOGS_COUNT}",
+            "banner_blogs",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Total blogs available in system: {len(all_blogs)}",
+            "banner_blogs",
+            "__init__",
+        )
+        safe_log_write(
+            log_file_handle, f"BANNER_BLOGS_COUNT constant: {BANNER_BLOGS_COUNT}\n"
+        )
+        safe_log_write(
+            log_file_handle, f"Total blogs available in system: {len(all_blogs)}\n"
+        )
+
         if featured_blogs:
+            log_message(
+                "info",
+                f"Featured blogs available: {len(featured_blogs)}",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle, f"Featured blogs available: {len(featured_blogs)}\n"
+            )
+
+            # Log details of featured blogs
+            for i, blog in enumerate(featured_blogs):
+                blog_title = getattr(blog, "blog_title", "No Title")
+                log_message(
+                    "debug",
+                    f"Featured blog {i+1}: '{blog_title}'",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle, f"Featured blog {i+1}: '{blog_title}'\n"
+                )
+
             max_banner_blogs = min(len(featured_blogs), BANNER_BLOGS_COUNT)
+            log_message(
+                "info",
+                f"Calculating max_banner_blogs: min({len(featured_blogs)}, {BANNER_BLOGS_COUNT}) = {max_banner_blogs}",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Calculating max_banner_blogs: min({len(featured_blogs)}, {BANNER_BLOGS_COUNT}) = {max_banner_blogs}\n",
+            )
+
             banner_blogs = featured_blogs[:max_banner_blogs]
+
+            log_message(
+                "info",
+                f"Selected {len(banner_blogs)} featured blogs for banner (max allowed: {BANNER_BLOGS_COUNT})",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Selected {len(banner_blogs)} featured blogs for banner (max allowed: {BANNER_BLOGS_COUNT})\n",
+            )
+
+            # Log the selected banner blogs in detail
+            log_message("info", "Selected banner blogs:", "banner_blogs", "__init__")
+            for i, blog in enumerate(banner_blogs):
+                blog_title = getattr(blog, "blog_title", "No Title")
+                log_message(
+                    "info",
+                    f"  Selected banner blog {i+1}: '{blog_title}'",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle, f"  Selected banner blog {i+1}: '{blog_title}'\n"
+                )
+
+            # Check if we need fallback due to missing or already-used blogs
+            log_message(
+                "info",
+                f"Checking fallback conditions for {len(banner_blogs)} featured blogs",
+                "banner_blogs",
+                "__init__",
+            )
+
+            # Only use fallback if:
+            # 1. We couldn't find all featured blogs from CSV (some blogs don't exist)
+            # 2. Some featured blogs are already used elsewhere on homepage
+
+            # Count original featured entries from CSV more safely
+            original_featured_count = 0
+            if features_csv_path.exists():
+                try:
+                    with open(str(features_csv_path), "r", encoding="utf-8") as f:
+                        import csv
+
+                        reader = csv.reader(f)
+                        original_featured_count = len(
+                            [row for row in reader if row and row[0].strip()]
+                        )
+                except Exception as e:
+                    log_message(
+                        "warning",
+                        f"Error counting CSV entries: {e}",
+                        "banner_blogs",
+                        "__init__",
+                    )
+                    original_featured_count = 4  # fallback to expected count
+            log_message(
+                "info",
+                f"Original featured CSV entries: {original_featured_count}, Successfully matched: {len(banner_blogs)}",
+                "banner_blogs",
+                "__init__",
+            )
+
+            # Check if we're missing blogs due to non-existence or other usage conflicts
+            if len(banner_blogs) < original_featured_count:
+                missing_count = original_featured_count - len(banner_blogs)
+                log_message(
+                    "warning",
+                    f"Missing {missing_count} featured blogs - some may not exist or have conflicts",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"Missing {missing_count} featured blogs - some may not exist or have conflicts\n",
+                )
+
+                # Only add fallback blogs to replace missing ones, not to reach BANNER_BLOGS_COUNT
+                featured_titles = {
+                    blog.blog_title
+                    for blog in banner_blogs
+                    if hasattr(blog, "blog_title")
+                }
+                log_message(
+                    "debug",
+                    f"Featured titles already selected: {featured_titles}",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"Featured titles already selected: {featured_titles}\n",
+                )
+
+                # Find blogs not already in featured and not used elsewhere
+                eligible_blogs = []
+                for blog in all_blogs:
+                    if (
+                        hasattr(blog, "blog_title")
+                        and blog.blog_title not in featured_titles
+                    ):
+                        # Check if blog is used elsewhere on homepage by checking used_blogs list
+                        blog_used_elsewhere = any(
+                            hasattr(used_blog, "blog_title")
+                            and getattr(used_blog, "blog_title") == blog.blog_title
+                            for used_blog in used_blogs
+                        )
+
+                        if not blog_used_elsewhere:
+                            eligible_blogs.append(blog)
+                        else:
+                            log_message(
+                                "debug",
+                                f"Skipping blog already used elsewhere: '{blog.blog_title}'",
+                                "banner_blogs",
+                                "__init__",
+                            )
+
+                log_message(
+                    "info",
+                    f"Found {len(eligible_blogs)} eligible blogs for fallback",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"Found {len(eligible_blogs)} eligible blogs for fallback\n",
+                )
+
+                # Only add the missing count, not to reach BANNER_BLOGS_COUNT
+                additional_blogs = eligible_blogs[:missing_count]
+
+                log_message(
+                    "info",
+                    f"Adding {len(additional_blogs)} fallback blogs to replace missing featured blogs",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"Adding {len(additional_blogs)} fallback blogs to replace missing featured blogs\n",
+                )
+
+                # Log details of additional blogs
+                for i, blog in enumerate(additional_blogs):
+                    blog_title = getattr(blog, "blog_title", "No Title")
+                    log_message(
+                        "info",
+                        f"Fallback blog {i+1}: '{blog_title}'",
+                        "banner_blogs",
+                        "__init__",
+                    )
+                    safe_log_write(
+                        log_file_handle, f"Fallback blog {i+1}: '{blog_title}'\n"
+                    )
+
+                banner_blogs.extend(additional_blogs)
+
+                log_message(
+                    "info",
+                    f"[SUCCESS] Fallback completed: Final banner blog count = {len(banner_blogs)}",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    f"[SUCCESS] Fallback completed: Final banner blog count = {len(banner_blogs)}\n",
+                )
+            else:
+                log_message(
+                    "info",
+                    "[SUCCESS] All featured blogs found successfully, no fallback needed",
+                    "banner_blogs",
+                    "__init__",
+                )
+                safe_log_write(
+                    log_file_handle,
+                    "[SUCCESS] All featured blogs found successfully, no fallback needed\n",
+                )
         else:
+            log_message(
+                "warning",
+                "No featured blogs found, using recent blogs for banner",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                "No featured blogs found, using recent blogs for banner\n",
+            )
             banner_blogs = all_blogs[:BANNER_BLOGS_COUNT]
+
+            log_message(
+                "info",
+                f"Selected {len(banner_blogs)} recent blogs for banner",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Selected {len(banner_blogs)} recent blogs for banner\n",
+            )
+
+        # Final summary
+        log_message(
+            "info",
+            f"========== FINAL BANNER BLOGS SELECTION SUMMARY ==========",
+            "banner_blogs",
+            "__init__",
+        )
+        log_message(
+            "info", f"Expected banner blogs from CSV: 4", "banner_blogs", "__init__"
+        )
+        log_message(
+            "info",
+            f"Total banner blogs selected: {len(banner_blogs)}",
+            "banner_blogs",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Selection method: {'Featured blogs only' if len(banner_blogs) == 4 else 'Featured + Fallback'}",
+            "banner_blogs",
+            "__init__",
+        )
+        safe_log_write(
+            log_file_handle,
+            f"========== FINAL BANNER BLOGS SELECTION SUMMARY ==========\n",
+        )
+        safe_log_write(log_file_handle, f"Expected: 4, Selected: {len(banner_blogs)}\n")
+
+        for i, blog in enumerate(banner_blogs):
+            blog_title = getattr(blog, "blog_title", "No Title")
+            blog_path = getattr(blog, "file_path", "No Path")
+            log_message(
+                "info",
+                f"Banner blog {i+1}: '{blog_title}' (Path: {blog_path})",
+                "banner_blogs",
+                "__init__",
+            )
+            safe_log_write(
+                log_file_handle,
+                f"Banner blog {i+1}: '{blog_title}' (Path: {blog_path})\n",
+            )
 
         # Add banner blogs to used list
         for blog in banner_blogs:
@@ -1905,75 +2386,342 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
     """Generate banner slider content for the index page."""
     try:
         banner_start_time = time.time()
-        log_message("info", "Generating banner slider content", "general", "__init__")
+        log_message(
+            "info",
+            "========== BANNER SLIDER GENERATION STARTED ==========",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Input banner blogs count: {len(banner_blogs)}",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Used blogs count (before banner): {len(used_blogs)}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Log details about input blogs
+        for i, blog in enumerate(banner_blogs):
+            blog_title = getattr(blog, "blog_title", "No Title")
+            blog_path = getattr(blog, "file_path", "No Path")
+            blog_category = getattr(blog, "category", "No Category")
+            has_thumbnail = hasattr(blog, "thumbnail")
+            has_image_paths = hasattr(blog, "image_paths") and blog.image_paths
+
+            log_message(
+                "info", f"Input blog {i+1} (index {i}):", "banner_slider", "__init__"
+            )
+            log_message("info", f"  Title: '{blog_title}'", "banner_slider", "__init__")
+            log_message("info", f"  Path: {blog_path}", "banner_slider", "__init__")
+            log_message(
+                "info", f"  Category: {blog_category}", "banner_slider", "__init__"
+            )
+            log_message(
+                "info", f"  Has thumbnail: {has_thumbnail}", "banner_slider", "__init__"
+            )
+            log_message(
+                "info",
+                f"  Has image_paths: {has_image_paths}",
+                "banner_slider",
+                "__init__",
+            )
+
+            # Check if this blog is already in used_blogs
+            already_used = any(
+                hasattr(used_blog, "blog_title")
+                and getattr(used_blog, "blog_title") == blog_title
+                for used_blog in used_blogs
+            )
+            log_message(
+                "info",
+                f"  Already used elsewhere: {already_used}",
+                "banner_slider",
+                "__init__",
+            )
 
         banner_slides = []
         banner_navigation = []
         error_count = 0
 
         # Generate banner slides and navigation items
+        log_message(
+            "info",
+            "========== PROCESSING BANNER BLOGS ==========",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Track successful generations per index to maintain alignment
+        successful_indices = []
+
         for i, blog in enumerate(banner_blogs):
+            blog_title = getattr(blog, "blog_title", "Unknown")
+            log_message(
+                "info",
+                f"\n--- Processing banner blog {i+1}/{len(banner_blogs)} (index {i}) ---",
+                "banner_slider",
+                "__init__",
+            )
+            log_message(
+                "info", f"Blog title: '{blog_title}'", "banner_slider", "__init__"
+            )
+
             try:
-                slide_html = generate_banner_slide(blog, rocmblogs, i, i == 0)
-                nav_html = generate_banner_navigation_item(blog, i, i == 0)
-
-                if not slide_html or not slide_html.strip():
-                    log_message(
-                        "warning",
-                        f"Empty banner slide HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}",
-                        "general",
-                        "__init__",
-                    )
-                    error_count += 1
-                    continue
-
-                if not nav_html or not nav_html.strip():
-                    log_message(
-                        "warning",
-                        f"Empty banner navigation HTML generated for blog: {getattr(blog, 'blog_title', 'Unknown')}",
-                        "general",
-                        "__init__",
-                    )
-                    error_count += 1
-                    continue
-
-                banner_slides.append(slide_html)
-                banner_navigation.append(nav_html)
-                # Add banner blogs to the used list to avoid duplication
-                used_blogs.append(blog)
                 log_message(
-                    "debug",
-                    f"Successfully generated banner slide for blog: {getattr(blog, 'blog_title', 'Unknown')}",
-                    "general",
+                    "info",
+                    f"Step 1: Calling generate_banner_slide for index {i}",
+                    "banner_slider",
                     "__init__",
                 )
+                slide_html = generate_banner_slide(blog, rocmblogs, i, i == 0)
+                log_message(
+                    "info",
+                    f"Step 1 Result: slide_html type={type(slide_html)}, length={len(slide_html) if slide_html else 0}",
+                    "banner_slider",
+                    "__init__",
+                )
+
+                if slide_html:
+                    # Log first 200 chars of slide HTML
+                    preview = (
+                        slide_html[:200] + "..."
+                        if len(slide_html) > 200
+                        else slide_html
+                    )
+                    log_message(
+                        "debug",
+                        f"Slide HTML preview: {preview}",
+                        "banner_slider",
+                        "__init__",
+                    )
+
+                log_message(
+                    "info",
+                    f"Step 2: Calling generate_banner_navigation_item for index {i}",
+                    "banner_slider",
+                    "__init__",
+                )
+                nav_html = generate_banner_navigation_item(blog, i, i == 0)
+                log_message(
+                    "info",
+                    f"Step 2 Result: nav_html type={type(nav_html)}, length={len(nav_html) if nav_html else 0}",
+                    "banner_slider",
+                    "__init__",
+                )
+
+                if nav_html:
+                    # Log navigation HTML
+                    log_message(
+                        "debug",
+                        f"Navigation HTML: {nav_html}",
+                        "banner_slider",
+                        "__init__",
+                    )
+
+                # Verify the generated HTML contains expected index
+                if nav_html and f'data-index="{i}"' not in nav_html:
+                    log_message(
+                        "warning",
+                        f"Navigation HTML does not contain expected index {i}",
+                        "banner_slider",
+                        "__init__",
+                    )
+
+                # Validate slide HTML
+                if not slide_html or not slide_html.strip():
+                    log_message(
+                        "error",
+                        f"[FAILED] EMPTY SLIDE HTML for blog {i+1}: '{getattr(blog, 'blog_title', 'Unknown')}'",
+                        "banner_slider",
+                        "__init__",
+                    )
+                    log_message(
+                        "error",
+                        f"Blog details - Title: '{getattr(blog, 'blog_title', 'N/A')}', Path: '{getattr(blog, 'file_path', 'N/A')}', Has image: {bool(getattr(blog, 'image_paths', None))}",
+                        "banner_slider",
+                        "__init__",
+                    )
+                    error_count += 1
+                    continue
+                else:
+                    log_message(
+                        "debug",
+                        f"[SUCCESS] Valid slide HTML generated (length: {len(slide_html)})",
+                        "banner_slider",
+                        "__init__",
+                    )
+                    # Check if slide contains essential elements
+                    if '<div class="banner-slide' not in slide_html:
+                        log_message(
+                            "warning",
+                            f"Slide {i+1} may be malformed - missing banner-slide div",
+                            "banner_slider",
+                            "__init__",
+                        )
+
+                # Validate navigation HTML
+                if not nav_html or not nav_html.strip():
+                    log_message(
+                        "error",
+                        f"[FAILED] EMPTY NAVIGATION HTML for blog {i+1}: '{getattr(blog, 'blog_title', 'Unknown')}'",
+                        "banner_slider",
+                        "__init__",
+                    )
+                    error_count += 1
+                    continue
+                else:
+                    log_message(
+                        "debug",
+                        f"[SUCCESS] Valid navigation HTML generated (length: {len(nav_html)})",
+                        "banner_slider",
+                        "__init__",
+                    )
+
+                # Successfully generated both slide and navigation
+                banner_slides.append(slide_html)
+                banner_navigation.append(nav_html)
+                successful_indices.append(i)
+                # Add banner blogs to the used list to avoid duplication
+                used_blogs.append(blog)
+
+                log_message(
+                    "info",
+                    f"[SUCCESS] Successfully generated banner slide {i+1}: '{getattr(blog, 'blog_title', 'Unknown')}'",
+                    "banner_slider",
+                    "__init__",
+                )
+                log_message(
+                    "debug",
+                    f"Current slides count: {len(banner_slides)}, navigation count: {len(banner_navigation)}",
+                    "banner_slider",
+                    "__init__",
+                )
+                log_message(
+                    "debug",
+                    f"Successful indices so far: {successful_indices}",
+                    "banner_slider",
+                    "__init__",
+                )
+
             except Exception as blog_error:
                 error_count += 1
                 log_message(
                     "error",
-                    f"Error generating banner slide for blog {getattr(blog, 'blog_title', 'Unknown')}: {blog_error}",
-                    "general",
+                    f"[FAILED] EXCEPTION generating banner slide {i+1} (index {i}) for blog '{getattr(blog, 'blog_title', 'Unknown')}': {blog_error}",
+                    "banner_slider",
                     "__init__",
                 )
                 log_message(
-                    "debug",
+                    "error",
+                    f"Blog attributes - Title: {getattr(blog, 'blog_title', 'N/A')}, Category: {getattr(blog, 'category', 'N/A')}, Path: {getattr(blog, 'file_path', 'N/A')}",
+                    "banner_slider",
+                    "__init__",
+                )
+                log_message(
+                    "error",
                     f"Traceback: {traceback.format_exc()}",
-                    "general",
+                    "banner_slider",
                     "__init__",
                 )
 
-        # Check if any slides were generated
+                # Log which step failed
+                # Clear any partial results to prevent misalignment
+                slide_html = None
+                nav_html = None
+
+                log_message(
+                    "error",
+                    f"Skipping blog at index {i} due to error",
+                    "banner_slider",
+                    "__init__",
+                )
+
+        # Final validation and summary
+        log_message(
+            "info",
+            "========== BANNER SLIDER GENERATION SUMMARY ==========",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info", f"Input blogs: {len(banner_blogs)}", "banner_slider", "__init__"
+        )
+        log_message(
+            "info",
+            f"Total slides generated: {len(banner_slides)}",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Total navigation items generated: {len(banner_navigation)}",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info",
+            f"Successful indices: {successful_indices}",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "info", f"Errors encountered: {error_count}", "banner_slider", "__init__"
+        )
+
+        # Log which blogs failed
+        if len(banner_slides) < len(banner_blogs):
+            failed_indices = [
+                i for i in range(len(banner_blogs)) if i not in successful_indices
+            ]
+            log_message(
+                "warning",
+                f"Failed to generate slides for indices: {failed_indices}",
+                "banner_slider",
+                "__init__",
+            )
+            for idx in failed_indices:
+                if idx < len(banner_blogs):
+                    failed_blog = banner_blogs[idx]
+                    log_message(
+                        "warning",
+                        f"Failed blog at index {idx}: '{getattr(failed_blog, 'blog_title', 'Unknown')}'",
+                        "banner_slider",
+                        "__init__",
+                    )
+
         if not banner_slides:
             log_message(
                 "critical",
-                f"No banner slides were generated. Check for errors in the banner slide generation functions.",
-                "general",
+                f"[FAILED] NO BANNER SLIDES GENERATED! Input blogs: {len(banner_blogs)}, Errors: {error_count}",
+                "banner_slider",
                 "__init__",
             )
             log_message(
-                "debug", f"Traceback: {traceback.format_exc()}", "general", "__init__"
+                "debug",
+                f"Traceback: {traceback.format_exc()}",
+                "banner_slider",
+                "__init__",
             )
             raise ROCmBlogsError("No banner slides were generated")
+        elif len(banner_slides) != len(banner_blogs):
+            log_message(
+                "warning",
+                f"[WARNING] MISMATCH: Expected {len(banner_blogs)} slides, generated {len(banner_slides)} slides",
+                "banner_slider",
+                "__init__",
+            )
+        else:
+            log_message(
+                "info",
+                "[SUCCESS] All banner slides generated successfully",
+                "banner_slider",
+                "__init__",
+            )
 
         # Load banner slider template
         try:
@@ -1999,9 +2747,125 @@ def _generate_banner_slider(rocmblogs, banner_blogs, used_blogs):
             return ""
 
         # Fill in the banner slider template
+        log_message(
+            "info",
+            f"Banner HTML generation - Slides: {len(banner_slides)}, Navigation: {len(banner_navigation)}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Debug: Log first few characters of each slide to verify content
+        for i, slide in enumerate(banner_slides):
+            slide_preview = slide[:100] + "..." if len(slide) > 100 else slide
+            log_message(
+                "debug",
+                f"Slide {i+1} preview: {slide_preview}",
+                "banner_slider",
+                "__init__",
+            )
+
+            # Check for active class
+            if 'class="banner-slide active"' in slide:
+                log_message(
+                    "debug",
+                    f"Slide {i+1} is marked as ACTIVE",
+                    "banner_slider",
+                    "__init__",
+                )
+            else:
+                log_message(
+                    "debug", f"Slide {i+1} is NOT active", "banner_slider", "__init__"
+                )
+
+        # Join the slides and navigation HTML
+        joined_slides = "\n".join(banner_slides)
+        joined_navigation = "\n".join(banner_navigation)
+
+        log_message(
+            "debug",
+            f"Joined slides HTML length: {len(joined_slides)}",
+            "banner_slider",
+            "__init__",
+        )
+        log_message(
+            "debug",
+            f"Joined navigation HTML length: {len(joined_navigation)}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Count occurrences of banner-slide in joined content
+        slide_count_in_joined = joined_slides.count('<div class="banner-slide')
+        nav_count_in_joined = joined_navigation.count("data-index=")
+        log_message(
+            "info",
+            f"Final joined content - Slides: {slide_count_in_joined}, Navigation items: {nav_count_in_joined}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Debug: Log each individual slide being joined
+        for i, slide in enumerate(banner_slides):
+            slide_class_count = slide.count('<div class="banner-slide')
+            slide_preview = (
+                slide[:200].replace("\n", " ") + "..."
+                if len(slide) > 200
+                else slide.replace("\n", " ")
+            )
+            log_message(
+                "info",
+                f"Slide {i}: Contains {slide_class_count} banner-slide divs, Preview: {slide_preview}",
+                "banner_slider",
+                "__init__",
+            )
+
         banner_html = banner_slider_template.replace(
-            "{banner_slides}", "\n".join(banner_slides)
-        ).replace("{banner_navigation}", "\n".join(banner_navigation))
+            "{banner_slides}", joined_slides
+        ).replace("{banner_navigation}", joined_navigation)
+
+        # Verify final HTML content
+        final_slide_count = banner_html.count('<div class="banner-slide')
+        final_nav_count = banner_html.count("data-index=")
+        log_message(
+            "info",
+            f"Final banner HTML - Slides: {final_slide_count}, Navigation items: {final_nav_count}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Log first 1000 chars of final HTML for debugging
+        html_preview = (
+            banner_html[:1000] + "..." if len(banner_html) > 1000 else banner_html
+        )
+        log_message(
+            "debug",
+            f"Final banner HTML preview: {html_preview}",
+            "banner_slider",
+            "__init__",
+        )
+
+        # Log the actual slide content titles to verify all are present
+        slide_titles = []
+        for slide in banner_slides:
+            title_start = slide.find('<h2 class="h--medium">')
+            if title_start != -1:
+                title_end = slide.find("</h2>", title_start)
+                if title_end != -1:
+                    title = slide[
+                        title_start + len('<h2 class="h--medium">') : title_end
+                    ].strip()
+                    slide_titles.append(title)
+                else:
+                    slide_titles.append("[No title end found]")
+            else:
+                slide_titles.append("[No title found]")
+
+        log_message(
+            "info",
+            f"Slide titles in final HTML: {slide_titles}",
+            "banner_slider",
+            "__init__",
+        )
 
         banner_slider_content = f"""
 ```{{raw}} html
@@ -2091,6 +2955,21 @@ def run_metadata_generator(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
 
         if log_file_handle:
             safe_log_write(log_file_handle, "Metadata generation completed\n")
+            safe_log_write(
+                log_file_handle, "Sorting blogs by vertical after metadata generation\n"
+            )
+
+        # Sort blogs by vertical after metadata generation is complete
+        rocm_blogs.blogs.sort_blogs_by_vertical()
+        log_message(
+            "info",
+            "Sorted blogs by vertical after metadata generation",
+            "general",
+            "__init__",
+        )
+
+        if log_file_handle:
+            safe_log_write(log_file_handle, "Blog vertical sorting completed\n")
 
         # Record timing information
         phase_duration = time.time() - phase_start_time
@@ -2364,6 +3243,36 @@ def update_posts_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 f" (Page {page_num} of {total_pages})" if page_num > 1 else ""
             )
 
+            # Validate grid content before creating page
+            if not page_grid_items:
+                log_message(
+                    "warning",
+                    f"No grid items for page {page_num}/{total_pages}. Skipping page creation.",
+                    "general",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: No grid items for page {page_num}/{total_pages}. Skipping page creation.\n",
+                    )
+                continue
+
+            # Additional validation: ensure grid content is meaningful
+            if not grid_content or not grid_content.strip():
+                log_message(
+                    "warning",
+                    f"Empty or whitespace-only grid content for page {page_num}/{total_pages}. Skipping page creation.",
+                    "general",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: Empty grid content for page {page_num}/{total_pages}. Skipping page creation.\n",
+                    )
+                continue
+
             # Create the final page content
             page_content = POSTS_TEMPLATE.format(
                 CSS=css_content,
@@ -2376,6 +3285,21 @@ def update_posts_file(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 page_description_suffix=page_description_suffix,
                 current_page=page_num,
             )
+
+            # Final validation: ensure page content is not empty
+            if not page_content or len(page_content.strip()) < 100:
+                log_message(
+                    "warning",
+                    f"Generated page content is too small or empty for page {page_num}/{total_pages}. Skipping file creation.",
+                    "general",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: Page content too small for page {page_num}/{total_pages}. Skipping file creation.\n",
+                    )
+                continue
 
             # Determine output filename and write the file
             output_filename = (
@@ -2487,7 +3411,7 @@ def clean_html(html_content):
 @profile_function("update_vertical_pages", save_report=True)
 def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
     """Generate paginated vertical pages with improved conditional string replacement"""
-    phase_name = "Update Vertical Pages"
+    phase_name = "update_vertical_pages"
     phase_start_time = time.time()
 
     log_filepath, log_file_handle = create_step_log_file(phase_name)
@@ -2576,6 +3500,21 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 rocm_blogs, vertical_blogs
             )
 
+            # Check if any grid items were generated for this vertical
+            if not all_grid_items:
+                log_message(
+                    "warning",
+                    f"No grid items were generated for vertical: {vertical}. Skipping page generation.",
+                    "general",
+                    "__init__",
+                )
+                if log_file_handle:
+                    safe_log_write(
+                        log_file_handle,
+                        f"WARNING: No grid items for vertical: {vertical}. Skipping page generation.\n",
+                    )
+                continue
+
             current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
             formatted_vertical = vertical.replace(" ", "-").replace("&", "and").lower()
@@ -2586,7 +3525,38 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 start_index = (page_num - 1) * BLOGS_PER_PAGE
                 end_index = min(start_index + BLOGS_PER_PAGE, len(all_grid_items))
                 page_grid_items = all_grid_items[start_index:end_index]
+
+                # Validate grid content before creating page
+                if not page_grid_items:
+                    log_message(
+                        "warning",
+                        f"No grid items for vertical {vertical} page {page_num}/{total_pages}. Skipping page creation.",
+                        "general",
+                        "__init__",
+                    )
+                    if log_file_handle:
+                        safe_log_write(
+                            log_file_handle,
+                            f"WARNING: No grid items for vertical {vertical} page {page_num}/{total_pages}. Skipping page creation.\n",
+                        )
+                    continue
+
                 grid_content = "\n".join(page_grid_items)
+
+                # Additional validation: ensure grid content is meaningful
+                if not grid_content or not grid_content.strip():
+                    log_message(
+                        "warning",
+                        f"Empty grid content for vertical {vertical} page {page_num}/{total_pages}. Skipping page creation.",
+                        "general",
+                        "__init__",
+                    )
+                    if log_file_handle:
+                        safe_log_write(
+                            log_file_handle,
+                            f"WARNING: Empty grid content for vertical {vertical} page {page_num}/{total_pages}. Skipping page creation.\n",
+                        )
+                    continue
 
                 pagination_controls = _create_pagination_controls(
                     pagination_template,
@@ -2618,6 +3588,21 @@ def update_vertical_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
                 page_content = page_content.replace(
                     "# Recent Posts", f"# {vertical} Blogs"
                 )
+
+                # Final validation: ensure page content is not empty
+                if not page_content or len(page_content.strip()) < 100:
+                    log_message(
+                        "warning",
+                        f"Generated page content is too small or empty for vertical {vertical} page {page_num}/{total_pages}. Skipping file creation.",
+                        "general",
+                        "__init__",
+                    )
+                    if log_file_handle:
+                        safe_log_write(
+                            log_file_handle,
+                            f"WARNING: Page content too small for vertical {vertical} page {page_num}/{total_pages}. Skipping file creation.\n",
+                        )
+                    continue
 
                 # Determine output filename and write the file
                 output_filename = (
@@ -3195,27 +4180,26 @@ def update_category_pages(sphinx_app: Sphinx, rocm_blogs: ROCmBlogs) -> None:
             safe_log_close(log_file_handle)
 
 
+@log_project_info
 def setup(sphinx_app: Sphinx) -> dict:
     """Set up the ROCm Blogs extension."""
     global _CRITICAL_ERROR_OCCURRED, structured_logger
     phase_start_time = time.time()
     phase_name = "setup"
 
+    sphinx_diagnostics.info(f"Setting up ROCm Blogs extension, version: {__version__}")
+    sphinx_diagnostics.info(
+        f"Build process started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_BUILD_START_TIME))}"
+    )
+    append_to_universal_log(f"ROCm Blogs Extension Setup - Version {__version__}")
+
     # Add configuration values for ROCm Blogs extension
     sphinx_app.add_config_value("rocm_blogs_debug", False, "env", [bool])
-    sphinx_app.add_config_value("rocm_blogs_enable_logging", False, "env", [bool])
     sphinx_app.add_config_value("rocm_blogs_log_level", "INFO", "env", [str])
     sphinx_app.add_config_value("rocm_blogs_log_file", None, "env", [str, type(None)])
     sphinx_app.add_config_value(
         "rocm_blogs_enable_performance_tracking", False, "env", [bool]
     )
-
-    # Authentication key configuration (supports multiple key names for compatibility)
-    sphinx_app.add_config_value("rocm_blogs_auth_key", None, "env", [str, type(None)])
-    sphinx_app.add_config_value("sphinx_decrypt_key", None, "env", [str, type(None)])
-    sphinx_app.add_config_value(
-        "sphinx_encrypt_key", None, "env", [str, type(None)]
-    )  # Legacy support
 
     # Initialize logging based on configuration
     _initialize_logging_from_config(sphinx_app)
@@ -3253,6 +4237,11 @@ def setup(sphinx_app: Sphinx) -> dict:
             extra_data={"duration_seconds": phase_duration},
         )
 
+        # Log successful completion
+        append_to_universal_log(
+            f"Setup completed successfully in {phase_duration:.2f} seconds"
+        )
+
         # Return extension metadata
         return {
             "version": __version__,
@@ -3268,6 +4257,7 @@ def setup(sphinx_app: Sphinx) -> dict:
             "extension",
             error=setup_error,
         )
+        append_to_universal_log(f"SETUP FAILED: {setup_error}")
         _BUILD_PHASES[phase_name] = time.time() - phase_start_time
         _CRITICAL_ERROR_OCCURRED = True
         raise ROCmBlogsError(
@@ -3289,52 +4279,29 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
     try:
         # Get configuration values
         debug_enabled = getattr(sphinx_app.config, "rocm_blogs_debug", False)
-        logging_enabled = getattr(sphinx_app.config, "rocm_blogs_enable_logging", False)
         log_level = getattr(sphinx_app.config, "rocm_blogs_log_level", "INFO")
         log_file = getattr(sphinx_app.config, "rocm_blogs_log_file", None)
         performance_tracking = getattr(
             sphinx_app.config, "rocm_blogs_enable_performance_tracking", False
         )
-        auth_key = getattr(sphinx_app.config, "rocm_blogs_auth_key", None)
 
-        # Debug authentication if key is provided
-        if auth_key and LOGGING_AVAILABLE:
-            try:
-                from rocm_blogs_logging.debug import (
-                    debug_authentication_key, should_debug_authentication)
-
-                # Always debug authentication during build if key is provided
-                print("\nROCm Blogs Authentication Debug")
-                print("-" * 50)
-                debug_info = debug_authentication_key(
-                    auth_key, "sphinx_build", print_report=True
-                )
-
-                # If authentication failed, provide clear guidance
-                if not debug_info.get("validation_result", False):
-                    print("\nAuthentication failed - logging will be disabled!")
-                    print("   See recommendations above for how to fix this.")
-                else:
-                    print("\nAuthentication successful - logging is enabled!")
-
-            except ImportError:
-                print(
-                    "Authentication debugging not available (rocm_blogs_logging not found)"
-                )
-            except Exception as debug_error:
-                print(f"Authentication debug error: {debug_error}")
+        # Enable logging if rocm_blogs_debug = True
+        if debug_enabled and LOGGING_AVAILABLE:
+            print("\nROCm Blogs Debug Mode Enabled")
+            print("-" * 40)
+            print("[SUCCESS] Logging enabled via rocm_blogs_debug = True")
+            print("[SUCCESS] Simple configuration - no complex setup needed")
 
         # Override environment variables with Sphinx config
-        if not debug_enabled:
+        if debug_enabled:
+            # If debug is enabled, enable logging
+            os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "false"
+            os.environ["ROCM_BLOGS_ENABLE_LOGGING"] = "true"
+            os.environ["ROCM_BLOGS_DEBUG"] = "true"
+        else:
             # If debug is disabled in config, disable all logging
             os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "true"
-        else:
-            # If debug is enabled, respect the logging_enabled setting
-            if logging_enabled:
-                os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "false"
-                os.environ["ROCM_BLOGS_ENABLE_LOGGING"] = "true"
-            else:
-                os.environ["ROCM_BLOGS_DISABLE_LOGGING"] = "true"
+            os.environ["ROCM_BLOGS_DEBUG"] = "false"
 
         # Set other configuration options
         if log_level:
@@ -3346,12 +4313,8 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
         if not performance_tracking:
             os.environ["ROCM_BLOGS_ENABLE_PERFORMANCE"] = "false"
 
-        # Set authentication key if provided
-        if auth_key:
-            os.environ["ROCM_BLOGS_AUTH_KEY"] = str(auth_key)
-
         # Reinitialize the structured logger with new configuration
-        if LOGGING_AVAILABLE and is_logging_enabled(auth_key):
+        if LOGGING_AVAILABLE and debug_enabled:
             try:
                 log_file_path = (
                     Path(log_file) if log_file else Path("logs/rocm_blogs.log")
@@ -3372,7 +4335,6 @@ def _initialize_logging_from_config(sphinx_app: Sphinx) -> None:
                         "logging_system",
                         extra_data={
                             "debug_enabled": debug_enabled,
-                            "logging_enabled": logging_enabled,
                             "log_level": log_level,
                             "log_file": str(log_file_path),
                             "performance_tracking": performance_tracking,
@@ -3395,30 +4357,14 @@ def is_logging_enabled_from_config():
     global _current_sphinx_app
 
     if _current_sphinx_app is not None:
-        # Use Sphinx configuration as highest priority
+        # Simple check: if rocm_blogs_debug = True, logging is enabled
         debug_enabled = getattr(_current_sphinx_app.config, "rocm_blogs_debug", False)
-        logging_enabled = getattr(
-            _current_sphinx_app.config, "rocm_blogs_enable_logging", False
-        )
-        auth_key = getattr(_current_sphinx_app.config, "rocm_blogs_auth_key", None)
+        return debug_enabled
 
-        # If debug is disabled, logging is disabled regardless of other settings
-        if not debug_enabled:
-            return False
+    # Fallback to environment variable check
+    import os
 
-        # If debug is enabled, check if logging is enabled
-        if logging_enabled:
-            # If auth key is provided, use authentication-aware check
-            if auth_key:
-                return is_logging_enabled(auth_key)
-            else:
-                # If no auth key but logging is explicitly enabled, allow it
-                return True
-        else:
-            return False
-
-    # Fallback to the imported is_logging_enabled function
-    return is_logging_enabled()
+    return os.getenv("ROCM_BLOGS_DEBUG", "").lower() in ("true", "1", "yes", "on")
 
 
 def _setup_static_files(sphinx_app: Sphinx) -> None:
@@ -3502,7 +4448,7 @@ def _initialize_shared_rocm_blogs(sphinx_app: Sphinx) -> ROCmBlogs:
 
         # Find README files
         readme_count = rocm_blogs.find_readme_files()
-        log_message("info", "Found {readme_count} README files", "general", "__init__")
+        log_message("info", f"Found {readme_count} README files", "general", "__init__")
 
         # Create blog objects
         rocm_blogs.create_blog_objects()
@@ -3523,10 +4469,6 @@ def _initialize_shared_rocm_blogs(sphinx_app: Sphinx) -> ROCmBlogs:
         ]
         rocm_blogs.blogs.sort_blogs_by_category(category_keys)
         log_message("info", "Sorted blogs by category", "general", "__init__")
-
-        # Sort by vertical
-        rocm_blogs.blogs.sort_blogs_by_vertical()
-        log_message("info", "Sorted blogs by vertical", "general", "__init__")
 
         log_message(
             "info",
@@ -3571,6 +4513,7 @@ def _register_event_handlers(sphinx_app: Sphinx) -> None:
                 run_metadata_generator, shared_rocm_blogs
             ),
         )
+
         sphinx_app.connect(
             "builder-inited",
             _create_event_handler_with_shared_instance(

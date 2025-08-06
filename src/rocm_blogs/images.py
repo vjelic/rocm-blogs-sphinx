@@ -14,19 +14,7 @@ from sphinx.util import logging as sphinx_logging
 
 from ._rocmblogs import ROCmBlogs
 from .constants import *
-
-
-# Import log_message from the main module
-def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
-    try:
-        from . import log_message as main_log_message
-
-        return main_log_message(level, message, operation, component, **kwargs)
-    except ImportError:
-        # Fallback to print if import fails
-        print(f"[{level.upper()}] {message}")
-
+from .logger.logger import create_step_log_file, log_message, safe_log_write
 
 WEBP_CONVERSION_STATISTICS = {
     "converted": 0,
@@ -301,7 +289,7 @@ def _verify_image_integrity(
 def _handle_problematic_image(
     pil_image, source_image_path, backup_image_path, source_image_filename
 ):
-    """Apply extremely conservative optimization for known problematic images."""
+    """Handle problematic images with more conservative optimization."""
     log_message(
         "info",
         "Using conservative optimization for {source_image_filename}",
@@ -787,11 +775,13 @@ def optimize_generic_image(sphinx_app=None):
         "images",
     )
     log_message(
-        "info", "Total WebP image size: {total_webp_kb:.1f} KB", "general", "images"
+        "info", f"Total WebP image size: {total_webp_kb:.1f} KB", "general", "images"
     )
-    log_message("info", "Total size saved: {size_saved_kb:.1f} KB", "general", "images")
     log_message(
-        "info", "Total time taken: {total_time:.2f} seconds", "general", "images"
+        "info", f"Total size saved: {size_saved_kb:.1f} KB", "general", "images"
+    )
+    log_message(
+        "info", f"Total time taken: {total_time:.2f} seconds", "general", "images"
     )
     log_message("info", "-" * 80, "general", "images")
     log_message("info", "END OF IMAGE OPTIMIZATION SUMMARY", "general", "images")

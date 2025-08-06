@@ -12,26 +12,73 @@ from typing import Any, Dict, List, Optional, Union
 from PIL import Image
 from sphinx.util import logging as sphinx_logging
 
+from .logger.logger import *
 
-# Import log_message from the main module
-def log_message(level, message, operation="general", component="rocmblogs", **kwargs):
-    """Import log_message function from main module to avoid circular imports."""
-    try:
-        from . import log_message as main_log_message
+# Global caches for performance optimization during blog processing
+_author_bio_cache: Dict[str, Dict[str, bool]] = {}
+_image_manifest_cache: Dict[str, Dict[str, str]] = {}
+_relative_path_cache: Dict[str, str] = {}
 
-        return main_log_message(level, message, operation, component, **kwargs)
-    except ImportError:
-        # Fallback to print if import fails
-        print(f"[{level.upper()}] {message}")
+
+def build_image_manifest(blogs_directory: str) -> Dict[str, str]:
+    """Build manifest of available images in blogs directory."""
+    global _image_manifest_cache
+
+    if blogs_directory in _image_manifest_cache:
+        return _image_manifest_cache[blogs_directory]
+
+    manifest = {}
+    blogs_path = pathlib.Path(blogs_directory)
+
+    # Define supported image file extensions for processing
+    image_extensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
+
+    for extension in image_extensions:
+        # Search within the dedicated images directory
+        images_directory = blogs_path / "images"
+        if images_directory.exists():
+            for image_file in images_directory.glob(f"*{extension}"):
+                if image_file.is_file():
+                    manifest[image_file.name.lower()] = str(image_file)
+
+        # Search within blog-specific subdirectories for embedded images
+        for subdirectory in blogs_path.rglob("*"):
+            if subdirectory.is_dir() and subdirectory.name not in [
+                "_static",
+                "__pycache__",
+                ".git",
+            ]:
+                for image_file in subdirectory.glob(f"*{extension}"):
+                    if image_file.is_file():
+                        manifest[image_file.name.lower()] = str(image_file)
+
+    _image_manifest_cache[blogs_directory] = manifest
+    return manifest
+
+
+def cache_author_bio_existence(blogs_directory: str) -> Dict[str, bool]:
+    """Cache existence status of author biography pages."""
+    global _author_bio_cache
+
+    if blogs_directory in _author_bio_cache:
+        return _author_bio_cache[blogs_directory]
+
+    author_cache = {}
+    authors_directory = pathlib.Path(blogs_directory) / "authors"
+
+    if authors_directory.exists():
+        for author_file in authors_directory.glob("*.md"):
+            if author_file.is_file():
+                # Extract author name from filename and normalize formatting
+                author_name = author_file.stem.replace("-", " ").title()
+                author_cache[author_name.lower()] = True
+
+    _author_bio_cache[blogs_directory] = author_cache
+    return author_cache
 
 
 class Blog:
-    """
-    Represents a blog post with metadata, content, and associated images.
-
-    This class handles blog metadata, image processing, author information,
-    and date parsing for the ROCmBlogs package.
-    """
+    """Represents a blog post with metadata and images."""
 
     # Define date formats once as a class variable to avoid recreation
     DATE_FORMATS = [
@@ -55,14 +102,14 @@ class Blog:
     def __init__(
         self, file_path: str, metadata: Dict[str, Any], image: Optional[bytes] = None
     ):
-        """Initialize a Blog instance."""
+        """Initialize Blog instance."""
         self.file_path = file_path
         self.metadata = metadata
         self.image = image
         self.image_paths = []
         self.word_count = 0
 
-        # Dynamically set attributes based on metadata
+        # Dynamically assign attributes based on metadata dictionary contents
         for key, value in metadata.items():
             setattr(self, key, value)
 
@@ -71,23 +118,19 @@ class Blog:
         )
 
     def set_word_count(self, word_count: int) -> None:
-        """Set the word count for the blog."""
+        """Set word count."""
         self.word_count = word_count
 
     def set_file_path(self, file_path: str) -> None:
-        """Set the file path for the blog."""
+        """Set file path."""
         self.file_path = file_path
 
     def normalize_date_string(self, date_str: str) -> str:
-        """Normalize the date string for consistent parsing."""
+        """Normalize date string formatting."""
         for original, replacement in self.MONTH_NORMALIZATION.items():
             date_str = date_str.replace(original, replacement)
 
         return date_str
-
-    def grab_metadata(self) -> Dict[str, Any]:
-        """Return the metadata dictionary."""
-        return self.metadata
 
     def grab_og_image(self) -> str:
         """Get OpenGraph image, falling back to regular image if not available."""
@@ -171,8 +214,12 @@ class Blog:
         except Exception:
             return "https://rocm.blogs.amd.com/"
 
+    def grab_metadata(self) -> Dict[str, Any]:
+        """Get metadata."""
+        return self.metadata
+
     def load_image_to_memory(self, image_path: str, format: str = "PNG") -> None:
-        """Load an image into memory."""
+        """Load image into memory."""
         try:
             with Image.open(image_path) as img:
                 buffer = io.BytesIO()
@@ -191,7 +238,7 @@ class Blog:
             )
 
     def to_json(self) -> str:
-        """Convert the blog metadata to JSON format."""
+        """Convert metadata to JSON."""
         try:
             return json.dumps(self.metadata, indent=4)
         except Exception as error:
@@ -204,7 +251,7 @@ class Blog:
             return "{}"
 
     def save_image(self, output_path: str) -> None:
-        """Save the image to disk."""
+        """Save image to disk."""
         if self.image is None:
             log_message(
                 "warning",
@@ -226,11 +273,11 @@ class Blog:
             )
 
     def save_image_path(self, image_path: str) -> None:
-        """Save the image path for later use."""
+        """Save image path."""
         self.image_paths.append(image_path)
 
     def parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        """Parse the date string into a datetime object."""
+        """Parse date string to datetime object."""
         if not date_str:
             return None
 
@@ -248,20 +295,20 @@ class Blog:
         return None
 
     def grab_href(self) -> str:
-        """Generate the HTML href for the blog."""
+        """Generate HTML href for blog."""
         return self.file_path.replace(".md", ".html").replace("\\", "/")
 
     def grab_authors_list(self) -> List[str]:
-        """Extract authors from the metadata."""
+        """Extract authors from metadata."""
 
         log_message(
             "info",
-            "Extracting authors from metadata: {self.file_path}",
+            f"Extracting authors from metadata: {self.file_path}",
             "general",
             "blog",
         )
 
-        log_message("info", "Authors metadata: {self.author}", "general", "blog")
+        log_message("info", f"Authors metadata: {self.author}", "general", "blog")
 
         if not self.author:
             return []
@@ -272,14 +319,14 @@ class Blog:
         if isinstance(self.author, str):
             authors = list(self.author.split(", "))
 
-        log_message("info", "Authors after split: {authors}", "general", "blog")
+        log_message("info", f"Authors after split: {authors}", "general", "blog")
 
         return authors
 
     def grab_authors(
         self, authors_list: List[Union[str, List[str]]], rocm_blogs
     ) -> str:
-        """Generate HTML links for authors, but only if their bio file exists."""
+        """Generate HTML links for authors with bio files."""
         # Filter out invalid authors
         valid_authors = []
         for author in authors_list:
@@ -294,14 +341,15 @@ class Blog:
         if not valid_authors:
             return ""
 
+        # Use cached author bio existence information
+        author_cache = cache_author_bio_existence(rocm_blogs.blogs_directory)
+
         # Process each author
         author_elements = []
         for author in valid_authors:
-            # Check if author has a page using the more robust approach
-            if pathlib.Path.exists(
-                pathlib.Path(rocm_blogs.blogs_directory)
-                / f"authors/{author.replace(' ', '-').lower()}.md"
-            ):
+            # Check if author has a page using cached information
+            author_key = author.lower()
+            if author_key in author_cache:
                 author_link = f"https://rocm.blogs.amd.com/authors/{author.replace(' ', '-').lower()}.html"
                 author_elements.append(f'<a href="{author_link}">{author}</a>')
             else:
@@ -311,7 +359,7 @@ class Blog:
         return ", ".join(author_elements)
 
     def grab_image(self, rocmblogs) -> pathlib.Path:
-        """Find the image for the blog and return its path."""
+        """Find and return blog image path."""
         image = getattr(self, "thumbnail", None)
 
         if not image:
@@ -390,7 +438,7 @@ class Blog:
     def _find_image_in_directories(
         self, image: str, blogs_directory: str
     ) -> Optional[pathlib.Path]:
-        """Search for an image in various directories."""
+        """Search for image in various directories."""
         blog_dir = pathlib.Path(self.file_path).parent
         blogs_dir = pathlib.Path(blogs_directory)
 
@@ -449,7 +497,7 @@ class Blog:
                 if str(path).lower().endswith(".webp"):
                     log_message(
                         "info",
-                        "Using WebP version for image: {path}",
+                        f"Using WebP version for image: {path}",
                         "general",
                         "blog",
                     )
@@ -463,7 +511,7 @@ class Blog:
                 if img_file.is_file() and webp_base in img_file.name.lower():
                     log_message(
                         "info",
-                        "Found WebP version by partial matching: {img_file}",
+                        f"Found WebP version by partial matching: {img_file}",
                         "general",
                         "blog",
                     )
@@ -496,7 +544,7 @@ class Blog:
                                     )
                                     log_message(
                                         "info",
-                                        "Resized image from {original_width}x{original_height} to {new_width}x{new_height}",
+                                        f"Resized image from {original_width}x{original_height} to {new_width}x{new_height}",
                                         "general",
                                         "blog",
                                     )
@@ -509,7 +557,7 @@ class Blog:
                                 # Return the WebP version
                                 log_message(
                                     "info",
-                                    "Successfully converted {img_file} to WebP: {webp_path}",
+                                    f"Successfully converted {img_file} to WebP: {webp_path}",
                                     "general",
                                     "blog",
                                 )
