@@ -1323,8 +1323,17 @@ def process_single_blog(blog_entry, rocm_blogs):
 
                     if blog_entry.image_paths:
                         image_filename = os.path.basename(blog_entry.image_paths[0])
+                        if not image_filename.lower().endswith('.webp'):
+                            base_name, ext = os.path.splitext(image_filename)
+                            image_filename = f"{base_name}.webp"
+                            log_message(
+                                "info",
+                                f"Using WebP version: {image_filename} instead of {blog_entry.image_paths[0]}",
+                                "general",
+                                "process",
+                            )
                     else:
-                        image_filename = "generic.jpg"
+                        image_filename = "generic.webp"
 
                     blog_image_path = f"{parent_directories}_images/{image_filename}"
 
@@ -1343,9 +1352,19 @@ def process_single_blog(blog_entry, rocm_blogs):
                         "process",
                     )
                     if blog_entry.image_paths:
-                        blog_image_path = f"../../_images/{blog_entry.image_paths[0]}"
+                        image_filename = os.path.basename(blog_entry.image_paths[0])
+                        if not image_filename.lower().endswith('.webp'):
+                            base_name, ext = os.path.splitext(image_filename)
+                            image_filename = f"{base_name}.webp"
+                            log_message(
+                                "info",
+                                f"Using WebP version in fallback: {image_filename} instead of {blog_entry.image_paths[0]}",
+                                "general",
+                                "process",
+                            )
+                        blog_image_path = f"../../_images/{image_filename}"
                     else:
-                        blog_image_path = "../../_images/generic.jpg"
+                        blog_image_path = "../../_images/generic.webp"
 
                 image_template_filled = image_html.replace(
                     "{IMAGE}", blog_image_path
